@@ -1,0 +1,5 @@
+Connect Euqilegna Paint Studio to the hosted Euqilegna Paint Compiler API.
+
+POST https://YOUR-COMPILER-DOMAIN.com/compile with multipart fields: file, colors, detail, min_region_area, merge_strength, outline_width.
+
+Receive paintMap.svg, paintMap_colored.svg, regions.json, palette.json, preview.png, metadata.json. Upload each returned file using Base44 UploadFile and store only the URLs. Interactive Painter must load the SVG and JSON from those URLs. Keep the original artwork URL for the 100% completion reveal. Never fall back to mosaic grids or demo artwork.
