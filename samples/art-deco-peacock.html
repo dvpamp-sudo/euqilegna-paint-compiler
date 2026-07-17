@@ -1,0 +1,160 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Art Deco Peacock</title><style>
+:root{--gold:#d4a64f;--purple:#7d38b7;--ink:#f8ead0;--panel:#11100f;--line:#5e4728}
+*{box-sizing:border-box}body{margin:0;background:#070707;color:var(--ink);font-family:Arial,sans-serif}
+header{padding:20px 26px;background:linear-gradient(135deg,#0b0b0b,#18120c);border-bottom:1px solid var(--line)}
+header a{color:var(--gold);text-decoration:none;font-weight:800}header h1{font-family:Georgia,serif;font-size:34px;margin:10px 0 4px;color:#f2c86d}
+.meta{color:#cbb895}.app{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:calc(100vh - 140px)}
+.stage{display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle,#17120f,#080808)}
+.board{width:min(92vw,920px);background:#fff;box-shadow:0 18px 50px #000;border:1px solid #7b5a31}
+svg{width:100%;height:auto;display:block}.r{fill:#fff;stroke:#222;stroke-width:1.6;vector-effect:non-scaling-stroke;cursor:pointer}
+.panel{padding:22px;background:#0d0d0d;border-left:1px solid var(--line)}.panel h2{color:var(--gold)}
+.palette{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.swatch{height:62px;border:2px solid #33271a;border-radius:10px;font-weight:900;cursor:pointer}
+.swatch.active{border-color:#fff;box-shadow:0 0 0 3px var(--gold)}.barwrap{height:13px;background:#2a2118;border-radius:999px;overflow:hidden}
+.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));width:0}.status-card{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#15110d}
+@media(max-width:800px){.app{grid-template-columns:1fr}.panel{border-left:0;border-top:1px solid var(--line)}}
+
+.save-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.save-row button{padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:#1a1510;color:var(--ink);font-weight:800;cursor:pointer}
+.save-row button:hover{border-color:var(--gold)}.review-box{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#15110d}
+.review-box textarea{width:100%;min-height:100px;padding:10px;border-radius:8px;border:1px solid #5e4728;background:#0b0b0b;color:#fff}
+.review-box input{width:100%;padding:9px;border-radius:8px;border:1px solid #5e4728;background:#0b0b0b;color:#fff;margin-bottom:8px}
+.label-bg{fill:#ffffff;stroke:#111;stroke-width:.8;pointer-events:none}.region-label{font-weight:900;fill:#111;pointer-events:none;paint-order:stroke;stroke:#fff;stroke-width:3px}
+.r.selected-target{fill:#d7d7d7!important;stroke:#6f2ca0!important;stroke-width:2.5!important}
+
+.premium-reference{margin-top:16px;border:1px solid #6f5430;border-radius:14px;overflow:hidden;background:#0b0908}
+.premium-reference img{width:100%;max-height:420px;object-fit:cover;display:block}
+.premium-reference .caption{padding:12px 14px;color:#cdbb9e;font-size:14px}
+</style></head><body>
+<header><a href="/samples">← Premium Adult Paint-by-Number Library</a><h1>Art Deco Peacock</h1><div class="meta">Gilded Geometry Collection • Advanced • 9–12 hours</div><p>A glamorous peacock-inspired portrait with jewel-toned eyespots and Art Deco symmetry.</p><div class="premium-reference"><img src="/samples/covers/art-deco-peacock.jpg" alt="Premium finished artwork reference"><div class="caption">Premium finished-artwork reference. The interactive page below is the current beta painting experience for this collection.</div></div></header>
+<div class="app"><main class="stage"><div class="board"><svg viewBox="0 0 900 650" xmlns="http://www.w3.org/2000/svg"><rect width="900" height="650" fill="#111826"/><path class="r" data-c="2" d="M450 90 C300 110 180 260 180 460 C300 380 380 380 450 500 C520 380 600 380 720 460 C720 260 600 110 450 90 Z"/><path class="r" data-c="3" d="M450 130 C340 150 270 270 278 410 C350 350 410 360 450 450 C490 360 550 350 622 410 C630 270 560 150 450 130 Z"/><path class="r" data-c="4" d="M450 180 C380 190 338 280 342 370 C390 330 426 342 450 404 C474 342 510 330 558 370 C562 280 520 190 450 180 Z"/><ellipse class="r" data-c="5" cx="450" cy="300" rx="84" ry="136"/><circle class="r" data-c="6" cx="450" cy="252" r="54"/><path class="r" data-c="1" d="M414 250 C426 230 446 230 456 250 C440 264 428 264 414 250 Z"/><path class="r" data-c="1" d="M464 250 C478 230 500 232 510 252 C492 266 478 266 464 250 Z"/><path class="r" data-c="8" d="M438 292 C450 302 462 302 474 292 C468 316 444 316 438 292 Z"/><path class="r" data-c="7" d="M416 180 L430 110 L450 166 L470 110 L486 180 Z"/><ellipse class="r" data-c="4" cx="250" cy="230" rx="54" ry="78" transform="rotate(-25 250 230)"/><ellipse class="r" data-c="7" cx="250" cy="230" rx="34" ry="48" transform="rotate(-25 250 230)"/><ellipse class="r" data-c="1" cx="250" cy="230" rx="18" ry="28" transform="rotate(-25 250 230)"/><ellipse class="r" data-c="4" cx="650" cy="230" rx="54" ry="78" transform="rotate(25 650 230)"/><ellipse class="r" data-c="7" cx="650" cy="230" rx="34" ry="48" transform="rotate(25 650 230)"/><ellipse class="r" data-c="1" cx="650" cy="230" rx="18" ry="28" transform="rotate(25 650 230)"/><ellipse class="r" data-c="4" cx="220" cy="340" rx="54" ry="78" transform="rotate(-15 220 340)"/><ellipse class="r" data-c="7" cx="220" cy="340" rx="34" ry="48" transform="rotate(-15 220 340)"/><ellipse class="r" data-c="1" cx="220" cy="340" rx="18" ry="28" transform="rotate(-15 220 340)"/><ellipse class="r" data-c="4" cx="680" cy="340" rx="54" ry="78" transform="rotate(15 680 340)"/><ellipse class="r" data-c="7" cx="680" cy="340" rx="34" ry="48" transform="rotate(15 680 340)"/><ellipse class="r" data-c="1" cx="680" cy="340" rx="18" ry="28" transform="rotate(15 680 340)"/><ellipse class="r" data-c="4" cx="260" cy="470" rx="54" ry="78" transform="rotate(10 260 470)"/><ellipse class="r" data-c="7" cx="260" cy="470" rx="34" ry="48" transform="rotate(10 260 470)"/><ellipse class="r" data-c="1" cx="260" cy="470" rx="18" ry="28" transform="rotate(10 260 470)"/><ellipse class="r" data-c="4" cx="640" cy="470" rx="54" ry="78" transform="rotate(-10 640 470)"/><ellipse class="r" data-c="7" cx="640" cy="470" rx="34" ry="48" transform="rotate(-10 640 470)"/><ellipse class="r" data-c="1" cx="640" cy="470" rx="18" ry="28" transform="rotate(-10 640 470)"/></svg></div></main><aside class="panel"><h2>Curated Color Palette</h2><div id="palette" class="palette"></div>
+<div class="status-card"><p id="status"></p><strong id="count"></strong><div class="barwrap"><div id="bar" class="bar"></div></div></div>
+<div class="save-row">
+  <button id="saveProgress" type="button">Save Progress</button>
+  <button id="downloadProgress" type="button">Download Progress</button>
+  <button id="loadProgress" type="button">Load Progress</button>
+  <button id="showNext" type="button">Show Next Section</button>
+</div>
+<input id="progressFile" type="file" accept="application/json" style="display:none">
+<div class="review-box">
+  <h3>Completed Project Review</h3>
+  <input id="reviewTitle" placeholder="Review title">
+  <textarea id="reviewNotes" placeholder="Add notes about the finished artwork, painting experience, difficult areas, or improvements."></textarea>
+  <div class="save-row"><button id="saveReview" type="button">Save Review Notes</button><button id="downloadReview" type="button">Download Review</button></div>
+  <p id="saveStatus"></p>
+</div></aside></div>
+<script>
+const STORAGE_KEY='euqilegna-premium-sample-'+location.pathname;
+const REVIEW_KEY=STORAGE_KEY+'-review';
+const colors=["#111826", "#17324C", "#235B78", "#2E8A8E", "#57B7A6", "#C4A448", "#E6C56B", "#8C5D84", "#B274A8", "#F1D7C7"];let selected=1;const painted=new Set();const regions=[...document.querySelectorAll('.r')];
+
+function safeStore(key,value){
+  try{localStorage.setItem(key,value);return true}catch(error){return false}
+}
+function safeRead(key){
+  try{return localStorage.getItem(key)}catch(error){return null}
+}
+function regionCenter(r){
+  const b=r.getBBox();
+  return {x:b.x+b.width/2,y:b.y+b.height/2,w:b.width,h:b.height};
+}
+regions.forEach((r,i)=>{
+  r.dataset.id='r'+i;
+  r.setAttribute('tabindex','0');
+  r.setAttribute('role','button');
+  const c=regionCenter(r);
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('data-label-for',r.dataset.id);
+  g.setAttribute('pointer-events','none');
+  const size=Math.max(13,Math.min(24,Math.max(13,Math.min(c.w,c.h)*.28)));
+  const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bg.setAttribute('cx',c.x);bg.setAttribute('cy',c.y);bg.setAttribute('r',Math.max(10,size*.72));bg.setAttribute('class','label-bg');
+  const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('x',c.x);t.setAttribute('y',c.y);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');
+  t.setAttribute('font-size',size);t.setAttribute('class','region-label');t.textContent=r.dataset.c;
+  g.append(bg,t);r.parentNode.appendChild(g);r._labelGroup=g;
+
+  const paint=()=>{
+    if(Number(r.dataset.c)!==selected){
+      status.textContent='You are painting color '+selected+'. Choose a matching highlighted section.';
+      r.animate([{opacity:1},{opacity:.35},{opacity:1}],{duration:300});return;
+    }
+    if(painted.has(r.dataset.id)) return;
+    r.style.fill=colors[selected-1];painted.add(r.dataset.id);g.style.display='none';
+    saveProgress(false);update();
+  };
+  r.onclick=paint;
+  r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();paint();}};
+});
+
+function render(){
+  palette.innerHTML='';
+  colors.forEach((c,i)=>{
+    const n=i+1,total=regions.filter(r=>+r.dataset.c===n).length,done=regions.filter(r=>+r.dataset.c===n&&painted.has(r.dataset.id)).length;
+    const b=document.createElement('button');b.className='swatch'+(selected===n?' active':'');b.style.background=c;b.style.color=(i<3?'#fff':'#111');
+    b.innerHTML=`${n}<br><small>${done}/${total}</small>`;
+    b.onclick=()=>{selected=n;render();highlight();};palette.appendChild(b);
+  });
+}
+function highlight(){
+  regions.forEach(r=>{
+    r.classList.remove('selected-target');
+    if(painted.has(r.dataset.id)) return;
+    if(+r.dataset.c===selected) r.classList.add('selected-target');
+    else r.style.fill='#fff';
+    if(r._labelGroup) r._labelGroup.style.display=painted.has(r.dataset.id)?'none':'';
+  });
+  status.textContent='Color '+selected+' selected. Paint any softly highlighted section—even when its number is small.';
+}
+function update(){
+  const done=painted.size,total=regions.length;
+  count.textContent=`${done} / ${total} regions painted`;
+  bar.style.width=(done/Math.max(1,total)*100)+'%';
+  render();highlight();
+  if(done===total){
+    status.textContent='Masterpiece complete — add your review notes or download your review.';
+    regions.forEach(r=>r.style.stroke='transparent');
+  }
+}
+function saveProgress(show=true){
+  const payload={version:1,path:location.pathname,selected,painted:[...painted],savedAt:new Date().toISOString()};
+  const ok=safeStore(STORAGE_KEY,JSON.stringify(payload));
+  if(show) saveStatus.textContent=ok?'Progress saved on this device.':'Browser storage is unavailable. Use Download Progress instead.';
+  return payload;
+}
+function restoreProgress(payload){
+  if(!payload||!Array.isArray(payload.painted)) return false;
+  painted.clear();payload.painted.forEach(id=>painted.add(id));selected=Number(payload.selected||1);
+  regions.forEach(r=>{const done=painted.has(r.dataset.id);if(done)r.style.fill=colors[Number(r.dataset.c)-1];if(r._labelGroup)r._labelGroup.style.display=done?'none':'';});
+  update();return true;
+}
+function downloadJson(data,name){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);
+}
+function nextSection(){
+  const target=regions.find(r=>+r.dataset.c===selected&&!painted.has(r.dataset.id));
+  if(!target){status.textContent='Color '+selected+' is complete.';return}
+  target.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
+  target.animate([{opacity:1},{opacity:.25},{opacity:1},{opacity:.25},{opacity:1}],{duration:1100});
+}
+saveProgress.onclick=()=>saveProgress(true);
+downloadProgress.onclick=()=>downloadJson(saveProgress(false),'euqilegna-paint-progress.json');
+loadProgress.onclick=()=>progressFile.click();
+progressFile.onchange=async()=>{const f=progressFile.files?.[0];if(!f)return;try{restoreProgress(JSON.parse(await f.text()));saveStatus.textContent='Progress loaded.'}catch(e){saveStatus.textContent='That progress file could not be loaded.'}};
+showNext.onclick=nextSection;
+
+function saveReviewNotes(show=true){
+  const review={title:reviewTitle.value.trim(),notes:reviewNotes.value.trim(),completed:painted.size===regions.length,paintedRegions:painted.size,totalRegions:regions.length,savedAt:new Date().toISOString()};
+  const ok=safeStore(REVIEW_KEY,JSON.stringify(review));
+  if(show) saveStatus.textContent=ok?'Review notes saved.':'Browser storage is unavailable. Use Download Review instead.';
+  return review;
+}
+saveReview.onclick=()=>saveReviewNotes(true);
+downloadReview.onclick=()=>downloadJson(saveReviewNotes(false),'euqilegna-completed-project-review.json');
+reviewTitle.oninput=()=>saveReviewNotes(false);
+reviewNotes.oninput=()=>saveReviewNotes(false);
+
+try{const p=JSON.parse(safeRead(STORAGE_KEY)||'null');if(p)restoreProgress(p)}catch(e){}
+try{const r=JSON.parse(safeRead(REVIEW_KEY)||'null');if(r){reviewTitle.value=r.title||'';reviewNotes.value=r.notes||''}}catch(e){}
+render();highlight();update();
+</script></body></html>

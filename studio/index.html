@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Euqilegna Interactive Digital Art Studio</title>
+<style>
+:root{--bg:#09070b;--panel:#141016;--panel2:#1c1420;--gold:#d8ad59;--purple:#8f45bd;--cream:#f4e8d6;--muted:#c2b19d;--line:#4c3827;--green:#3d9a5c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 78% 5%,#32183f 0,transparent 35%),linear-gradient(180deg,#09070b,#100c11 55%,#070607);color:var(--cream);font-family:Arial,sans-serif}
+a{text-decoration:none;color:inherit}.wrap{max-width:1520px;margin:auto;padding:24px 34px 60px}.nav{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:8px 0 24px}
+.brand{display:flex;align-items:center;gap:12px}.mark{font-size:38px}.brand strong{font-family:Georgia,serif;font-size:25px}.brand small{display:block;color:var(--gold);letter-spacing:2px}
+.navlinks{display:flex;gap:10px;flex-wrap:wrap}.navlinks a{padding:9px 12px;border-radius:999px;border:1px solid #433424;color:#d8cab7}.navlinks a:hover{border-color:var(--gold)}
+.hero{min-height:520px;border:1px solid var(--line);border-radius:28px;padding:52px;display:grid;grid-template-columns:1.1fr .9fr;gap:30px;align-items:center;overflow:hidden;background:linear-gradient(90deg,#0b090bec 0%,#0b090bc7 50%,transparent 100%),url('/samples/covers/midnight-jazz.jpg') center/cover;box-shadow:0 25px 60px #0009}
+.eyebrow{color:var(--gold);font-weight:900;letter-spacing:2px;text-transform:uppercase}.hero h1{font-family:Georgia,serif;font-size:64px;line-height:.98;margin:14px 0}.hero p{font-size:20px;color:#dfd1bf;line-height:1.55;max-width:720px}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}.btn{display:inline-block;padding:14px 18px;border-radius:12px;font-weight:900;border:1px solid #5a4030}.primary{background:var(--purple);border-color:var(--purple);color:#fff}.secondary{background:#14100ee8}.hero-side{align-self:end;background:#100c10dd;border:1px solid #63482d;border-radius:18px;padding:18px}.hero-side h3{color:var(--gold);margin:0 0 12px}.hero-side div{padding:9px 0;border-bottom:1px solid #31251c}.hero-side div:last-child{border-bottom:0}
+.section-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin:42px 0 17px}.section-head h2{font-family:Georgia,serif;font-size:36px;margin:0}.section-head p{color:var(--muted);margin:0}
+.modes{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}.mode{background:linear-gradient(145deg,#171218,#100d11);border:1px solid #493625;border-radius:20px;padding:20px;min-height:260px;position:relative;transition:.25s;overflow:hidden}.mode:hover{transform:translateY(-7px);border-color:var(--gold)}.mode .icon{font-size:54px}.mode h3{font-family:Georgia,serif;font-size:25px;margin:12px 0 7px}.mode p{color:var(--muted);line-height:1.45}.status{position:absolute;right:12px;top:12px;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900}.live{background:#dff2e4;color:#256f3d}.prototype{background:#efe1f7;color:#6b278e}.future{background:#312a26;color:#d7c7b4}
+.collections{display:grid;grid-template-columns:2fr 1fr 1fr;grid-template-rows:270px 270px;gap:16px}.collection{position:relative;border-radius:20px;overflow:hidden;border:1px solid #4d3826;background:#222}.collection:first-child{grid-row:1/3}.collection img{width:100%;height:100%;object-fit:cover;transition:.5s}.collection:hover img{transform:scale(1.06)}.collection:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 20%,#060606e8)}.collection-copy{position:absolute;z-index:2;bottom:0;padding:20px}.collection-copy span{color:var(--gold);font-size:12px;letter-spacing:1px;text-transform:uppercase;font-weight:900}.collection-copy h3{font-family:Georgia,serif;font-size:27px;margin:6px 0}.journey{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.step{background:#151116;border:1px solid #443322;border-radius:16px;padding:17px}.step b{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--purple);margin-bottom:10px}.step h3{margin:7px 0}.step p{color:var(--muted);line-height:1.4;font-size:14px}
+.footer-cta{margin-top:46px;text-align:center;padding:38px;border:1px solid #583f2a;border-radius:22px;background:linear-gradient(135deg,#1a111d,#171009)}.footer-cta h2{font-family:Georgia,serif;font-size:39px;margin:0 0 8px}
+@media(max-width:1050px){.hero{grid-template-columns:1fr}.modes{grid-template-columns:repeat(2,1fr)}.collections{grid-template-columns:1fr 1fr;grid-template-rows:340px 260px}.collection:first-child{grid-column:1/3;grid-row:auto}.journey{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.wrap{padding:14px}.nav{align-items:flex-start}.navlinks{display:none}.hero{min-height:620px;padding:28px 20px}.hero h1{font-size:44px}.modes,.collections,.journey{grid-template-columns:1fr}.collection:first-child{grid-column:auto}.collections{grid-template-rows:repeat(4,320px)}.section-head{display:block}.section-head p{margin-top:8px}}
+</style></head>
+<body><div class="wrap">
+<nav class="nav"><div class="brand"><div class="mark">🎨</div><div><strong>Euqilegna</strong><small>INTERACTIVE DIGITAL ART STUDIO</small></div></div>
+<div class="navlinks"><a href="/dashboard">Dashboard</a><a href="/creator">Creator Studio</a><a href="/create">Create</a><a href="/samples">Gallery Collections</a><a href="/studio/gallery">My Gallery</a><a href="/studio/music">Paint With Music</a><a href="/beta">Beta Club</a></div></nav>
+
+<section class="hero"><div><span class="eyebrow">Create • Paint • Relax • Display</span><h1>Create artwork you’ll be proud to showcase.</h1>
+<p>An immersive AI-powered art studio where anyone can turn images and imagination into relaxing interactive experiences and gallery-quality finished artwork.</p>
+<div class="actions"><a class="btn primary" href="/studio/create">Start New Artwork</a><a class="btn secondary" href="/studio/gallery">Continue a Project</a><a class="btn secondary" href="/samples">Explore Collections</a></div></div>
+<aside class="hero-side"><h3>Your Studio Experience</h3><div>✓ Beginner-friendly guided painting</div><div>✓ Automatic progress saving</div><div>✓ Premium artistic finish choices</div><div>✓ Music and calming ambience</div><div>✓ Finished artwork and showcase cards</div></aside></section>
+
+<div class="section-head"><div><h2>How would you like to create?</h2><p>Begin with working experiences and preview the expanding studio.</p></div></div>
+<section class="modes">
+<a class="mode" href="/create"><span class="status live">Live Beta</span><div class="icon">🎨</div><h3>Paint by Number</h3><p>Upload artwork, compile numbered regions, paint interactively, save progress, and reveal your finished masterpiece.</p></a>
+<a class="mode" href="/beta/color-by-number"><span class="status prototype">Prototype</span><div class="icon">🌈</div><h3>Color by Number</h3><p>A calmer mobile-friendly experience using larger color zones, hints, progress, undo, and automatic saving.</p></a>
+<a class="mode" href="/studio/finishes"><span class="status prototype">Preview</span><div class="icon">🖌️</div><h3>Artistic Finish Studio</h3><p>Preview Acrylic Gallery, Watercolor Studio, Oil Museum, Colored Pencil, and Mixed Media finish directions.</p></a>
+<a class="mode" href="/studio/music"><span class="status prototype">Preview</span><div class="icon">🎵</div><h3>Paint With Music</h3><p>Pair creative sessions with Avalon Blue jazz, rain, vinyl crackle, ocean, café, and calming ambience.</p></a>
+<a class="mode" href="/samples"><span class="status live">Live Beta</span><div class="icon">🖼️</div><h3>Gallery Collections</h3><p>Browse immersive adult artwork organized by mood, style, difficulty, and estimated painting time.</p></a>
+<a class="mode" href="/studio/gallery"><span class="status prototype">Working</span><div class="icon">🏛️</div><h3>My Gallery</h3><p>Save artwork records, titles, notes, completion dates, and creative memories in a personal portfolio.</p></a>
+<a class="mode" href="/studio/challenges"><span class="status prototype">Preview</span><div class="icon">🏆</div><h3>Studio Challenges</h3><p>Join gentle weekly themes, creative milestones, gallery awards, and Founders Club testing challenges.</p></a>
+<a class="mode" href="/beta/feedback"><span class="status live">Live Beta</span><div class="icon">💬</div><h3>Shape the Studio</h3><p>Share what you love, what frustrates you, and what should change before the public launch.</p></a>
+</section>
+
+<div class="section-head"><div><h2>Featured Gallery Collections</h2><p>Premium visual experiences designed to feel worth painting and displaying.</p></div><a href="/samples">View all collections →</a></div>
+<section class="collections">
+<a class="collection" href="/samples/midnight-jazz"><img src="/samples/covers/midnight-jazz.jpg"><div class="collection-copy"><span>Signature Collection</span><h3>Midnight Jazz</h3><p>Music, mood, rain, and rich evening light.</p></div></a>
+<a class="collection" href="/samples/botanical-portrait"><img src="/samples/covers/botanical-portrait.jpg"><div class="collection-copy"><span>Portrait Collection</span><h3>Botanical Muses</h3></div></a>
+<a class="collection" href="/samples/afrofuturist-stargazer"><img src="/samples/covers/afrofuturist-stargazer.jpg"><div class="collection-copy"><span>Fantasy Collection</span><h3>Cosmic Heritage</h3></div></a>
+<a class="collection" href="/samples/rainy-cafe"><img src="/samples/covers/rainy-cafe.jpg"><div class="collection-copy"><span>City Mood</span><h3>Rain & Reflection</h3></div></a>
+<a class="collection" href="/samples/golden-koi"><img src="/samples/covers/golden-koi.jpg"><div class="collection-copy"><span>Serenity Collection</span><h3>Golden Koi</h3></div></a>
+</section>
+
+<div class="section-head"><div><h2>The Creative Journey</h2><p>Every feature supports a calm process and a result worth celebrating.</p></div></div>
+<section class="journey"><div class="step"><b>1</b><h3>Choose</h3><p>Upload artwork or browse a curated collection.</p></div><div class="step"><b>2</b><h3>Personalize</h3><p>Select experience, difficulty, colors, mood, and finish.</p></div><div class="step"><b>3</b><h3>Create</h3><p>Paint with guidance, hints, zoom, progress, and optional music.</p></div><div class="step"><b>4</b><h3>Celebrate</h3><p>Enjoy a gallery-style reveal and record your creative journey.</p></div><div class="step"><b>5</b><h3>Showcase</h3><p>Download, print, share, or preserve it in My Gallery.</p></div></section>
+
+<section class="footer-cta"><h2>Help build the future of relaxing digital creativity.</h2><p>Test the studio with family, friends, artists, and potential customers.</p><div class="actions" style="justify-content:center"><a class="btn primary" href="/beta">Enter the Founders Club Beta</a><a class="btn secondary" href="/beta/feedback">Submit Feedback</a></div></section>
+</div></body></html>

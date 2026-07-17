@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 opencv-python-headless
 numpy
@@ -7,3 +7,4 @@ pillow
 scikit-image
 scipy
 shapely
+reportlab

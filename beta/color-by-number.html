@@ -1,0 +1,268 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
+<title>Euqilegna Color-by-Number Beta</title>
+<style>
+:root{--bg:#100b14;--panel:#0b090e;--purple:#8a3fc1;--purple2:#bf78e5;--line:#583968;--text:#fff;--muted:#cbbbd2;--good:#39a766}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+button{font:inherit;touch-action:manipulation}
+.top{padding:18px 22px;background:#09070b;border-bottom:1px solid var(--line)}
+.top a{color:#ddaaff;font-weight:800}.top h1{font-family:Georgia,serif;font-size:34px;margin:16px 0 8px}
+.top p{color:var(--muted);margin:0}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:calc(100vh - 132px)}
+.stage{display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;overscroll-behavior:contain}
+.board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px #0008}
+.board{display:block;width:100%;height:auto;touch-action:manipulation}
+.zone{fill:#fff;stroke:#302636;stroke-width:2.2;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
+.zone.target{fill:#ded7e1;stroke:#7c2fb2;stroke-width:4;filter:drop-shadow(0 0 4px #fff)}
+.zone.wrong{animation:shake .28s linear}
+.zone.painting{animation:paintPop .48s ease}
+.zone.done{stroke:#ffffff55;stroke-width:1.2}
+.zone-label{pointer-events:none;font-weight:900;fill:#171219;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes paintPop{0%{filter:brightness(1.7);opacity:.65}100%{filter:none;opacity:1}}
+.complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:#100b14cc;text-align:center;padding:24px}
+.complete-overlay.show{display:grid}.complete-card{background:#fff;color:#281a2d;border-radius:18px;padding:24px;max-width:420px}.complete-card h2{font-family:Georgia,serif;font-size:32px;margin:0 0 8px}
+.panel{padding:20px;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
+.panel h2{margin:0 0 12px}.current{border:1px solid var(--line);border-radius:14px;padding:13px;background:#15101a;margin-bottom:14px}
+.current-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{background:#211829;border-radius:10px;padding:10px}.metric small{display:block;color:var(--muted);margin-bottom:4px}
+.palette{display:grid;grid-template-columns:1fr 1fr;gap:10px}.swatch{min-height:68px;border-radius:12px;border:3px solid transparent;font-weight:900;color:#fff;cursor:pointer;position:relative}
+.swatch.active{border-color:#fff;box-shadow:0 0 0 3px var(--purple)}.swatch.complete:after{content:"✓";position:absolute;right:8px;top:6px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center}
+.swatch small{display:block;margin-top:4px}
+.progress{height:13px;background:#34273d;border-radius:999px;overflow:hidden;margin-top:8px}.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2));width:0;transition:width .3s}
+.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.toolbar button,.toolbar a{padding:11px;border-radius:10px;border:1px solid var(--line);background:#201627;color:#fff;text-decoration:none;text-align:center;font-weight:800;cursor:pointer}
+.toolbar .primary{background:var(--purple);border-color:var(--purple)}.save-note{color:var(--muted);font-size:13px;margin-top:10px;min-height:18px}
+.review{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}.review textarea{width:100%;min-height:90px;background:#151019;color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+.mobile-palette-toggle{display:none;position:sticky;bottom:10px;z-index:20;margin:10px auto;border:0;border-radius:999px;background:var(--purple);color:#fff;padding:13px 20px;font-weight:900}
+@media(max-width:780px){
+ .top h1{font-size:28px}.app{display:block}.stage{padding:10px;min-height:auto}.board-wrap{width:100%}
+ .panel{border-left:0;border-top:1px solid var(--line);padding:16px}.palette{grid-template-columns:repeat(4,1fr)}
+ .swatch{min-height:58px}.mobile-palette-toggle{display:block}.panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
+}
+</style>
+</head>
+<body>
+<header class="top">
+<a href="/beta">← Beta Dashboard</a>
+<h1>Color-by-Number Beta</h1>
+<p>Tap a color, then tap only the softly highlighted matching zones. Progress saves automatically.</p>
+</header>
+
+<div class="app">
+<main class="stage">
+<div class="board-wrap">
+<svg id="board" class="board" viewBox="0 0 800 600" aria-label="Interactive color-by-number artwork">
+<rect width="800" height="600" fill="#e7daf0"/>
+<path class="zone" data-c="1" d="M0 430 C180 350 310 400 430 440 C580 490 700 440 800 390 L800 600 L0 600 Z"/>
+<circle class="zone" data-c="2" cx="400" cy="205" r="90"/>
+<path class="zone" data-c="3" d="M312 210 C315 105 500 90 500 215 C465 165 430 145 395 150 C355 155 330 175 312 210 Z"/>
+<path class="zone" data-c="4" d="M330 305 C365 270 440 266 478 306 L530 540 L280 540 Z"/>
+<path class="zone" data-c="5" d="M360 300 L404 405 L448 300 L470 532 L330 532 Z"/>
+<path class="zone" data-c="6" d="M210 190 C245 120 320 145 325 220 C290 185 250 180 210 205 Z"/>
+<path class="zone" data-c="7" d="M520 200 C570 125 655 155 660 245 C620 200 570 190 520 220 Z"/>
+<ellipse class="zone" data-c="8" cx="180" cy="450" rx="100" ry="45"/>
+<ellipse class="zone" data-c="8" cx="640" cy="460" rx="110" ry="48"/>
+</svg>
+<div id="completeOverlay" class="complete-overlay"><div class="complete-card"><h2>Masterpiece Complete!</h2><p>You finished the Color-by-Number beta design.</p><button id="closeComplete">View Artwork</button><a href="/beta/feedback" style="display:block;margin-top:12px">Give Beta Feedback</a></div></div>
+</div>
+</main>
+
+<aside id="panel" class="panel">
+<button id="mobilePaletteToggle" class="mobile-palette-toggle">Show / Hide Palette</button>
+<h2>Choose a Color</h2>
+<section class="current">
+<div class="current-grid">
+<div class="metric"><small>Current color</small><strong id="currentColor">1</strong></div>
+<div class="metric"><small>Regions remaining</small><strong id="remaining">—</strong></div>
+</div>
+<p id="status">Choose a color to begin.</p>
+<strong id="count">0 / 0 regions colored</strong>
+<div class="progress"><div id="bar" class="bar"></div></div>
+</section>
+<div id="palette" class="palette"></div>
+<div class="toolbar">
+<button id="showNext" type="button">Show Next</button>
+<button id="undo" type="button">Undo</button>
+<button id="save" type="button">Save Now</button>
+<button id="reset" type="button">Reset</button>
+<a href="/beta/feedback">Give Feedback</a>
+<button id="downloadProgress" type="button">Download Progress</button>
+</div>
+<p id="saveNote" class="save-note">Auto-save is active.</p>
+<section class="review">
+<h3>Quick Review Note</h3>
+<textarea id="reviewNote" placeholder="What did you like or dislike about this Color-by-Number experience?"></textarea>
+<button id="saveReview" class="primary" type="button" style="margin-top:8px;padding:10px;border-radius:9px;color:#fff">Save Review Note</button>
+</section>
+</aside>
+</div>
+
+<script>
+'use strict';
+const COLORS=['#2a2237','#b96f61','#292132','#96506f','#d89270','#765f88','#ae657f','#82937d'];
+const STORAGE_KEY='euqilegna-color-by-number-beta-v2';
+const REVIEW_KEY=STORAGE_KEY+'-review';
+
+const board=document.getElementById('board');
+const paletteEl=document.getElementById('palette');
+const statusEl=document.getElementById('status');
+const countEl=document.getElementById('count');
+const barEl=document.getElementById('bar');
+const remainingEl=document.getElementById('remaining');
+const currentColorEl=document.getElementById('currentColor');
+const saveNoteEl=document.getElementById('saveNote');
+const panelEl=document.getElementById('panel');
+const completeOverlay=document.getElementById('completeOverlay');
+const reviewNote=document.getElementById('reviewNote');
+
+const zones=[...board.querySelectorAll('.zone')];
+let selected=1;
+let completed=new Set();
+let history=[];
+
+function safeSet(key,value){
+  try{localStorage.setItem(key,value);return true}catch(error){return false}
+}
+function safeGet(key){
+  try{return localStorage.getItem(key)}catch(error){return null}
+}
+function saveProgress(show=false){
+  const data={version:2,selected,completed:[...completed],savedAt:new Date().toISOString()};
+  const ok=safeSet(STORAGE_KEY,JSON.stringify(data));
+  if(show) saveNoteEl.textContent=ok?'Progress saved.':'Storage is blocked; use Download Progress.';
+  return data;
+}
+function addLabels(){
+  zones.forEach((zone,index)=>{
+    zone.dataset.index=String(index);
+    zone.setAttribute('tabindex','0');
+    zone.setAttribute('role','button');
+    const box=zone.getBBox();
+    const label=document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x',box.x+box.width/2);
+    label.setAttribute('y',box.y+box.height/2);
+    label.setAttribute('text-anchor','middle');
+    label.setAttribute('dominant-baseline','middle');
+    label.setAttribute('font-size',Math.max(17,Math.min(30,Math.min(box.width,box.height)*.3)));
+    label.setAttribute('class','zone-label');
+    label.textContent=zone.dataset.c;
+    board.appendChild(label);
+    zone._label=label;
+  });
+}
+function remainingFor(color){
+  return zones.filter((zone,index)=>Number(zone.dataset.c)===color&&!completed.has(index)).length;
+}
+function totalFor(color){
+  return zones.filter(zone=>Number(zone.dataset.c)===color).length;
+}
+function renderPalette(){
+  paletteEl.innerHTML='';
+  COLORS.forEach((color,index)=>{
+    const number=index+1;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='swatch'+(selected===number?' active':'')+(remainingFor(number)===0&&totalFor(number)>0?' complete':'');
+    button.style.background=color;
+    button.innerHTML=`${number}<small>${totalFor(number)-remainingFor(number)}/${totalFor(number)}</small>`;
+    button.addEventListener('click',()=>{selected=number;render();});
+    paletteEl.appendChild(button);
+  });
+}
+function highlight(){
+  zones.forEach((zone,index)=>{
+    zone.classList.toggle('target',!completed.has(index)&&Number(zone.dataset.c)===selected);
+  });
+  currentColorEl.textContent=String(selected);
+  remainingEl.textContent=String(remainingFor(selected));
+  statusEl.textContent=remainingFor(selected)
+    ? `Color ${selected} selected. Tap a gray highlighted zone.`
+    : `Color ${selected} is complete. Choose another color.`;
+}
+function render(){
+  zones.forEach((zone,index)=>{
+    if(completed.has(index)){
+      zone.style.fill=COLORS[Number(zone.dataset.c)-1];
+      zone.classList.add('done');
+      if(zone._label) zone._label.style.display='none';
+    }else{
+      zone.style.fill='#fff';
+      zone.classList.remove('done');
+      if(zone._label) zone._label.style.display='';
+    }
+  });
+  countEl.textContent=`${completed.size} / ${zones.length} regions colored`;
+  barEl.style.width=`${zones.length?completed.size/zones.length*100:0}%`;
+  renderPalette();
+  highlight();
+  if(completed.size===zones.length) completeOverlay.classList.add('show');
+}
+function paintZone(zone,index){
+  if(completed.has(index)) return;
+  const expected=Number(zone.dataset.c);
+  if(expected!==selected){
+    zone.classList.remove('wrong');void zone.offsetWidth;zone.classList.add('wrong');
+    statusEl.textContent=`That zone is color ${expected}. You are currently painting color ${selected}.`;
+    if(navigator.vibrate) navigator.vibrate(40);
+    return;
+  }
+  completed.add(index);
+  history.push(index);
+  zone.classList.add('painting');
+  setTimeout(()=>zone.classList.remove('painting'),500);
+  saveProgress(false);
+  render();
+}
+zones.forEach((zone,index)=>{
+  zone.addEventListener('pointerup',event=>{event.preventDefault();paintZone(zone,index);});
+  zone.addEventListener('keydown',event=>{
+    if(event.key==='Enter'||event.key===' '){event.preventDefault();paintZone(zone,index);}
+  });
+});
+function showNext(){
+  const item=zones.find((zone,index)=>Number(zone.dataset.c)===selected&&!completed.has(index));
+  if(!item){statusEl.textContent=`Color ${selected} is complete.`;return}
+  item.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
+  item.animate([{opacity:1},{opacity:.2},{opacity:1},{opacity:.2},{opacity:1}],{duration:1000});
+}
+function downloadJson(data,filename){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const link=document.createElement('a');
+  link.href=url;link.download=filename;link.click();URL.revokeObjectURL(url);
+}
+document.getElementById('showNext').onclick=showNext;
+document.getElementById('undo').onclick=()=>{
+  const last=history.pop();
+  if(last===undefined){statusEl.textContent='Nothing to undo.';return}
+  completed.delete(last);saveProgress(false);render();
+};
+document.getElementById('save').onclick=()=>saveProgress(true);
+document.getElementById('reset').onclick=()=>{
+  if(!confirm('Reset all Color-by-Number progress?')) return;
+  completed.clear();history=[];safeSet(STORAGE_KEY,'');completeOverlay.classList.remove('show');render();
+};
+document.getElementById('downloadProgress').onclick=()=>downloadJson(saveProgress(false),'euqilegna-color-by-number-progress.json');
+document.getElementById('closeComplete').onclick=()=>completeOverlay.classList.remove('show');
+document.getElementById('mobilePaletteToggle').onclick=()=>panelEl.classList.toggle('collapsed');
+reviewNote.addEventListener('input',()=>safeSet(REVIEW_KEY,reviewNote.value));
+document.getElementById('saveReview').onclick=()=>{
+  const ok=safeSet(REVIEW_KEY,reviewNote.value);
+  saveNoteEl.textContent=ok?'Review note saved.':'Review could not be saved in this browser.';
+};
+
+addLabels();
+try{
+  const saved=JSON.parse(safeGet(STORAGE_KEY)||'null');
+  if(saved){
+    selected=Number(saved.selected||1);
+    (saved.completed||[]).forEach(index=>completed.add(Number(index)));
+  }
+}catch(error){}
+reviewNote.value=safeGet(REVIEW_KEY)||'';
+render();
+</script>
+</body>
+</html>

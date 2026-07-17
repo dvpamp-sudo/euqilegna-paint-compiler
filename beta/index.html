@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Euqilegna Paint Studio Beta</title>
+<style>
+:root{--purple:#6f2ca0;--gold:#d2a34a;--cream:#fff9f2;--ink:#2a1710;--line:#ead5c3;--green:#23713c}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#fffaf4,#f7eee6);font-family:Arial,sans-serif;color:var(--ink)}
+.wrap{max-width:1280px;margin:auto;padding:28px}.hero{background:#fff;border:1px solid var(--line);border-radius:24px;padding:30px;box-shadow:0 15px 36px #00000010}
+.hero h1{font-family:Georgia,serif;font-size:44px;margin:0 0 8px}.hero p{font-size:18px;line-height:1.5;max-width:850px}
+.badge{display:inline-block;background:#efe1fa;color:var(--purple);padding:7px 11px;border-radius:999px;font-weight:800}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}.btn{display:inline-block;text-decoration:none;border-radius:12px;padding:14px 18px;font-weight:900;border:0;cursor:pointer}
+.primary{background:var(--purple);color:#fff}.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}
+h2{font-family:Georgia,serif;font-size:30px;margin:30px 0 14px}.modes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px;min-height:220px;box-shadow:0 10px 24px #0000000d;position:relative}
+.card .icon{font-size:48px}.card h3{margin:10px 0 6px;font-size:22px}.card p{color:#6f594a;line-height:1.45}.status{position:absolute;right:12px;top:12px;border-radius:999px;padding:5px 8px;font-size:12px;font-weight:900}
+.live{background:#ddf3e3;color:var(--green)}.soon{background:#f2eaf7;color:var(--purple)}
+.test-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px}
+.steps{counter-reset:step}.steps li{list-style:none;margin:14px 0;padding-left:42px;position:relative;line-height:1.4}.steps li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:-2px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--purple);color:#fff;font-weight:900}
+.code{background:#241c18;color:#fff;border-radius:10px;padding:12px;font-family:Consolas,monospace;overflow:auto}
+@media(max-width:950px){.modes{grid-template-columns:1fr 1fr}.test-grid{grid-template-columns:1fr}}@media(max-width:600px){.modes{grid-template-columns:1fr}.wrap{padding:14px}.hero h1{font-size:34px}}
+</style>
+</head>
+<body><div class="wrap">
+<section class="hero">
+<span class="badge">Founders Club Testing Prototype</span>
+<h1>Euqilegna Interactive Digital Art Studio 6.0 Beta</h1>
+<p>Create, paint, review, and showcase. This prototype is designed for family, friends, artists, and potential customers to test the experience and tell you exactly what works, what feels frustrating, and what should change before launch.</p>
+<div class="actions">
+<a class="btn primary" href="/">Create a Paint-by-Number</a>
+<a class="btn secondary" href="/samples">Browse Premium Adult Library</a>
+<a class="btn secondary" href="/beta/color-by-number">Try Color-by-Number Demo</a>
+<a class="btn secondary" href="/beta/feedback">Give Beta Feedback</a>
+</div>
+</section>
+
+<h2>Choose a Creative Experience</h2>
+<section class="modes">
+<div class="card"><span class="status live">Live Beta</span><div class="icon">🎨</div><h3>Paint by Number</h3><p>Interactive numbered regions, hints, save and resume, finished artwork reveal, printable package, and showcase card.</p><a class="btn primary" href="/">Start Testing</a></div>
+<div class="card"><span class="status live">Prototype</span><div class="icon">🌈</div><h3>Color by Number</h3><p>A working mobile-friendly experience with numbered zones, auto-save, resume, undo, hints, progress, and review notes.</p><a class="btn primary" href="/beta/color-by-number">Try Demo</a></div>
+<div class="card"><span class="status soon">Coming Next</span><div class="icon">🖍️</div><h3>Coloring Book</h3><p>Clean outlines without numbers for markers, colored pencils, tablets, and printable pages.</p></div>
+<div class="card"><span class="status soon">Coming Next</span><div class="icon">✏️</div><h3>Grayscale Coloring</h3><p>Preserved shadows and texture for adult coloring and more realistic finished artwork.</p></div>
+<div class="card"><span class="status soon">Roadmap</span><div class="icon">💎</div><h3>Diamond Painting</h3><p>Symbol chart, drill palette, printable pattern, and color reference.</p></div>
+<div class="card"><span class="status soon">Roadmap</span><div class="icon">🧵</div><h3>Cross Stitch</h3><p>Grid conversion, stitch count, printable pattern, and thread-color guide.</p></div>
+<div class="card"><span class="status soon">Roadmap</span><div class="icon">🧩</div><h3>Mosaic Art</h3><p>Square, triangle, or hexagonal pieces for a meditative geometric art experience.</p></div>
+<div class="card"><span class="status soon">Roadmap</span><div class="icon">🎵</div><h3>Paint While You Listen</h3><p>Avalon Blue jazz, rain ambience, ocean sounds, and relaxing creative soundscapes.</p></div>
+</section>
+
+<h2>Beta Test Plan</h2>
+<section class="test-grid">
+<div class="panel"><h3>Tester Instructions</h3><ol class="steps">
+<li>Choose one design or upload one image.</li><li>Paint for at least 15 minutes.</li><li>Save, close the browser, reopen, and verify progress returns.</li><li>Use zoom, pan, hints, skip color, and Show Next Section.</li><li>Finish a small design when possible and review the completed artwork.</li><li>Submit the feedback form—even when the experience went well.</li></ol></div>
+<div class="panel"><h3>Suggested Tester Groups</h3><p>Invite 5 family members, 5 friends, 5 creative hobbyists, and 5 people who have never used paint-by-number software.</p><h3>Run on your local network</h3><p>Start the server with:</p><div class="code">C:\PythonEnvs\euqilegna\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000</div><p>People connected to the same Wi-Fi can use your computer’s local IPv4 address followed by <strong>:8000/beta</strong>. Windows Firewall may ask for permission.</p></div>
+</section>
+</div></body></html>

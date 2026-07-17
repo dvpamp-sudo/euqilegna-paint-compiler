@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Beta Feedback</title>
+<style>
+body{font-family:Arial,sans-serif;background:#fff8f1;color:#2b190f;margin:0}.wrap{max-width:900px;margin:30px auto;padding:20px}.card{background:#fff;border:1px solid #ead6c5;border-radius:20px;padding:26px;box-shadow:0 12px 30px #0001}
+h1{font-family:Georgia,serif;font-size:38px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}label{font-weight:800;display:block;margin-top:14px}input,select,textarea{width:100%;padding:11px;border:1px solid #cdb7a6;border-radius:9px;margin-top:6px}textarea{min-height:100px}.checks label{font-weight:400}.checks input{width:auto;margin-right:8px}.btn{margin-top:20px;background:#6f2ca0;color:#fff;border:0;border-radius:11px;padding:14px 20px;font-weight:900;cursor:pointer}.success{color:#23713c;font-weight:900;margin-top:14px}@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style></head><body><div class="wrap"><div class="card">
+<a href="/beta">← Beta Dashboard</a><h1>Euqilegna Paint Studio Beta Feedback</h1>
+<p>Your honest feedback will help improve the experience before it is offered to customers.</p>
+<form id="feedbackForm">
+<div class="grid"><label>Your name or tester nickname<input name="testerName"></label><label>Experience tested<select name="experience"><option>Paint by Number</option><option>Color by Number</option><option>Premium Library</option><option>Upload and Compiler</option></select></label></div>
+<div class="grid"><label>Overall enjoyment<select name="enjoyment"><option value="5">5 — Loved it</option><option value="4">4 — Good</option><option value="3">3 — Okay</option><option value="2">2 — Frustrating</option><option value="1">1 — Very frustrating</option></select></label><label>Difficulty<select name="difficulty"><option>Too easy</option><option selected>Just right</option><option>Too difficult</option></select></label></div>
+<div class="grid"><label>Numbers and regions<select name="regions"><option>All easy to find</option><option>Mostly easy</option><option>Some difficult</option><option>Very difficult</option></select></label><label>Finished image quality<select name="imageQuality"><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Acceptable</option><option value="2">2 — Poor</option><option value="1">1 — Unusable</option></select></label></div>
+<label>What frustrated you?</label><div class="checks">
+<label><input type="checkbox" name="frustrations" value="Could not find regions">Could not find regions</label>
+<label><input type="checkbox" name="frustrations" value="Numbers too small">Numbers too small</label>
+<label><input type="checkbox" name="frustrations" value="Too many tiny regions">Too many tiny regions</label>
+<label><input type="checkbox" name="frustrations" value="Save or resume failed">Save or resume failed</label>
+<label><input type="checkbox" name="frustrations" value="Zoom or movement problem">Zoom or movement problem</label>
+<label><input type="checkbox" name="frustrations" value="Slow performance">Slow performance</label>
+<label><input type="checkbox" name="frustrations" value="Finished image did not match original">Finished image did not match original</label>
+</div>
+<label>Favorite feature<select name="favorite"><option>Interactive painting</option><option>Finished artwork reveal</option><option>Hints</option><option>Premium gallery</option><option>Save and resume</option><option>Showcase card</option><option>Color by Number</option></select></label>
+<label>What should be changed first?<textarea name="changeFirst"></textarea></label>
+<label>Additional comments<textarea name="comments"></textarea></label>
+<label>Would you recommend this experience? (0–10)<input name="recommend" type="number" min="0" max="10" value="8"></label>
+<button class="btn" type="submit">Submit Beta Feedback</button><div id="result"></div>
+</form></div></div>
+<script>
+feedbackForm.onsubmit=async e=>{
+ e.preventDefault();const fd=new FormData(feedbackForm);const data={};
+ for(const [k,v] of fd.entries()){if(k==='frustrations'){(data[k]??=[]).push(v)}else data[k]=v}
+ data.page=location.href;data.userAgent=navigator.userAgent;data.screen=`${screen.width}x${screen.height}`;
+ const r=await fetch('/api/beta-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+ const result=await r.json();document.getElementById('result').className='success';document.getElementById('result').textContent=result.ok?'Thank you. Your feedback was saved.':'Feedback could not be saved.';
+};
+</script></body></html>

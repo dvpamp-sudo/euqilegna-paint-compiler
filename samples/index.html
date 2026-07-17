@@ -1,0 +1,197 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Premium Adult Paint-by-Number Library</title>
+<style>
+:root{--gold:#d9ad59;--purple:#8b43bd;--cream:#f5ead7;--muted:#c4b59f;--line:#5e4527;--bg:#070707}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#090807,#11100e 48%,#070707);color:var(--cream);font-family:Arial,sans-serif}
+.hero{min-height:430px;display:flex;align-items:end;padding:55px max(28px,5vw);background:
+linear-gradient(90deg,#080706 0%,#080706dd 38%,transparent 78%),
+linear-gradient(180deg,transparent,#080706),
+url('/samples/covers/midnight-jazz.jpg') center/cover;border-bottom:1px solid var(--line)}
+.hero-inner{max-width:760px}.eyebrow{color:var(--gold);font-weight:900;text-transform:uppercase;letter-spacing:2px}h1{font-family:Georgia,serif;font-size:58px;margin:10px 0 14px;line-height:1.02}
+.hero p{font-size:20px;line-height:1.55;color:#e1d5c3}.hero a{display:inline-block;margin-top:15px;color:#fff;background:var(--purple);padding:13px 18px;border-radius:11px;text-decoration:none;font-weight:900}
+.toolbar{max-width:1500px;margin:0 auto;padding:26px 34px 8px;display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
+.toolbar h2{font-family:Georgia,serif;font-size:34px;margin:0}.filters{display:flex;gap:8px;flex-wrap:wrap}.filter{border:1px solid #5c4a38;background:#14110e;color:#e9dac4;border-radius:999px;padding:9px 13px;cursor:pointer}
+.filter.active{background:var(--gold);color:#15100a;border-color:var(--gold)}
+.grid{max-width:1500px;margin:0 auto;padding:20px 34px 60px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.art-card{background:#11100e;border:1px solid #423221;border-radius:18px;overflow:hidden;box-shadow:0 18px 36px #0008;transition:.25s}.art-card:hover{transform:translateY(-8px);border-color:var(--gold);box-shadow:0 24px 50px #000}
+.art-link{color:inherit;text-decoration:none}.image-wrap{height:360px;position:relative;overflow:hidden;background:#222}.image-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .55s ease,filter .4s ease}
+.art-card:hover img{transform:scale(1.07);filter:brightness(.72)}.badge{position:absolute;left:14px;top:14px;background:#0b0907dd;color:var(--gold);border:1px solid #b58a44;border-radius:999px;padding:7px 10px;font-weight:900;font-size:12px}
+.overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 15%,#080707ed 100%);display:flex;align-items:end;opacity:0;transition:.35s}.art-card:hover .overlay{opacity:1}.overlay-copy{padding:22px}.overlay-copy span{color:var(--gold);font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:900}.overlay-copy h2{font-family:Georgia,serif;font-size:30px;margin:7px 0}.overlay-copy p{color:#ddd0bf}.overlay-copy button{background:var(--purple);color:#fff;border:0;border-radius:9px;padding:11px 14px;font-weight:900}
+.card-info{padding:16px 17px 18px}.collection{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;font-weight:900}h3{font-family:Georgia,serif;font-size:23px;margin:6px 0 12px}.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:13px;border-top:1px solid #332719;padding-top:12px}
+.library-note{max-width:1100px;margin:0 auto 55px;padding:0 30px;text-align:center;color:#cbbb9f;font-size:17px;line-height:1.55}
+@media(max-width:1200px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){h1{font-size:40px}.hero{min-height:390px}.grid{grid-template-columns:1fr;padding:18px}.image-wrap{height:420px}.toolbar{padding:22px 18px 0}}
+</style></head>
+<body>
+<section class="hero"><div class="hero-inner"><span class="eyebrow">Euqilegna Curated Collections</span><h1>Premium Adult Paint-by-Number Library</h1>
+<p>Original Euqilegna premium artwork created for adults who want sophisticated subjects, rich color stories, meaningful detail, and finished pieces worth displaying.</p>
+<a href="/">Create From Your Own Artwork</a></div></section>
+<section class="toolbar"><h2>Curated Artwork</h2><div class="filters">
+<button class="filter active" data-filter="all">All</button><button class="filter" data-filter="jazz">Jazz & Music</button><button class="filter" data-filter="portrait">Portraits</button><button class="filter" data-filter="nature">Nature</button><button class="filter" data-filter="city">City Mood</button><button class="filter" data-filter="advanced">Advanced</button>
+</div></section>
+<main class="grid">
+    <article class="art-card" data-tags="jazz • portrait • lounge intermediate">
+      <a href="/samples/midnight-jazz" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/midnight-jazz.jpg" alt="Midnight Jazz Muse">
+          <span class="badge">Editor's Pick</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Soulful Night Collection</span>
+              <h2>Midnight Jazz Muse</h2>
+              <p>Jazz • Portrait • Lounge</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Soulful Night Collection</span><h3>Midnight Jazz Muse</h3></div>
+          <div class="meta"><span>Intermediate</span><span>8–10 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="vinyl • retro • mood intermediate">
+      <a href="/samples/noir-vinyl" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/noir-vinyl.jpg" alt="Noir Vinyl Reverie">
+          <span class="badge">Trending</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Analog Dreams Collection</span>
+              <h2>Noir Vinyl Reverie</h2>
+              <p>Vinyl • Retro • Mood</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Analog Dreams Collection</span><h3>Noir Vinyl Reverie</h3></div>
+          <div class="meta"><span>Intermediate</span><span>6–8 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="afrofuturism • cosmic • portrait advanced">
+      <a href="/samples/afrofuturist-stargazer" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/afrofuturist-stargazer.jpg" alt="Afrofuturist Stargazer">
+          <span class="badge">New</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Celestial Heritage Collection</span>
+              <h2>Afrofuturist Stargazer</h2>
+              <p>Afrofuturism • Cosmic • Portrait</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Celestial Heritage Collection</span><h3>Afrofuturist Stargazer</h3></div>
+          <div class="meta"><span>Advanced</span><span>10–14 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="nature • koi • meditation intermediate">
+      <a href="/samples/golden-koi" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/golden-koi.jpg" alt="Golden Koi & Lotus">
+          <span class="badge">Relaxing</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Serenity Collection</span>
+              <h2>Golden Koi & Lotus</h2>
+              <p>Nature • Koi • Meditation</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Serenity Collection</span><h3>Golden Koi & Lotus</h3></div>
+          <div class="meta"><span>Intermediate</span><span>7–9 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="city • rain • café intermediate">
+      <a href="/samples/rainy-cafe" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/rainy-cafe.jpg" alt="Rainy Café Nocturne">
+          <span class="badge">Popular</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>City Mood Collection</span>
+              <h2>Rainy Café Nocturne</h2>
+              <p>City • Rain • Café</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">City Mood Collection</span><h3>Rainy Café Nocturne</h3></div>
+          <div class="meta"><span>Intermediate</span><span>7–10 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="portrait • florals • luxe advanced">
+      <a href="/samples/botanical-portrait" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/botanical-portrait.jpg" alt="Celestial Botanical Portrait">
+          <span class="badge">Premium</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Floral Muse Collection</span>
+              <h2>Celestial Botanical Portrait</h2>
+              <p>Portrait • Florals • Luxe</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Floral Muse Collection</span><h3>Celestial Botanical Portrait</h3></div>
+          <div class="meta"><span>Advanced</span><span>10–12 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="art deco • jewel tones advanced">
+      <a href="/samples/art-deco-peacock" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/art-deco-peacock.jpg" alt="Art Deco Peacock">
+          <span class="badge">Collector</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Gilded Geometry Collection</span>
+              <h2>Art Deco Peacock</h2>
+              <p>Art Deco • Jewel Tones</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Gilded Geometry Collection</span><h3>Art Deco Peacock</h3></div>
+          <div class="meta"><span>Advanced</span><span>9–12 hours</span></div>
+        </div>
+      </a>
+    </article>
+    <article class="art-card" data-tags="urban • jazz • heritage intermediate">
+      <a href="/samples/brownstone-jazz" class="art-link">
+        <div class="image-wrap">
+          <img src="/samples/covers/brownstone-jazz.jpg" alt="Brownstone Jazz Evening">
+          <span class="badge">Featured</span>
+          <div class="overlay">
+            <div class="overlay-copy">
+              <span>Urban Heritage Collection</span>
+              <h2>Brownstone Jazz Evening</h2>
+              <p>Urban • Jazz • Heritage</p>
+              <button>Explore Artwork</button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div><span class="collection">Urban Heritage Collection</span><h3>Brownstone Jazz Evening</h3></div>
+          <div class="meta"><span>Intermediate</span><span>8–11 hours</span></div>
+        </div>
+      </a>
+    </article></main>
+<p class="library-note">Each collection includes interactive painting, a printable guide, curated color palette, finished-artwork reveal, progress saving, and a shareable showcase card.</p>
+<script>
+const buttons=[...document.querySelectorAll('.filter')],cards=[...document.querySelectorAll('.art-card')];
+buttons.forEach(button=>button.onclick=()=>{buttons.forEach(b=>b.classList.remove('active'));button.classList.add('active');const value=button.dataset.filter;cards.forEach(card=>card.style.display=value==='all'||card.dataset.tags.includes(value)?'block':'none')});
+</script></body></html>
