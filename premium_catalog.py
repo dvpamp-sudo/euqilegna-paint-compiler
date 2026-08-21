@@ -2,6 +2,7 @@ from __future__ import annotations
 
 PREMIUM_CATALOG = {
     "midnight-jazz": {
+        "compiler_profile": "portrait",
         "title": "Midnight Jazz Muse",
         "collection": "Midnight Jazz",
         "difficulty": "Expert",
@@ -11,6 +12,7 @@ PREMIUM_CATALOG = {
         "description": "A joyful saxophone performance beneath a luminous midnight skyline.",
     },
     "noir-vinyl": {
+        "compiler_profile": "graphic_monochrome",
         "title": "Noir Vinyl Reverie",
         "collection": "Analog Dreams",
         "difficulty": "Advanced",
@@ -20,6 +22,7 @@ PREMIUM_CATALOG = {
         "description": "Graphic black-and-cream vinyl artwork with strong rhythmic detail.",
     },
     "afrofuturist-stargazer": {
+        "compiler_profile": "portrait",
         "title": "Afrofuturist Stargazer",
         "collection": "Celestial Heritage",
         "difficulty": "Expert",
@@ -29,6 +32,7 @@ PREMIUM_CATALOG = {
         "description": "A luminous cosmic portrait filled with stars, color, and wonder.",
     },
     "golden-koi": {
+        "compiler_profile": "decorative",
         "title": "Golden Koi & Lotus",
         "collection": "Serenity",
         "difficulty": "Advanced",
@@ -38,6 +42,7 @@ PREMIUM_CATALOG = {
         "description": "Ornamental koi and lotus artwork with flowing line detail.",
     },
     "rainy-cafe": {
+        "compiler_profile": "landscape",
         "title": "Rainy Café Nocturne",
         "collection": "Rain & Reflection",
         "difficulty": "Expert",
@@ -47,6 +52,7 @@ PREMIUM_CATALOG = {
         "description": "A glowing café street scene reflected across a rainy evening.",
     },
     "botanical-portrait": {
+        "compiler_profile": "decorative",
         "title": "Celestial Botanical Portrait",
         "collection": "Botanical Muses",
         "difficulty": "Expert",
@@ -56,6 +62,7 @@ PREMIUM_CATALOG = {
         "description": "A richly decorated floral portrait framed by moons and stars.",
     },
     "art-deco-peacock": {
+        "compiler_profile": "decorative",
         "title": "Art Deco Peacock",
         "collection": "Gilded Geometry",
         "difficulty": "Expert",
@@ -65,6 +72,7 @@ PREMIUM_CATALOG = {
         "description": "A jewel-toned peacock surrounded by intricate gilded ornament.",
     },
     "brownstone-jazz": {
+        "compiler_profile": "landscape",
         "title": "Brownstone Jazz Evening",
         "collection": "Urban Heritage",
         "difficulty": "Expert",

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: euqilegna-paint-compiler
+    runtime: python
+    plan: standard
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.4
+      - key: EUQILEGNA_DATA_DIR
+        value: /var/data/euqilegna
+      - key: EUQILEGNA_BETA_CODE
+        generateValue: true
+    disk:
+      name: euqilegna-runtime-data
+      mountPath: /var/data
+      sizeGB: 10

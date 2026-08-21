@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Euqilegna Modular Compiler Platform</title>
+<style>
+:root{--bg:#090708;--panel:#161116;--line:#503a27;--gold:#dba84b;--purple:#8f43bd;--cream:#f4e7d4;--muted:#c2b09c;--ok:#2d8a4c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#2b1535,transparent 34%),var(--bg);color:var(--cream);font-family:Arial}
+.wrap{max-width:1280px;margin:auto;padding:26px}h1,h2{font-family:Georgia,serif}.hero{padding:28px 0}.hero h1{font-size:52px;margin:8px 0}.hero p{font-size:18px;color:var(--muted);max-width:850px;line-height:1.55}
+.grid{display:grid;grid-template-columns:1fr .8fr;gap:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px}
+label{display:block;margin:14px 0 6px;font-weight:800}input,select{width:100%;padding:11px;border:1px solid #5b432d;border-radius:10px;background:#0c090c;color:#fff}
+button,.btn{display:inline-block;padding:13px 16px;border:0;border-radius:11px;background:var(--purple);color:#fff;font-weight:900;text-decoration:none;cursor:pointer;margin-top:15px}.btn.secondary{background:#211922;border:1px solid #60462e}
+.progress{height:15px;background:#33261b;border-radius:999px;overflow:hidden;margin:15px 0}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--purple),var(--gold));transition:.3s}
+.status{padding:14px;border:1px solid #463323;border-radius:12px;background:#0b090b;min-height:72px;color:#dccbb6}.quality{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.metric{background:#0b090b;border:1px solid #3c2c1f;border-radius:11px;padding:12px}.metric strong{display:block;font-size:24px;color:var(--gold)}.hidden{display:none}
+.arch{display:grid;gap:9px}.module{padding:13px;border-radius:12px;border:1px solid #493522;background:#0c090b}.module b{display:block;color:var(--gold)}.module span{color:var(--muted)}
+@media(max-width:800px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body><div class="wrap"><header class="hero"><small style="color:var(--gold)">EUQILEGNA MODULAR COMPILER PLATFORM 10.0</small><h1>Compile, validate, simulate, then export.</h1><p>The customer-facing studio now calls a dedicated compiler application. Image loading, orchestration, region data, paintability QA, exports, and the API live in separate modules.</p></header>
+<div class="grid"><section class="panel"><h2>Compile Artwork</h2><form id="form">
+<label>Artwork image</label><input name="file" type="file" accept="image/*" required>
+<label>Palette colors</label><input name="colors" type="number" value="30" min="8" max="48">
+<label>Target regions</label><input name="target_regions" type="number" value="600" min="120" max="1800">
+<label>Minimum region area</label><input name="min_region_area" type="number" value="24" min="8" max="120">
+<label>Finished-art style</label><select name="finish_mode"><option value="original">Original Detail</option><option value="acrylic">Acrylic</option><option value="watercolor">Watercolor</option><option value="oil">Oil</option><option value="pencil">Colored Pencil</option><option value="pastel">Pastel</option><option value="mixed_media">Mixed Media</option></select>
+<button type="submit">Compile and Validate</button></form>
+<div class="progress"><div id="bar" class="bar"></div></div><div id="status" class="status">Ready.</div>
+<div id="quality" class="quality hidden"></div><div id="links" class="hidden"><a id="play" class="btn" href="#">Open Validated Player</a><a id="download" class="btn secondary" href="#">Download Package</a></div></section>
+<aside class="panel"><h2>Separated Architecture</h2><div class="arch"><div class="module"><b>Image Loader</b><span>Input validation and decoding.</span></div><div class="module"><b>Compiler Orchestrator</b><span>One stable entry point for compilation.</span></div><div class="module"><b>Region Repository</b><span>Shared geometry and palette records.</span></div><div class="module"><b>Paintability Validator</b><span>Numbers, SVG paths, click targets, and simulation.</span></div><div class="module"><b>Export Engine</b><span>Only packages that pass quality control.</span></div><div class="module"><b>Independent FastAPI Service</b><span>Can run separately from the storefront.</span></div></div></aside></div></div>
+<script>
+const form=document.getElementById('form'),statusBox=document.getElementById('status'),bar=document.getElementById('bar'),quality=document.getElementById('quality'),links=document.getElementById('links');
+form.onsubmit=async event=>{event.preventDefault();quality.classList.add('hidden');links.classList.add('hidden');bar.style.width='1%';statusBox.textContent='Uploading artwork…';const response=await fetch('/api/compile',{method:'POST',body:new FormData(form)});const data=await response.json();if(!response.ok){statusBox.textContent=data.detail||'Unable to start.';return}poll(data.jobId)};
+async function poll(id){const response=await fetch(`/api/jobs/${id}`);const data=await response.json();bar.style.width=`${data.percent||0}%`;statusBox.textContent=`${data.percent||0}% — ${data.stage||data.status}`;if(data.status==='complete'){showQuality(id,data.quality);return}if(['failed','quality_failed'].includes(data.status)){statusBox.textContent=data.error||data.stage;return}setTimeout(()=>poll(id),1200)}
+function showQuality(id,q){quality.innerHTML='';[['Regions',q.region_count],['Simulated',q.simulated_count],['Numbers',q.numbered_count],['Click targets',q.clickable_count],['Hintable',q.hintable_count],['Palette colors',q.palette_count]].forEach(([label,value])=>{const box=document.createElement('div');box.className='metric';box.innerHTML=`<strong>${value}</strong>${label}`;quality.appendChild(box)});quality.classList.remove('hidden');links.classList.remove('hidden');play.href=`/api/jobs/${id}/play`;download.href=`/api/jobs/${id}/download`;statusBox.textContent='Quality control passed. Package is ready.'}
+</script></body></html>

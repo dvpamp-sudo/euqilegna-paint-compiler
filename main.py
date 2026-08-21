@@ -27,6 +27,13 @@ from studio_config import (
 )
 from premium_catalog import PREMIUM_CATALOG
 from studio_storage import read_json, append_json_line
+from testing_runtime_v10 import (
+    RuntimeDatabase,
+    feedback_csv,
+    render_beta_portal,
+    render_feedback_form,
+    resolve_data_dir,
+)
 
 
 app = FastAPI(title=f"{APP_NAME} {APP_VERSION}")
@@ -39,11 +46,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-executor = ThreadPoolExecutor(max_workers=2)
+executor = ThreadPoolExecutor(max_workers=1)
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = Lock()
 
 initialize_storage()
+
+PROJECT_ROOT = Path(__file__).parent
+RUNTIME_DATA_DIR = resolve_data_dir(PROJECT_ROOT)
+RUNTIME_DB = RuntimeDatabase(RUNTIME_DATA_DIR / "euqilegna_runtime.sqlite3")
+BETA_ACCESS_CODE = RUNTIME_DB.ensure_default_invite()
+INTERRUPTED_ON_STARTUP = RUNTIME_DB.mark_interrupted_jobs()
 
 
 def utc_now() -> str:
@@ -58,15 +71,45 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def set_job(job_id: str, **updates: Any) -> None:
+def get_job_record(job_id: str, *, hydrate: bool = True) -> dict[str, Any] | None:
+    """Return a job from memory, falling back to persistent SQLite storage."""
     with jobs_lock:
-        if job_id in jobs:
-            jobs[job_id].update(updates)
+        job = jobs.get(job_id)
+        if job is not None:
+            return job
+
+    persisted = RUNTIME_DB.load_job(job_id)
+    if persisted is None:
+        return None
+
+    if hydrate:
+        with jobs_lock:
+            jobs[job_id] = persisted
+    return persisted
+
+
+def set_job(job_id: str, **updates: Any) -> None:
+    snapshot = None
+    with jobs_lock:
+        job = jobs.get(job_id)
+
+    if job is None:
+        job = RUNTIME_DB.load_job(job_id)
+        if job is None:
+            return
+        with jobs_lock:
+            jobs[job_id] = job
+
+    with jobs_lock:
+        jobs[job_id].update(updates)
+        snapshot = dict(jobs[job_id])
+
+    RUNTIME_DB.save_job(snapshot)
 
 
 def is_cancelled(job_id: str) -> bool:
-    with jobs_lock:
-        return bool(jobs.get(job_id, {}).get("cancelRequested"))
+    job = get_job_record(job_id)
+    return bool((job or {}).get("cancelRequested"))
 
 
 def progress_update(job_id: str, percent: int, stage: str, stats: dict) -> None:
@@ -81,18 +124,23 @@ def progress_update(job_id: str, percent: int, stage: str, stats: dict) -> None:
         "message": stage,
     }
 
+    job = get_job_record(job_id)
+    if not job:
+        return
+
     with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            return
+        job = jobs[job_id]
         job["percent"] = percent
         job["stage"] = stage
         job["stats"] = stats
         job["elapsedSeconds"] = round(elapsed)
         job["estimatedSecondsRemaining"] = eta
         job["updatedAt"] = utc_now()
-        job["logs"].append(log_entry)
+        job.setdefault("logs", []).append(log_entry)
         job["logs"] = job["logs"][-100:]
+        snapshot = dict(job)
+
+    RUNTIME_DB.save_job(snapshot)
 
 
 def run_job(job_id: str, settings: dict[str, Any]) -> None:
@@ -175,6 +223,97 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
             completedAt=utc_now(),
             updatedAt=utc_now(),
         )
+
+
+
+@app.get("/beta-test", response_class=HTMLResponse)
+def beta_test_portal(request: Request):
+    public_url = str(request.base_url).rstrip("/")
+    return HTMLResponse(render_beta_portal(public_url, BETA_ACCESS_CODE))
+
+
+@app.get("/beta/feedback-v10", response_class=HTMLResponse)
+def beta_feedback_v10(code: str = ""):
+    if not RUNTIME_DB.validate_invite(code):
+        raise HTTPException(status_code=403, detail="A valid beta access code is required.")
+    return HTMLResponse(render_feedback_form(code))
+
+
+@app.post("/api/beta-feedback-v10")
+async def save_beta_feedback_v10(request: Request):
+    payload = await request.json()
+    code = str(payload.pop("code", ""))
+    if not RUNTIME_DB.validate_invite(code):
+        raise HTTPException(status_code=403, detail="Invalid beta access code.")
+    payload["submittedAt"] = utc_now()
+    feedback_id = RUNTIME_DB.save_feedback(payload)
+    return {"ok": True, "feedbackId": feedback_id}
+
+
+@app.get("/beta/admin-v10", response_class=HTMLResponse)
+def beta_admin_v10():
+    rows = RUNTIME_DB.feedback_rows()
+    total = len(rows)
+    completed = sum(1 for row in rows if row.get("completion_status") == "Completed it")
+    pointer_pass = sum(1 for row in rows if row.get("pointer_worked") == 1)
+    avg_enjoyment = round(
+        sum((row.get("enjoyment") or 0) for row in rows) / max(1, total),
+        2,
+    )
+    table = "".join(
+        "<tr>"
+        f"<td>{row.get('submitted_at','')}</td>"
+        f"<td>{row.get('tester_name','')}</td>"
+        f"<td>{row.get('device','')}</td>"
+        f"<td>{row.get('artwork','')}</td>"
+        f"<td>{row.get('completion_status','')}</td>"
+        f"<td>{'Yes' if row.get('pointer_worked') else 'No'}</td>"
+        f"<td>{row.get('comments','')}</td>"
+        "</tr>"
+        for row in rows[:200]
+    )
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>Euqilegna Beta Results</title>
+    <style>body{{font-family:Arial;background:#fff8f1;color:#2b190f;padding:20px}}.cards{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.card{{background:white;border:1px solid #ead6c5;border-radius:14px;padding:16px}}table{{width:100%;border-collapse:collapse;background:white;margin-top:18px}}th,td{{padding:8px;border:1px solid #ead6c5;text-align:left}}@media(max-width:800px){{.cards{{grid-template-columns:1fr 1fr}}}}</style></head>
+    <body><h1>Family & Friends Beta Results</h1>
+    <p>Share: <code>/beta-test</code> — Access code: <strong>{BETA_ACCESS_CODE}</strong></p>
+    <div class='cards'>
+    <div class='card'><strong>Responses</strong><h2>{total}</h2></div>
+    <div class='card'><strong>Completed</strong><h2>{completed}</h2></div>
+    <div class='card'><strong>Pointer passed</strong><h2>{pointer_pass}/{total}</h2></div>
+    <div class='card'><strong>Avg. enjoyment</strong><h2>{avg_enjoyment}/5</h2></div>
+    </div>
+    <p><a href='/beta/feedback-v10.csv'>Download CSV</a></p>
+    <table><thead><tr><th>Date</th><th>Tester</th><th>Device</th><th>Artwork</th><th>Progress</th><th>Pointer</th><th>Comments</th></tr></thead><tbody>{table}</tbody></table>
+    </body></html>""")
+
+
+@app.get("/beta/feedback-v10.csv")
+def beta_feedback_v10_csv():
+    content = feedback_csv(RUNTIME_DB.feedback_rows())
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=euqilegna_beta_feedback_v10.csv"},
+    )
+
+
+@app.get("/api/runtime-status")
+def runtime_status():
+    return {
+        "ok": True,
+        "version": "10.0",
+        "dataDir": str(RUNTIME_DATA_DIR),
+        "persistentDataConfigured": bool(
+            os.getenv("EUQILEGNA_DATA_DIR")
+            or os.getenv("DATA_DIR")
+            or str(RUNTIME_DATA_DIR).startswith("/var/data")
+        ),
+        "singleCompilerWorker": True,
+        "interruptedJobsRecovered": INTERRUPTED_ON_STARTUP,
+        "recentJobs": RUNTIME_DB.recent_jobs(10),
+    }
 
 
 
@@ -369,11 +508,28 @@ def catalog_data():
     return {"items": PREMIUM_CATALOG, "count": len(PREMIUM_CATALOG)}
 
 
+@app.get("/runtime/jobs/{job_id}")
+def runtime_job_diagnostic(job_id: str):
+    """Diagnostic view proving a job exists in persistent storage."""
+    job = RUNTIME_DB.load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Persistent job not found.")
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "percent": job.get("percent"),
+        "stage": job.get("stage"),
+        "createdAt": job.get("createdAt"),
+        "updatedAt": job.get("updatedAt"),
+        "persistent": True,
+    }
+
+
 @app.get("/health")
 def health():
     return {
         "ok": True,
-        "service": "Euqilegna Interactive Digital Art Studio 9.0",
+        "service": "Euqilegna Interactive Digital Art Studio 10.0 Testing Release",
         "features": [
             "real-time progress",
             "current stage",
@@ -1086,6 +1242,7 @@ def compile_premium_sample(sample_name: str):
 
     with jobs_lock:
         jobs[job_id] = job
+    RUNTIME_DB.save_job(job)
 
     settings = {
         "preset": "illustration",
@@ -1145,7 +1302,8 @@ async def create_job(
     finish_mode: str = Form("original"),
 ):
     job_id = uuid4().hex
-    work_dir = Path(tempfile.mkdtemp(prefix=f"euqilegna_{job_id}_"))
+    work_dir = RUNTIME_DATA_DIR / "jobs" / job_id
+    work_dir.mkdir(parents=True, exist_ok=True)
     input_path = work_dir / (file.filename or "artwork.png")
     output_dir = work_dir / "package"
     zip_path = work_dir / "euqilegna_paint_package_v7.zip"
@@ -1174,6 +1332,7 @@ async def create_job(
 
     with jobs_lock:
         jobs[job_id] = job
+    RUNTIME_DB.save_job(job)
 
     settings = {
         "preset": preset,
@@ -1198,34 +1357,37 @@ async def create_job(
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
-    with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Compilation job not found.")
-        return public_job(job)
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Compilation job not found.")
+    return public_job(job)
 
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Compilation job not found.")
+
+    if job["status"] in {"complete", "failed", "cancelled", "interrupted"}:
+        return {"ok": True, "status": job["status"]}
+
     with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] in {"complete", "failed", "cancelled"}:
-            return {"ok": True, "status": job["status"]}
-        job["cancelRequested"] = True
-        job["stage"] = "Cancellation requested"
-        job["updatedAt"] = utc_now()
+        jobs[job_id]["cancelRequested"] = True
+        jobs[job_id]["stage"] = "Cancellation requested"
+        jobs[job_id]["updatedAt"] = utc_now()
+        snapshot = dict(jobs[job_id])
+
+    RUNTIME_DB.save_job(snapshot)
     return {"ok": True, "status": "cancelling"}
 
 
 
 @app.get("/jobs/{job_id}/test", response_class=HTMLResponse)
 def test_job(job_id: str):
-    with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Compilation job not found.")
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Compilation job not found.")
         if job["status"] != "complete":
             raise HTTPException(status_code=409, detail="Compilation is not complete.")
         player_path = Path(job["outputDir"]) / "interactive_player.html"
@@ -1240,10 +1402,9 @@ def test_job(job_id: str):
 
 @app.get("/jobs/{job_id}/qa", response_class=HTMLResponse)
 def qa_job(job_id: str):
-    with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Compilation job not found.")
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Compilation job not found.")
         if job["status"] != "complete":
             raise HTTPException(status_code=409, detail="Compilation is not complete.")
         qa_path = Path(job["outputDir"]) / "quality_dashboard.html"
@@ -1257,10 +1418,9 @@ def qa_job(job_id: str):
 
 @app.get("/jobs/{job_id}/download")
 def download_job(job_id: str):
-    with jobs_lock:
-        job = jobs.get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Compilation job not found.")
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Compilation job not found.")
         if job["status"] != "complete":
             raise HTTPException(status_code=409, detail="Compilation is not complete.")
         zip_path = Path(job["zipPath"])
