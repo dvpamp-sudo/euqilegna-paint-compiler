@@ -68,6 +68,7 @@ PROFILES: dict[str, ArtworkProfile] = {
         target_region_max=1100,
         experience_mode="detailed",
         simplify_tolerance_floor=0.06,
+        description="Black, cream, and gray graphic artwork with broad dark fills plus fine protected line detail.",
     ),
     "landscape": ArtworkProfile(
         name="landscape",
