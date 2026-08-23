@@ -1511,7 +1511,8 @@ def simulate_complete_painting(
     records: list[dict],
     palette: list[dict],
     blank_svg: str,
-    region_masks: dict[str, np.ndarray],
+    regions: np.ndarray,
+    region_labels: dict[str, int],
 ) -> dict:
     """
     Run a deterministic pre-export customer simulation.
@@ -1571,7 +1572,7 @@ def simulate_complete_painting(
         color_id = str(record.get("colorId"))
         path = paths.get(region_id)
         label = labels.get(region_id)
-        mask = region_masks.get(region_id)
+        label_id = region_labels.get(region_id)
 
         reasons: list[str] = []
         if path is None or not (path.get("d") or "").strip():
@@ -1580,17 +1581,17 @@ def simulate_complete_painting(
             reasons.append("missing_number")
         elif (label.text or "").strip() != color_id:
             reasons.append("wrong_number")
-        if mask is None or not mask.any():
-            reasons.append("missing_mask")
+        if label_id is None:
+             reasons.append("missing_region_label")
         else:
-            label_data = record.get("label", {})
-            x = int(round(float(label_data.get("x", -1))))
-            y = int(round(float(label_data.get("y", -1))))
-            if not (
-                0 <= y < mask.shape[0]
-                and 0 <= x < mask.shape[1]
-                and bool(mask[y, x])
-            ):
+           label_data = record.get("label", {})
+           x = int(round(float(label_data.get("x", -1))))
+           y = int(round(float(label_data.get("y", -1))))
+           if not (
+                0 <= y < regions.shape[0]
+                and 0 <= x < regions.shape[1]
+                and int(regions[y, x]) == label_id
+       ):
                 reasons.append("number_not_inside_region")
 
         if region_id in simulated_ids:
@@ -4093,7 +4094,7 @@ def compile_artwork(
     update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
     h, w = processed.shape[:2]
     records: List[dict] = []
-    region_masks: dict[str, np.ndarray] = {}
+    region_labels: dict[str, int] = {}
     rendered_coverage = np.zeros((h, w), dtype=bool)
 
     total_region_ids = len(region_ids)
@@ -4126,7 +4127,7 @@ def compile_artwork(
         )
         x, y, radius = label_point(mask)
         region_id = f"region_{index}"
-        region_masks[region_id] = mask.copy()
+        region_labels[region_id] = int(rid)
         records.append(
             {
                 "regionId": region_id,
@@ -4307,8 +4308,9 @@ def compile_artwork(
         records,
         palette,
         blank_svg_text,
-        region_masks,
-    )
+        regions,
+        region_labels,
+)
     (output_dir / "paintability_simulation.json").write_text(
         json.dumps(simulation_report, indent=2),
         encoding="utf-8",
