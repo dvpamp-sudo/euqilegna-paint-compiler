@@ -3789,12 +3789,33 @@ def compile_artwork(
                     experience_mode,
                     target_regions,
                 )
-
+                illustration_region_count = int(len(np.unique(regions[regions > 0])))
+                illustration_hard_cap = max(int(target_regions * 1.35), target_regions + 60)
+                if illustration_region_count > illustration_hard_cap:
+                    update(
+                        60,
+                        "Illustration region count exceeded the hard cap — merging to reduce",
+                        {
+                            "illustrationRegionCount": illustration_region_count,
+                            "hardCap": illustration_hard_cap,
+                        },
+                    )
+                    regions = adaptive_merge_regions(
+                        processed,
+                        regions,
+                        barrier_strength,
+                        detail_map,
+                        min_area,
+                        experience_mode,
+                        illustration_hard_cap,
+                    )
+                    illustration_region_count = int(len(np.unique(regions[regions > 0])))
         update(
             64,
             "Closed paint regions created",
             {
                 "lineArtRegions": marker_count,
+                "illustrationRegionCount": illustration_region_count,
                 "recoveryPipeline": active_pipeline,
             },
         )
