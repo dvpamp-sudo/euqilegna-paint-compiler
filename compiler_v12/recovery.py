@@ -32,12 +32,13 @@ def build_attempts(source_analysis: dict[str, Any], requested: dict[str, Any]) -
 
     illustration = dict(requested)
     illustration.update({
-        "name": "full-canvas-illustration-recovery",
-        "design_style": "illustration",
-        "auto_crop": False,
-        "min_region_area": max(int(requested.get("min_region_area") or 36), 36),
-        "target_regions": min(int(requested.get("target_regions") or 480), 480),
-    })
+    "name": "full-canvas-illustration-recovery",
+    "design_style": "illustration",
+    "auto_crop": False,
+    "min_region_area": max(int(requested.get("min_region_area") or 36), 36),
+    "target_regions": min(int(requested.get("target_regions") or 480), 480),
+    "experience_mode": "relaxed",
+})
     attempts.append(illustration)
 
     photo = dict(requested)
