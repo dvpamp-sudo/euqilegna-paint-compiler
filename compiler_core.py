@@ -1895,9 +1895,10 @@ textarea{width:100%;min-height:90px;border:1px solid #ccb7a7;border-radius:8px;p
       <span id="zoomReadout" class="zoom-readout">100%</span>
       <button id="zoomIn" class="secondary">+</button>
       <button id="zoomReset" class="secondary">Reset View</button>
-      <button id="canvasLockBtn" class="secondary">Canvas Locked</button>
+      <button id="canvasLockBtn" class="secondary">Paint Mode</button>
       <button id="centerSelected" class="secondary">Center Selected Color</button><button id="toggleNumberFocus" class="secondary">Show All Numbers</button>
     </div>
+    <p class="hint">Looking for a number? Zoom in with the +/− buttons or by scrolling over the picture, then switch to <strong>Pan Mode</strong> and drag to move around. In Paint Mode you can also hold Space or use the middle mouse button to drag.</p>
 
     <div class="review-only review-card">
       <h3>Review tools</h3>
@@ -3095,7 +3096,7 @@ artboard.addEventListener('pointerdown',event=>{
   isDragging=false;
 
   const mousePanGesture=event.pointerType==='mouse' && (
-    event.button===1 || spacePanActive
+    event.button===1 || spacePanActive || !canvasLocked
   );
   const touchPanGesture=event.pointerType==='touch' && !canvasLocked;
 
@@ -3166,11 +3167,12 @@ document.getElementById('zoomReset').onclick=()=>{zoom=1;panX=0;panY=0;applyTran
 document.getElementById('canvasLockBtn').onclick=()=>{
   canvasLocked=!canvasLocked;
   const button=document.getElementById('canvasLockBtn');
-  button.textContent=canvasLocked?'Canvas Locked':'Pan Canvas';
+  button.textContent=canvasLocked?'Paint Mode':'Pan Mode';
   button.className=canvasLocked?'secondary':'primary';
+  artboard.style.cursor=canvasLocked?'crosshair':'grab';
   message.textContent=canvasLocked
-    ? 'Canvas locked — tapping paints without moving the artwork.'
-    : 'Canvas unlocked — drag to pan while zoomed in. Lock it again to paint.';
+    ? 'Paint Mode — tapping paints without moving the artwork.'
+    : 'Pan Mode — drag the picture to move around while zoomed in. Switch back to Paint Mode to paint.';
 };
 document.getElementById('centerSelected').onclick=centerOnSelectedColor;
 document.getElementById('toggleNumberFocus').onclick=()=>{
