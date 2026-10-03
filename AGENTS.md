@@ -29,11 +29,40 @@ auto-generated if absent. `EUQILEGNA_DATA_DIR` is set in compose.
 
 ## Known quirk: compiler_core.py indentation
 
-`compiler_core.py` (a ~4500-line generated file) had a block (lines ~4097–4488
-inside `compile_artwork`) that lost its 4-space indentation, causing a
-`SyntaxError: 'return' outside function`. This was fixed by prepending 4 spaces
-to every line in that range. If the file is regenerated/overwritten, re-check
-that block's indentation.
+The imported commit `7eba90b` ("Fail early when illustration region cap is
+exceeded") mangled `compiler_core.py`: it added a fail-early cap check **and**
+stripped indentation from the tail of `compile_artwork` (from `region_ids = [...]`
+to the end of the function), causing `SyntaxError: 'return' outside function`.
+A naive "add 4 spaces everywhere" re-indent is WRONG — the loss was not uniform
+(the outer block lost 4 spaces but the for-loop body ended up over-indented),
+which silently moved the Pixel Coverage Guarantee check *inside* the vectorize
+loop and made every compile fail coverage.
+
+Correct fix: restore from the last good commit and re-apply only the intended
+change:
+
+    git show 2cba359:compiler_core.py > compiler_core.py   # last correct version
+
+then re-add the cap check with its variable defined (the upstream check
+referenced `illustration_hard_cap`, which was only computed in the line-art
+recovery path, so it raised `UnboundLocalError` for the illustration pipeline):
+
+    illustration_hard_cap = max(int(target_regions * 1.35), target_regions + 60)
+    if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
+        raise ValueError(...)
+
+Verify with `diff -w -B` against `2cba359` — only that block should differ.
+
+## Behavior note: the illustration region cap is a hard failure
+
+The cap check is a deliberate "fail early" guard: when the illustration pipeline
+produces more regions than `max(target_regions*1.35, target_regions+60)`, the
+attempt raises instead of exporting an unusable package. Most premium samples
+compile fine (`afrofuturist-stargazer` → 612 regions under its 648 cap), but
+heavily detailed ones can over-segment and fail (`midnight-jazz` → ~2100–2300
+regions vs its 648–756 cap). This is pre-existing: the un-corrupted `2cba359`
+version fails the same artwork through `validate_package`'s region-count check,
+so it is not a regression from the indentation fix.
 
 ## Secondary service (not in preview)
 
