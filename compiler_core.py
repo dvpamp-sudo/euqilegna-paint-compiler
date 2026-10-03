@@ -1791,7 +1791,7 @@ header h1{margin:0;font-family:Georgia,serif;font-size:23px}
 .mode-switch{display:flex;gap:8px}
 .app{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 68px)}
 .canvas-wrap{position:relative;overflow:hidden;background:#f3ede8;display:flex;align-items:center;justify-content:center;padding:18px}
-#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;will-change:transform;backface-visibility:hidden;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;will-change:transform;backface-visibility:hidden;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
 #svgHost,#completion,#referenceOverlay,#masterReveal{position:absolute;inset:0;width:100%;height:100%}#svgHost{z-index:2;transition:opacity .35s ease,filter .35s ease}#masterReveal{z-index:4;pointer-events:none;overflow:hidden;display:block}#masterReveal image{image-rendering:auto}
 #svgHost svg{width:100%;height:100%;display:block;shape-rendering:geometricPrecision;text-rendering:geometricPrecision}
 #completion,#referenceOverlay{object-fit:contain;pointer-events:none;transition:opacity .5s ease}
@@ -1895,10 +1895,9 @@ textarea{width:100%;min-height:90px;border:1px solid #ccb7a7;border-radius:8px;p
       <span id="zoomReadout" class="zoom-readout">100%</span>
       <button id="zoomIn" class="secondary">+</button>
       <button id="zoomReset" class="secondary">Reset View</button>
-      <button id="canvasLockBtn" class="secondary">Paint Mode</button>
       <button id="centerSelected" class="secondary">Center Selected Color</button><button id="toggleNumberFocus" class="secondary">Show All Numbers</button>
     </div>
-    <p class="hint">Looking for a number? Zoom in with the +/− buttons or by scrolling over the picture, then switch to <strong>Pan Mode</strong> and drag to move around. In Paint Mode you can also hold Space or use the middle mouse button to drag.</p>
+    <p class="hint">Looking for a number? Zoom in with the +/− buttons or by scrolling over the picture, then drag the picture to move around. A quick tap still paints as usual.</p>
 
     <div class="review-only review-card">
       <h3>Review tools</h3>
@@ -1967,8 +1966,6 @@ let pointerStartX=0;
 let pointerStartY=0;
 let hasDragged=false;
 let pointerIsDown=false;
-let canvasLocked=true;
-let spacePanActive=false;
 let numberFocus=false;
 let hintedRegionId=null;
 let completionShown=false;
@@ -2814,8 +2811,13 @@ function applyTransform(){
 }
 function setZoom(next){
   zoom=Math.max(.6,Math.min(8,next));
-  if(zoom<=1){panX=0;panY=0;}
+  if(zoom<=1){
+    panX=0;panY=0;
+    isDragging=false;pointerIsDown=false;hasDragged=false;
+    artboard.classList.remove('dragging');
+  }
   applyTransform();
+  artboard.style.cursor=zoom>1?'grab':'';
   document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
 }
 function setMode(mode){
@@ -3086,7 +3088,13 @@ document.getElementById('paintAgainBtn').onclick=()=>{
   resetArtworkForRepaint();
 };
 
+// Any drag past a few pixels moves the picture. A quick tap still paints,
+// so customers never have to switch modes to look around a zoomed image.
+const PAN_THRESHOLD=5;
+let panPointerId=null;
+
 artboard.addEventListener('pointerdown',event=>{
+  if(event.button===2) return;
   pointerIsDown=true;
   pointerStartX=event.clientX;
   pointerStartY=event.clientY;
@@ -3094,22 +3102,23 @@ artboard.addEventListener('pointerdown',event=>{
   dragStartY=event.clientY-panY;
   hasDragged=false;
   isDragging=false;
-
-  const mousePanGesture=event.pointerType==='mouse' && (
-    event.button===1 || spacePanActive || !canvasLocked
-  );
-  const touchPanGesture=event.pointerType==='touch' && !canvasLocked;
-
-  if(zoom>1 && (mousePanGesture || touchPanGesture)){
-    isDragging=true;
-    hasDragged=true;
-    artboard.classList.add('dragging');
-    try{artboard.setPointerCapture(event.pointerId)}catch(e){}
-  }
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+  panPointerId=event.pointerId;
 });
 
 artboard.addEventListener('pointermove',event=>{
-  if(!pointerIsDown || !isDragging || zoom<=1) return;
+  if(!pointerIsDown || zoom<=1) return;
+
+  if(!isDragging){
+    const moved=Math.hypot(event.clientX-pointerStartX,event.clientY-pointerStartY);
+    if(moved<PAN_THRESHOLD) return;
+    isDragging=true;
+    hasDragged=true;
+    artboard.classList.add('dragging');
+    artboard.style.cursor='grabbing';
+    try{artboard.setPointerCapture(panPointerId)}catch(e){}
+  }
 
   event.preventDefault();
   panX=event.clientX-dragStartX;
@@ -3119,6 +3128,7 @@ artboard.addEventListener('pointermove',event=>{
 
 artboard.addEventListener('pointerup',event=>{
   pointerIsDown=false;
+  panPointerId=null;
   if(isDragging){
     event.preventDefault();
     event.stopPropagation();
@@ -3126,6 +3136,7 @@ artboard.addEventListener('pointerup',event=>{
 
   isDragging=false;
   artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
 
   try{artboard.releasePointerCapture(event.pointerId)}catch(e){}
   setTimeout(()=>{hasDragged=false;},0);
@@ -3143,18 +3154,6 @@ artboard.addEventListener('lostpointercapture',()=>{
   artboard.classList.remove('dragging');
 });
 
-window.addEventListener('keydown',event=>{
-  if(event.code==='Space' && !event.repeat){
-    spacePanActive=true;
-    if(zoom>1) artboard.style.cursor='grab';
-  }
-});
-window.addEventListener('keyup',event=>{
-  if(event.code==='Space'){
-    spacePanActive=false;
-    artboard.style.cursor='';
-  }
-});
 artboard.addEventListener('wheel',event=>{
   event.preventDefault();
   const delta=event.deltaY<0?.25:-.25;
@@ -3163,17 +3162,7 @@ artboard.addEventListener('wheel',event=>{
 
 document.getElementById('zoomIn').onclick=()=>setZoom(Math.round((zoom+.25)*4)/4);
 document.getElementById('zoomOut').onclick=()=>setZoom(Math.round((zoom-.25)*4)/4);
-document.getElementById('zoomReset').onclick=()=>{zoom=1;panX=0;panY=0;applyTransform();document.getElementById('zoomReadout').textContent='100%';};
-document.getElementById('canvasLockBtn').onclick=()=>{
-  canvasLocked=!canvasLocked;
-  const button=document.getElementById('canvasLockBtn');
-  button.textContent=canvasLocked?'Paint Mode':'Pan Mode';
-  button.className=canvasLocked?'secondary':'primary';
-  artboard.style.cursor=canvasLocked?'crosshair':'grab';
-  message.textContent=canvasLocked
-    ? 'Paint Mode — tapping paints without moving the artwork.'
-    : 'Pan Mode — drag the picture to move around while zoomed in. Switch back to Paint Mode to paint.';
-};
+document.getElementById('zoomReset').onclick=()=>setZoom(1);
 document.getElementById('centerSelected').onclick=centerOnSelectedColor;
 document.getElementById('toggleNumberFocus').onclick=()=>{
   numberFocus=!numberFocus;
