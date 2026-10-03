@@ -4094,395 +4094,395 @@ def compile_artwork(
         if rid > 0
     ]
 
-if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
-    raise ValueError(
-        f"Illustration region cap was not achieved before export: "
-        f"{len(region_ids)} > {illustration_hard_cap}"
-    )
-
-if not region_ids:
-    raise ValueError(
-        "No usable paint regions were generated. Reduce minimum region area."
-    )
-
-update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
-if active_pipeline == "lineart":
-    region_to_color, centers, original_region_means = assign_premium_lineart_palette(
-        regions,
-        processed,
-    )
-else:
-    region_to_color, centers, original_region_means = assign_region_palette(
-        processed,
-        regions,
-        region_ids,
-        color_count,
-    )
-
-update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
-h, w = processed.shape[:2]
-records: List[dict] = []
-region_labels: dict[str, int] = {}
-rendered_coverage = np.zeros((h, w), dtype=bool)
-
-total_region_ids = len(region_ids)
-for index, rid in enumerate(region_ids, start=1):
-    if index == 1 or index % 100 == 0 or index == total_region_ids:
-        update(
-            min(89, 80 + int(9 * index / max(1, total_region_ids))),
-            "Vectorizing closed paint regions",
-            {"vectorized": index - 1, "regionCandidates": total_region_ids},
-        )
-    mask = regions == rid
-    area = int(mask.sum())
-    region_detail = float(detail_map[mask].mean()) if area else 0.0
-    poly = mask_polygon(mask, validation_tolerance)
-    if poly is None:
+    if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
         raise ValueError(
-            f"Validated region {rid} became non-vectorizable during export."
+            f"Illustration region cap was not achieved before export: "
+            f"{len(region_ids)} > {illustration_hard_cap}"
         )
-    path = polygon_path(poly)
-    if not path:
+    
+    if not region_ids:
         raise ValueError(
-            f"Validated region {rid} produced an empty SVG path."
+            "No usable paint regions were generated. Reduce minimum region area."
         )
-
-    rendered_coverage |= mask
-    color_id = region_to_color[rid]
-    palette_fill = rgb_to_hex(centers[color_id])
-    original_fill = rgb_to_hex(
-        np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
-    )
-    x, y, radius = label_point(mask)
-    region_id = f"region_{index}"
-    region_labels[region_id] = int(rid)
-    records.append(
-        {
-            "regionId": region_id,
-            "colorId": str(color_id + 1),
-            "fillColor": palette_fill,
-            "paletteColor": palette_fill,
-            "originalColor": original_fill,
-            "painted": False,
-            "area": area,
-            "detailScore": round(region_detail, 4),
-            "paintability": (
-                "tiny" if area < 80
-                else "small" if area < 180
-                else "comfortable"
+    
+    update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
+    if active_pipeline == "lineart":
+        region_to_color, centers, original_region_means = assign_premium_lineart_palette(
+            regions,
+            processed,
+        )
+    else:
+        region_to_color, centers, original_region_means = assign_region_palette(
+            processed,
+            regions,
+            region_ids,
+            color_count,
+        )
+    
+    update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
+    h, w = processed.shape[:2]
+    records: List[dict] = []
+    region_labels: dict[str, int] = {}
+    rendered_coverage = np.zeros((h, w), dtype=bool)
+    
+    total_region_ids = len(region_ids)
+    for index, rid in enumerate(region_ids, start=1):
+        if index == 1 or index % 100 == 0 or index == total_region_ids:
+            update(
+                min(89, 80 + int(9 * index / max(1, total_region_ids))),
+                "Vectorizing closed paint regions",
+                {"vectorized": index - 1, "regionCandidates": total_region_ids},
+            )
+        mask = regions == rid
+        area = int(mask.sum())
+        region_detail = float(detail_map[mask].mean()) if area else 0.0
+        poly = mask_polygon(mask, validation_tolerance)
+        if poly is None:
+            raise ValueError(
+                f"Validated region {rid} became non-vectorizable during export."
+            )
+        path = polygon_path(poly)
+        if not path:
+            raise ValueError(
+                f"Validated region {rid} produced an empty SVG path."
+            )
+    
+        rendered_coverage |= mask
+        color_id = region_to_color[rid]
+        palette_fill = rgb_to_hex(centers[color_id])
+        original_fill = rgb_to_hex(
+            np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
+        )
+        x, y, radius = label_point(mask)
+        region_id = f"region_{index}"
+        region_labels[region_id] = int(rid)
+        records.append(
+            {
+                "regionId": region_id,
+                "colorId": str(color_id + 1),
+                "fillColor": palette_fill,
+                "paletteColor": palette_fill,
+                "originalColor": original_fill,
+                "painted": False,
+                "area": area,
+                "detailScore": round(region_detail, 4),
+                "paintability": (
+                    "tiny" if area < 80
+                    else "small" if area < 180
+                    else "comfortable"
+                ),
+                "path": path,
+                "label": {
+                    "x": x,
+                    "y": y,
+                    "radius": radius,
+                    "fontSize": max(5.2, min(14.0, radius * 0.68)),
+                    "visible": True,
+                },
+            }
+        )
+    
+        if not records:
+            raise ValueError("No vector paint regions could be created.")
+    
+        missing_render_pixels = int((~rendered_coverage).sum())
+        rendered_coverage_percent = round(
+            float(rendered_coverage.mean()) * 100.0,
+            6,
+        )
+    
+        if missing_render_pixels > 0:
+            raise ValueError(
+                "Pixel Coverage Guarantee failed: "
+                f"{missing_render_pixels} canvas pixels were not converted into "
+                "selectable paint regions. The package was not exported."
+            )
+    
+        records.sort(key=lambda item: item["area"], reverse=True)
+    
+        update(90, "Tracing preserved ink overlay", {"finalRegions": len(records)})
+        ink_paths = trace_ink_paths(barrier, fg)
+    
+        palette = [
+            {
+                "colorId": str(i + 1),
+                "hex": rgb_to_hex(center),
+                "rgb": [int(v) for v in center],
+                "label": f"Color {i + 1}",
+            }
+            for i, center in enumerate(centers)
+        ]
+    
+        palette_preview = np.full((h, w, 3), 255, dtype=np.uint8)
+        reference_preview = np.full((h, w, 3), 255, dtype=np.uint8)
+        for rid in region_ids:
+            palette_preview[regions == rid] = centers[region_to_color[rid]]
+            reference_preview[regions == rid] = np.clip(
+                np.round(original_region_means[rid]), 0, 255
+            ).astype(np.uint8)
+        Image.fromarray(palette_preview).save(output_dir / "preview_palette.png")
+        Image.fromarray(reference_preview).save(output_dir / "preview_reference.png")
+        Image.fromarray(reference_preview).save(output_dir / "preview.png")
+        source_gray = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
+        preview_gray = cv2.cvtColor(reference_preview, cv2.COLOR_RGB2GRAY)
+        source_edges = cv2.Canny(source_gray, 45, 120) > 0
+        preview_edges = cv2.Canny(preview_gray, 45, 120) > 0
+        edge_union = int(np.logical_or(source_edges, preview_edges).sum())
+        edge_overlap = int(np.logical_and(source_edges, preview_edges).sum())
+        edge_retention = round(edge_overlap / edge_union, 4) if edge_union else 1.0
+        tonal_mae = round(float(np.abs(
+            source_gray.astype(np.float32) - preview_gray.astype(np.float32)
+        ).mean()), 3)
+        fidelity_report = {
+            "artworkProfile": artwork_profile.name,
+            "edgeRetention": edge_retention,
+            "tonalMeanAbsoluteError": tonal_mae,
+            "regions": len(records),
+            "passed": (
+                edge_retention >= (0.18 if artwork_profile.name == "graphic_monochrome" else 0.10)
+                and tonal_mae <= 42.0
             ),
-            "path": path,
-            "label": {
-                "x": x,
-                "y": y,
-                "radius": radius,
-                "fontSize": max(5.2, min(14.0, radius * 0.68)),
-                "visible": True,
-            },
         }
-    )
-
-    if not records:
-        raise ValueError("No vector paint regions could be created.")
-
-    missing_render_pixels = int((~rendered_coverage).sum())
-    rendered_coverage_percent = round(
-        float(rendered_coverage.mean()) * 100.0,
-        6,
-    )
-
-    if missing_render_pixels > 0:
-        raise ValueError(
-            "Pixel Coverage Guarantee failed: "
-            f"{missing_render_pixels} canvas pixels were not converted into "
-            "selectable paint regions. The package was not exported."
+        (output_dir / "visual_fidelity_report.json").write_text(
+            json.dumps(fidelity_report, indent=2),
+            encoding="utf-8",
         )
-
-    records.sort(key=lambda item: item["area"], reverse=True)
-
-    update(90, "Tracing preserved ink overlay", {"finalRegions": len(records)})
-    ink_paths = trace_ink_paths(barrier, fg)
-
-    palette = [
-        {
-            "colorId": str(i + 1),
-            "hex": rgb_to_hex(center),
-            "rgb": [int(v) for v in center],
-            "label": f"Color {i + 1}",
-        }
-        for i, center in enumerate(centers)
-    ]
-
-    palette_preview = np.full((h, w, 3), 255, dtype=np.uint8)
-    reference_preview = np.full((h, w, 3), 255, dtype=np.uint8)
-    for rid in region_ids:
-        palette_preview[regions == rid] = centers[region_to_color[rid]]
-        reference_preview[regions == rid] = np.clip(
-            np.round(original_region_means[rid]), 0, 255
-        ).astype(np.uint8)
-    Image.fromarray(palette_preview).save(output_dir / "preview_palette.png")
-    Image.fromarray(reference_preview).save(output_dir / "preview_reference.png")
-    Image.fromarray(reference_preview).save(output_dir / "preview.png")
-    source_gray = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
-    preview_gray = cv2.cvtColor(reference_preview, cv2.COLOR_RGB2GRAY)
-    source_edges = cv2.Canny(source_gray, 45, 120) > 0
-    preview_edges = cv2.Canny(preview_gray, 45, 120) > 0
-    edge_union = int(np.logical_or(source_edges, preview_edges).sum())
-    edge_overlap = int(np.logical_and(source_edges, preview_edges).sum())
-    edge_retention = round(edge_overlap / edge_union, 4) if edge_union else 1.0
-    tonal_mae = round(float(np.abs(
-        source_gray.astype(np.float32) - preview_gray.astype(np.float32)
-    ).mean()), 3)
-    fidelity_report = {
-        "artworkProfile": artwork_profile.name,
-        "edgeRetention": edge_retention,
-        "tonalMeanAbsoluteError": tonal_mae,
-        "regions": len(records),
-        "passed": (
-            edge_retention >= (0.18 if artwork_profile.name == "graphic_monochrome" else 0.10)
-            and tonal_mae <= 42.0
-        ),
-    }
-    (output_dir / "visual_fidelity_report.json").write_text(
-        json.dumps(fidelity_report, indent=2),
-        encoding="utf-8",
-    )
-    Image.fromarray(palette_preview).save(output_dir / "painted_palette_preview.png")
-
-
-    region_css = (
-        f".paint-region{{stroke:#202020;stroke-width:{outline_width};"
-        "stroke-linecap:round;stroke-linejoin:round;"
-        "vector-effect:non-scaling-stroke;cursor:pointer}}"
-    )
-    text_css = (
-        ".region-number{font-family:Arial,sans-serif;font-weight:800;"
-        "text-anchor:middle;dominant-baseline:middle;pointer-events:none;"
-        "paint-order:stroke;stroke:#ffffff;stroke-width:2.2px;"
-        "stroke-linejoin:round;fill:#111111}"
-    )
-    hit_css = (
-        ".region-hit{fill:rgba(0,0,0,0.001);stroke:rgba(0,0,0,0.001);stroke-width:8px;"
-        "vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}"
-    )
-    ink_css = (
-        ".ink-line{fill:none;stroke:#171717;stroke-width:0.34;"
-        "stroke-linecap:round;stroke-linejoin:round;"
-        "vector-effect:non-scaling-stroke;pointer-events:none}"
-    )
-
-    palette_svg = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}">',
-        f"<style>{region_css}{ink_css}</style>",
-    ]
-    reference_svg = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}">',
-        f"<style>{region_css}{ink_css}</style>",
-    ]
-    blank = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}">',
-        f"<style>{region_css}.paint-region{{fill:#fff}}{text_css}{hit_css}{ink_css}</style>",
-    ]
-
-    for record in records:
-        attrs = (
-            f'id="{record["regionId"]}" '
-            f'data-region-id="{record["regionId"]}" '
-            f'data-color-id="{record["colorId"]}" '
-            f'data-fill-color="{record["fillColor"]}" '
-            f'fill-rule="evenodd" d="{record["path"]}"'
+        Image.fromarray(palette_preview).save(output_dir / "painted_palette_preview.png")
+    
+    
+        region_css = (
+            f".paint-region{{stroke:#202020;stroke-width:{outline_width};"
+            "stroke-linecap:round;stroke-linejoin:round;"
+            "vector-effect:non-scaling-stroke;cursor:pointer}}"
         )
-        palette_svg.append(
-            f'<path class="paint-region" {attrs} fill="{record["paletteColor"]}"/>'
+        text_css = (
+            ".region-number{font-family:Arial,sans-serif;font-weight:800;"
+            "text-anchor:middle;dominant-baseline:middle;pointer-events:none;"
+            "paint-order:stroke;stroke:#ffffff;stroke-width:2.2px;"
+            "stroke-linejoin:round;fill:#111111}"
         )
-        reference_svg.append(
-            f'<path class="paint-region" {attrs} fill="{record["originalColor"]}"/>'
+        hit_css = (
+            ".region-hit{fill:rgba(0,0,0,0.001);stroke:rgba(0,0,0,0.001);stroke-width:8px;"
+            "vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}"
         )
-        blank.append(f'<path class="paint-region" {attrs} fill="#ffffff"/>')
-        blank.append(
-            f'<path class="region-hit" '
-            f'data-target-region="{record["regionId"]}" '
-            f'data-color-id="{record["colorId"]}" '
-            f'fill-rule="evenodd" fill="rgba(0,0,0,0.001)" '
-            f'd="{record["path"]}"/>'
+        ink_css = (
+            ".ink-line{fill:none;stroke:#171717;stroke-width:0.34;"
+            "stroke-linecap:round;stroke-linejoin:round;"
+            "vector-effect:non-scaling-stroke;pointer-events:none}"
         )
-
-    for index, path in enumerate(ink_paths, start=1):
-        element = f'<path class="ink-line" id="ink_{index}" d="{path}"/>'
-        palette_svg.append(element)
-        reference_svg.append(element)
-        blank.append(element)
-
-    for record in records:
-        label = record["label"]
-        blank.append(
-            f'<text class="region-number" '
-            f'data-region-id="{record["regionId"]}" '
-            f'data-color-id="{record["colorId"]}" '
-            f'x="{label["x"]:.2f}" y="{label["y"]:.2f}" '
-            f'font-size="{label["fontSize"]:.1f}px">'
-            f'{record["colorId"]}</text>'
+    
+        palette_svg = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+            f'viewBox="0 0 {w} {h}">',
+            f"<style>{region_css}{ink_css}</style>",
+        ]
+        reference_svg = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+            f'viewBox="0 0 {w} {h}">',
+            f"<style>{region_css}{ink_css}</style>",
+        ]
+        blank = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+            f'viewBox="0 0 {w} {h}">',
+            f"<style>{region_css}.paint-region{{fill:#fff}}{text_css}{hit_css}{ink_css}</style>",
+        ]
+    
+        for record in records:
+            attrs = (
+                f'id="{record["regionId"]}" '
+                f'data-region-id="{record["regionId"]}" '
+                f'data-color-id="{record["colorId"]}" '
+                f'data-fill-color="{record["fillColor"]}" '
+                f'fill-rule="evenodd" d="{record["path"]}"'
+            )
+            palette_svg.append(
+                f'<path class="paint-region" {attrs} fill="{record["paletteColor"]}"/>'
+            )
+            reference_svg.append(
+                f'<path class="paint-region" {attrs} fill="{record["originalColor"]}"/>'
+            )
+            blank.append(f'<path class="paint-region" {attrs} fill="#ffffff"/>')
+            blank.append(
+                f'<path class="region-hit" '
+                f'data-target-region="{record["regionId"]}" '
+                f'data-color-id="{record["colorId"]}" '
+                f'fill-rule="evenodd" fill="rgba(0,0,0,0.001)" '
+                f'd="{record["path"]}"/>'
+            )
+    
+        for index, path in enumerate(ink_paths, start=1):
+            element = f'<path class="ink-line" id="ink_{index}" d="{path}"/>'
+            palette_svg.append(element)
+            reference_svg.append(element)
+            blank.append(element)
+    
+        for record in records:
+            label = record["label"]
+            blank.append(
+                f'<text class="region-number" '
+                f'data-region-id="{record["regionId"]}" '
+                f'data-color-id="{record["colorId"]}" '
+                f'x="{label["x"]:.2f}" y="{label["y"]:.2f}" '
+                f'font-size="{label["fontSize"]:.1f}px">'
+                f'{record["colorId"]}</text>'
+            )
+    
+        palette_svg.append("</svg>")
+        reference_svg.append("</svg>")
+        blank.append("</svg>")
+    
+        blank_svg_text = "\n".join(blank)
+        simulation_report = simulate_complete_painting(
+            records,
+            palette,
+            blank_svg_text,
+            regions,
+            region_labels,
+    )
+        (output_dir / "paintability_simulation.json").write_text(
+            json.dumps(simulation_report, indent=2),
+            encoding="utf-8",
         )
-
-    palette_svg.append("</svg>")
-    reference_svg.append("</svg>")
-    blank.append("</svg>")
-
-    blank_svg_text = "\n".join(blank)
-    simulation_report = simulate_complete_painting(
-        records,
-        palette,
-        blank_svg_text,
-        regions,
-        region_labels,
-)
-    (output_dir / "paintability_simulation.json").write_text(
-        json.dumps(simulation_report, indent=2),
-        encoding="utf-8",
-    )
-    if not simulation_report["passed"]:
-        raise ValueError(
-            "Pre-export customer simulation failed. "
-            f"{simulation_report['simulated']} of "
-            f"{simulation_report['expected']} regions passed."
+        if not simulation_report["passed"]:
+            raise ValueError(
+                "Pre-export customer simulation failed. "
+                f"{simulation_report['simulated']} of "
+                f"{simulation_report['expected']} regions passed."
+            )
+    
+        (output_dir / "paintMap_palette.svg").write_text(
+            "\n".join(palette_svg),
+            encoding="utf-8",
         )
-
-    (output_dir / "paintMap_palette.svg").write_text(
-        "\n".join(palette_svg),
-        encoding="utf-8",
-    )
-    (output_dir / "paintMap_reference.svg").write_text(
-        "\n".join(reference_svg),
-        encoding="utf-8",
-    )
-    # Backward compatibility: colored now means the faithful reference preview.
-    (output_dir / "paintMap_colored.svg").write_text(
-        "\n".join(reference_svg),
-        encoding="utf-8",
-    )
-    (output_dir / "paintMap.svg").write_text(
-        blank_svg_text,
-        encoding="utf-8",
-    )
-
-    build_interactive_player(
-        output_dir,
-        records,
-        palette,
-        blank_svg_text,
-        "\n".join(reference_svg),
-    )
-
-    ink_svg = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}">',
-        f"<style>{ink_css}</style>",
-    ]
-    ink_svg.extend(
-        f'<path class="ink-line" id="ink_{i}" d="{path}"/>'
-        for i, path in enumerate(ink_paths, start=1)
-    )
-    ink_svg.append("</svg>")
-    (output_dir / "ink_overlay.svg").write_text(
-        "\n".join(ink_svg),
-        encoding="utf-8",
-    )
-
-    (output_dir / "regions.json").write_text(
-        json.dumps(records, indent=2),
-        encoding="utf-8",
-    )
-    (output_dir / "palette.json").write_text(
-        json.dumps(palette, indent=2),
-        encoding="utf-8",
-    )
-
-    metadata = {
-        "engine": "Euqilegna Version 11.2 Complete Paintability Engine",
-        "inputFile": input_path.name,
-        "width": w,
-        "height": h,
-        "regions": len(records),
-        "inkPaths": len(ink_paths),
-        "markerSeeds": marker_count,
-        "colors": len(palette),
-        "preset": preset,
-        "minRegionArea": min_area,
-        "outlineWidth": outline_width,
-        "simplifyTolerance": tolerance,
-        "autoCrop": auto_crop,
-        "crop": crop_meta,
-        "completionImage": "finished_masterpiece.png",
-            "progressiveRevealImage": "completion_reveal.png",
-        "inkOverlay": "ink_overlay.svg",
-        "detailMap": "detail_map.png",
-        "paintabilityEngine": "paintability_engine_report.json",
-        "paintabilitySimulation": "paintability_simulation.json",
-        "paintabilityGuaranteed": True,
-        "experienceMode": experience_mode,
-        "targetRegions": target_regions,
-        "designStyle": design_style,
-        "activePipeline": active_pipeline,
-        "pipelineAnalysis": analysis,
-        "artworkProfile": artwork_profile.name,
-        "artworkProfileAnalysis": profile_analysis,
-        "foregroundAnalysis": foreground_meta,
-        "automaticRecoveryEnabled": True,
-        "modularCompilerVersion": "11.0",
-        "visualFidelityReport": "visual_fidelity_report.json",
-        "visualFidelity": fidelity_report,
-        "finalCanvasCoverage": round(float((regions > 0).mean()), 6),
-        "pixelCoveragePercent": rendered_coverage_percent,
-        "coverageErrors": 0 if missing_render_pixels == 0 else 1,
-        "orphanPixels": missing_render_pixels,
-        "edgeRepair": "completed",
-        "coverageGuarantee": missing_render_pixels == 0,
-        "completionImageSource": "artistic_master",
-        "finishMode": finish_mode,
-        "tinyRegions": sum(1 for item in records if item["paintability"] == "tiny"),
-        "smallRegions": sum(1 for item in records if item["paintability"] == "small"),
-    }
-    if "metadata_validation_summary" in locals():
-        metadata.update(metadata_validation_summary)
-
-    (output_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2),
-        encoding="utf-8",
-    )
-
-    update(94, "Scoring customer paintability")
-    quality_report = build_quality_report(
-        output_dir,
-        records,
-        palette,
-        metadata,
-    )
-    metadata["qualityStatus"] = quality_report["status"]
-    metadata["paintabilityScore"] = quality_report["paintabilityScore"]
-    metadata["estimatedInteractiveMinutes"] = quality_report["estimatedInteractiveMinutes"]
-    (output_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2),
-        encoding="utf-8",
-    )
-
-    if generate_pdf:
-        update(96, "Creating palette PDF", {"finalRegions": len(records), "inkPaths": len(ink_paths)})
-        build_pdf(output_dir / "palette_guide.pdf", palette, metadata)
-
-    update(
-        100,
-        "Complete",
-        {
-            "finalRegions": len(records),
+        (output_dir / "paintMap_reference.svg").write_text(
+            "\n".join(reference_svg),
+            encoding="utf-8",
+        )
+        # Backward compatibility: colored now means the faithful reference preview.
+        (output_dir / "paintMap_colored.svg").write_text(
+            "\n".join(reference_svg),
+            encoding="utf-8",
+        )
+        (output_dir / "paintMap.svg").write_text(
+            blank_svg_text,
+            encoding="utf-8",
+        )
+    
+        build_interactive_player(
+            output_dir,
+            records,
+            palette,
+            blank_svg_text,
+            "\n".join(reference_svg),
+        )
+    
+        ink_svg = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+            f'viewBox="0 0 {w} {h}">',
+            f"<style>{ink_css}</style>",
+        ]
+        ink_svg.extend(
+            f'<path class="ink-line" id="ink_{i}" d="{path}"/>'
+            for i, path in enumerate(ink_paths, start=1)
+        )
+        ink_svg.append("</svg>")
+        (output_dir / "ink_overlay.svg").write_text(
+            "\n".join(ink_svg),
+            encoding="utf-8",
+        )
+    
+        (output_dir / "regions.json").write_text(
+            json.dumps(records, indent=2),
+            encoding="utf-8",
+        )
+        (output_dir / "palette.json").write_text(
+            json.dumps(palette, indent=2),
+            encoding="utf-8",
+        )
+    
+        metadata = {
+            "engine": "Euqilegna Version 11.2 Complete Paintability Engine",
+            "inputFile": input_path.name,
+            "width": w,
+            "height": h,
+            "regions": len(records),
             "inkPaths": len(ink_paths),
+            "markerSeeds": marker_count,
             "colors": len(palette),
+            "preset": preset,
+            "minRegionArea": min_area,
+            "outlineWidth": outline_width,
+            "simplifyTolerance": tolerance,
+            "autoCrop": auto_crop,
+            "crop": crop_meta,
+            "completionImage": "finished_masterpiece.png",
+                "progressiveRevealImage": "completion_reveal.png",
+            "inkOverlay": "ink_overlay.svg",
+            "detailMap": "detail_map.png",
+            "paintabilityEngine": "paintability_engine_report.json",
+            "paintabilitySimulation": "paintability_simulation.json",
+            "paintabilityGuaranteed": True,
+            "experienceMode": experience_mode,
+            "targetRegions": target_regions,
+            "designStyle": design_style,
+            "activePipeline": active_pipeline,
+            "pipelineAnalysis": analysis,
+            "artworkProfile": artwork_profile.name,
+            "artworkProfileAnalysis": profile_analysis,
+            "foregroundAnalysis": foreground_meta,
+            "automaticRecoveryEnabled": True,
+            "modularCompilerVersion": "11.0",
+            "visualFidelityReport": "visual_fidelity_report.json",
+            "visualFidelity": fidelity_report,
+            "finalCanvasCoverage": round(float((regions > 0).mean()), 6),
             "pixelCoveragePercent": rendered_coverage_percent,
+            "coverageErrors": 0 if missing_render_pixels == 0 else 1,
             "orphanPixels": missing_render_pixels,
             "edgeRepair": "completed",
-            "totalSeconds": round(time.time() - started_at, 1),
-        },
-    )
-    return metadata
+            "coverageGuarantee": missing_render_pixels == 0,
+            "completionImageSource": "artistic_master",
+            "finishMode": finish_mode,
+            "tinyRegions": sum(1 for item in records if item["paintability"] == "tiny"),
+            "smallRegions": sum(1 for item in records if item["paintability"] == "small"),
+        }
+        if "metadata_validation_summary" in locals():
+            metadata.update(metadata_validation_summary)
+    
+        (output_dir / "metadata.json").write_text(
+            json.dumps(metadata, indent=2),
+            encoding="utf-8",
+        )
+    
+        update(94, "Scoring customer paintability")
+        quality_report = build_quality_report(
+            output_dir,
+            records,
+            palette,
+            metadata,
+        )
+        metadata["qualityStatus"] = quality_report["status"]
+        metadata["paintabilityScore"] = quality_report["paintabilityScore"]
+        metadata["estimatedInteractiveMinutes"] = quality_report["estimatedInteractiveMinutes"]
+        (output_dir / "metadata.json").write_text(
+            json.dumps(metadata, indent=2),
+            encoding="utf-8",
+        )
+    
+        if generate_pdf:
+            update(96, "Creating palette PDF", {"finalRegions": len(records), "inkPaths": len(ink_paths)})
+            build_pdf(output_dir / "palette_guide.pdf", palette, metadata)
+    
+        update(
+            100,
+            "Complete",
+            {
+                "finalRegions": len(records),
+                "inkPaths": len(ink_paths),
+                "colors": len(palette),
+                "pixelCoveragePercent": rendered_coverage_percent,
+                "orphanPixels": missing_render_pixels,
+                "edgeRepair": "completed",
+                "totalSeconds": round(time.time() - started_at, 1),
+            },
+        )
+        return metadata
