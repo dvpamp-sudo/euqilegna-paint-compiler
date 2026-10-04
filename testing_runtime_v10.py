@@ -12,6 +12,8 @@ import os
 import secrets
 import sqlite3
 
+from paintings import Painting, PaintingStatus
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -87,6 +89,14 @@ class RuntimeDatabase:
                     enabled INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     uses INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS paintings (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    date_created TEXT NOT NULL,
+                    medium TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'planned'
                 );
                 """
             )
@@ -201,6 +211,51 @@ class RuntimeDatabase:
             ).fetchall()
         return [json.loads(row["payload_json"] or "{}") for row in rows]
 
+    def save_painting(self, painting: Painting) -> Painting:
+        with self.lock, self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO paintings(id,title,date_created,medium,status)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title,
+                    date_created=excluded.date_created,
+                    medium=excluded.medium,
+                    status=excluded.status
+                """,
+                (
+                    painting.id,
+                    painting.title,
+                    painting.date_created,
+                    painting.medium,
+                    str(painting.status),
+                ),
+            )
+        return painting
+
+    def load_painting(self, painting_id: str) -> Painting | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id,title,date_created,medium,status
+                FROM paintings
+                WHERE id=?
+                """,
+                (painting_id,),
+            ).fetchone()
+        return _row_to_painting(row) if row else None
+
+    def list_paintings(self, status: str | None = None) -> list[Painting]:
+        query = "SELECT id,title,date_created,medium,status FROM paintings"
+        params: tuple[Any, ...] = ()
+        if status is not None:
+            query += " WHERE status=?"
+            params = (str(status),)
+        query += " ORDER BY date_created DESC, title ASC"
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_painting(row) for row in rows]
+
     def save_feedback(self, payload: dict[str, Any]) -> int:
         submitted_at = payload.get("submittedAt") or utc_now()
         with self.lock, self.connect() as connection:
@@ -285,6 +340,16 @@ class RuntimeDatabase:
                 (code,),
             )
             return True
+
+
+def _row_to_painting(row: sqlite3.Row) -> Painting:
+    return Painting(
+        id=row["id"],
+        title=row["title"],
+        date_created=row["date_created"],
+        medium=row["medium"],
+        status=PaintingStatus(row["status"]),
+    )
 
 
 def _as_int(value: Any) -> int | None:
