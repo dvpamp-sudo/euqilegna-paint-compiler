@@ -120,9 +120,11 @@ def validate_package(
         preview_path = output_dir / "preview.png"
 
     similarity = {"score": 0.0}
+    fidelity_short = False
     if source_path.exists() and preview_path.exists():
         similarity = _image_similarity(source_path, preview_path)
         if similarity["score"] < minimum_similarity:
+            fidelity_short = True
             errors.append(
                 "Visual fidelity is below the publishing threshold "
                 f"({similarity['score']:.3f} < {minimum_similarity:.3f})."
@@ -136,6 +138,10 @@ def validate_package(
         "similarity": similarity,
         "errors": errors,
         "warnings": warnings,
+        # True when the package is sound in every other respect and only the
+        # fidelity score fell short, so a caller can tell a usable package
+        # from a broken one.
+        "fidelityOnly": fidelity_short and len(errors) == 1,
     }
     (output_dir / "v12_validation_report.json").write_text(
         json.dumps(report, indent=2),

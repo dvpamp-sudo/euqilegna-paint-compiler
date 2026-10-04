@@ -19,6 +19,17 @@ from .validation import validate_package
 # through hours of retries.
 RECOVERY_TIME_BUDGET_SECONDS = 900.0
 
+# A package at or above this fidelity publishes cleanly.
+PUBLISH_SIMILARITY = 0.68
+
+# Fidelity compares flat paint regions with the source pixel by pixel, so
+# hand-hatched or scribbled line art scores low however good the package is
+# (dense hatching alone costs ~0.1). When no strategy reaches the publishing
+# threshold, the best package that is sound in every other respect and scores
+# at least this much is delivered, flagged, instead of failing the upload.
+# Anything lower is a genuinely poor reproduction and still fails.
+ACCEPTABLE_SIMILARITY_FLOOR = 0.60
+
 
 def _copy_tree_contents(source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
@@ -147,7 +158,7 @@ def compile_artwork(
                 report = validate_package(
                     attempt_dir,
                     source_path=input_path,
-                    minimum_similarity=0.68,
+                    minimum_similarity=PUBLISH_SIMILARITY,
                     target_regions=int(settings.get("target_regions") or target_regions or 480),
                 )
                 result = AttemptResult(
@@ -180,6 +191,20 @@ def compile_artwork(
             # recovery on a line-art source) is not cut off by attempt count.
             if best is None and time.monotonic() - recovery_started_at > RECOVERY_TIME_BUDGET_SECONDS:
                 break
+
+        below_threshold = False
+        if best is None:
+            # No strategy reached the publishing threshold. Fall back to the
+            # best package whose only shortfall is visual fidelity.
+            usable = [
+                item
+                for item in results
+                if (item.validation or {}).get("fidelityOnly")
+                and item.score >= ACCEPTABLE_SIMILARITY_FLOOR
+            ]
+            if usable:
+                best = max(usable, key=lambda item: item.score)
+                below_threshold = True
 
         if best is None:
             diagnostic = {
@@ -215,7 +240,8 @@ def compile_artwork(
         "v12SourceAnalysis": analysis,
         "v12SelectedAttempt": best.name,
         "v12SimilarityScore": best.score,
-        "v12ValidationPassed": True,
+        "v12ValidationPassed": not below_threshold,
+        "v12FidelityBelowThreshold": below_threshold,
         "v12Attempts": [
             {
                 "name": item.name,
@@ -232,10 +258,19 @@ def compile_artwork(
     )
 
     if progress_callback:
-        progress_callback(100, "Complete — Version 12 validation passed", {
-            "selectedAttempt": best.name,
-            "similarityScore": best.score,
-            "validationPassed": True,
-        })
+        progress_callback(
+            100,
+            (
+                f"Complete — closest match found ({best.score:.2f}); very fine "
+                "line work is simplified into paintable regions"
+                if below_threshold
+                else "Complete — Version 12 validation passed"
+            ),
+            {
+                "selectedAttempt": best.name,
+                "similarityScore": best.score,
+                "validationPassed": not below_threshold,
+            },
+        )
 
     return final_metadata

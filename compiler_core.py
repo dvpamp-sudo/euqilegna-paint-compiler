@@ -745,59 +745,119 @@ def adaptive_seed_threshold(
     return max(5, int(round(adaptive)))
 
 
-def _build_markers_at_threshold(
+@dataclass(frozen=True)
+class _SeedTable:
+    """Every candidate seed component of an image, labelled once."""
+
+    labels: np.ndarray
+    boxes: list
+    areas: np.ndarray
+    details: np.ndarray
+
+
+def _seed_table(
     color_map: np.ndarray,
-    fg: np.ndarray,
-    barrier: np.ndarray,
+    interior: np.ndarray,
+    detail_map: np.ndarray,
+) -> _SeedTable:
+    """
+    Label the connected components of each colour's interior in one shared
+    label image (colours never overlap), with each component's area and mean
+    detail. Numbering follows colour order, then component order.
+
+    Each component is measured inside its own bounding box. Testing
+    ``labels == comp`` against the whole frame is quadratic in the number of
+    components, which on a detailed 1800px source (tens of thousands of them)
+    turned a single marker pass into minutes.
+    """
+    labels = np.zeros(interior.shape, dtype=np.int32)
+    offset = 0
+    for color_id in [v for v in np.unique(color_map) if v >= 0]:
+        components = measure.label(interior & (color_map == color_id), connectivity=2)
+        count = int(components.max())
+        if count:
+            found = components > 0
+            labels[found] = components[found] + offset
+            offset += count
+    return _measure_components(labels, detail_map)
+
+
+def _measure_components(labels: np.ndarray, detail_map: np.ndarray) -> _SeedTable:
+    height, width = labels.shape
+    boxes = []
+    areas = []
+    details = []
+    for comp, box in enumerate(ndi.find_objects(labels), start=1):
+        # Padded by one pixel so the disk(1) erosion in _place_seeds sees the
+        # same neighbours it would see on the full frame.
+        rows = slice(max(0, box[0].start - 1), min(height, box[0].stop + 1))
+        cols = slice(max(0, box[1].start - 1), min(width, box[1].stop + 1))
+        component_mask = labels[rows, cols] == comp
+        area = int(component_mask.sum())
+        boxes.append((rows, cols))
+        areas.append(area)
+        details.append(
+            float(detail_map[rows, cols][component_mask].mean()) if area else 0.0
+        )
+    return _SeedTable(
+        labels,
+        boxes,
+        np.asarray(areas, dtype=np.int64),
+        np.asarray(details, dtype=np.float64),
+    )
+
+
+def _seeds_kept(
+    table: _SeedTable,
+    seed_min_area: int,
+    experience_mode: str,
+) -> np.ndarray:
+    """Boolean per component: is it big enough, for its local detail, to seed?"""
+    required = np.fromiter(
+        (
+            adaptive_seed_threshold(float(detail), seed_min_area, experience_mode)
+            for detail in table.details
+        ),
+        dtype=np.int64,
+        count=len(table.details),
+    )
+    return table.areas >= required
+
+
+def _place_seeds(
+    table: _SeedTable,
+    keep: np.ndarray,
+    seed_min_area: int,
+    erode: bool,
+) -> np.ndarray:
+    markers = np.zeros(table.labels.shape, dtype=np.int32)
+    footprint = morphology.disk(1)
+    eroded_floor = max(4, seed_min_area // 4)
+    marker_id = 1
+
+    for index in np.flatnonzero(keep):
+        rows, cols = table.boxes[index]
+        component_mask = table.labels[rows, cols] == index + 1
+        if erode:
+            # Erode slightly so markers sit inside visual regions, not on line edges.
+            eroded = morphology.erosion(component_mask, footprint)
+            if eroded.sum() >= eroded_floor:
+                component_mask = eroded
+        markers[rows, cols][component_mask] = marker_id
+        marker_id += 1
+    return markers
+
+
+def _fallback_markers(
+    interior: np.ndarray,
     detail_map: np.ndarray,
     seed_min_area: int,
     experience_mode: str,
 ) -> Tuple[np.ndarray, int]:
-    markers = np.zeros(fg.shape, dtype=np.int32)
-    marker_id = 1
-    interior = fg & ~barrier
-
-    for color_id in [v for v in np.unique(color_map) if v >= 0]:
-        mask = interior & (color_map == color_id)
-        components = measure.label(mask, connectivity=2)
-
-        for comp in range(1, int(components.max()) + 1):
-            component_mask = components == comp
-            area = int(component_mask.sum())
-            detail_mean = float(detail_map[component_mask].mean()) if area else 0.0
-            required_area = adaptive_seed_threshold(
-                detail_mean,
-                seed_min_area,
-                experience_mode,
-            )
-            if area < required_area:
-                continue
-
-            # Erode slightly so markers sit inside visual regions, not on line edges.
-            eroded = morphology.erosion(component_mask, morphology.disk(1))
-            if eroded.sum() >= max(4, seed_min_area // 4):
-                component_mask = eroded
-
-            markers[component_mask] = marker_id
-            marker_id += 1
-
-    if marker_id == 1:
-        # Conservative fallback.
-        components = measure.label(interior, connectivity=2)
-        for comp in range(1, int(components.max()) + 1):
-            mask = components == comp
-            area = int(mask.sum())
-            detail_mean = float(detail_map[mask].mean()) if area else 0.0
-            required_area = adaptive_seed_threshold(
-                detail_mean,
-                seed_min_area,
-                experience_mode,
-            )
-            if area >= required_area:
-                markers[mask] = marker_id
-                marker_id += 1
-
-    return markers, marker_id - 1
+    """Conservative fallback: seed from the whole interior, colours ignored."""
+    table = _measure_components(measure.label(interior, connectivity=2), detail_map)
+    keep = _seeds_kept(table, seed_min_area, experience_mode)
+    return _place_seeds(table, keep, seed_min_area, erode=False), int(keep.sum())
 
 
 def build_markers(
@@ -816,35 +876,36 @@ def build_markers(
     post-merge brings that back down cheaply. When ``max_seeds`` is set the
     seed area threshold is raised until the seeds fit, so microscopic colour
     specks are absorbed by their neighbours instead of becoming regions of
-    their own.
+    their own. The threshold is the *smallest* one that fits: the seed count
+    only ever falls as the threshold rises, so it is found by bracketing and
+    bisection over a once-labelled component table, which keeps as much detail
+    as the budget allows instead of overshooting into a handful of regions.
     """
-    markers, count = _build_markers_at_threshold(
-        color_map,
-        fg,
-        barrier,
-        detail_map,
-        seed_min_area,
-        experience_mode,
-    )
-    if max_seeds is None or count <= max_seeds:
-        return markers
+    interior = fg & ~barrier
+    table = _seed_table(color_map, interior, detail_map)
+    keep = _seeds_kept(table, seed_min_area, experience_mode)
 
-    scale = max(2.0, count / float(max(1, max_seeds)))
-    for _ in range(4):
-        seed_min_area = max(seed_min_area + 1, int(round(seed_min_area * scale)))
-        markers, count = _build_markers_at_threshold(
-            color_map,
-            fg,
-            barrier,
-            detail_map,
-            seed_min_area,
-            experience_mode,
-        )
-        if count <= max_seeds:
-            return markers
-        scale *= 1.7
+    if max_seeds is not None and int(keep.sum()) > max_seeds:
+        low = seed_min_area  # known to be too many seeds
+        high = seed_min_area
+        while True:
+            high *= 2
+            keep = _seeds_kept(table, high, experience_mode)
+            if int(keep.sum()) <= max_seeds or high > table.labels.size:
+                break
+            low = high
+        while high - low > 1:
+            middle = (low + high) // 2
+            if int(_seeds_kept(table, middle, experience_mode).sum()) <= max_seeds:
+                high = middle
+            else:
+                low = middle
+        seed_min_area = high
+        keep = _seeds_kept(table, seed_min_area, experience_mode)
 
-    return markers
+    if not keep.any():
+        return _fallback_markers(interior, detail_map, seed_min_area, experience_mode)[0]
+    return _place_seeds(table, keep, seed_min_area, erode=True)
 
 
 def illustration_watershed(
@@ -4259,10 +4320,10 @@ def compile_artwork(
         update(43, "Building closed-region markers")
         # Keep the seed count inside the paintable budget up front: a watershed
         # seeded with thousands of specks cannot be merged back down cheaply.
-        seed_ceiling = max(
-            60,
-            int(max(target_regions * 1.35, target_regions + 60)),
-        )
+        # Every seed becomes a region and heavily inked artwork barely merges
+        # afterwards, so seed at the target itself; seeding at the hard region
+        # cap leaves no headroom and the attempt overshoots that cap.
+        seed_ceiling = max(60, int(target_regions))
         markers = build_markers(
             pixel_colors,
             fg,

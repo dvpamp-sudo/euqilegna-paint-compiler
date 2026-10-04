@@ -86,15 +86,27 @@ sized regions come out of watershed and no cheap post-merge brings them back
 down. The pipeline now works on the problem in three layers, in order
 (`compile_artwork`, illustration branch):
 
-1. **Seed budget before watershed** — `seed_ceiling = max(60, max(target_regions*1.35, target_regions+60))`
-   is passed to `build_markers(..., max_seeds=seed_ceiling)`. `build_markers` is
-   now a thin wrapper over `_build_markers_at_threshold`: it builds seeds once,
-   and if the count exceeds `max_seeds` it raises `seed_min_area` (initial scale
-   `max(2.0, count/max_seeds)`, ×1.7 per retry, up to 4 retries) so microscopic
-   colour specks are absorbed by their neighbours instead of becoming regions of
-   their own. `max_seeds=None` (the default) reproduces the old behaviour
-   exactly, so other callers are unaffected. A seed count below 2 still falls
-   back to the full-canvas Photo pipeline as before.
+1. **Seed budget before watershed** — `seed_ceiling = max(60, target_regions)`
+   is passed to `build_markers(..., max_seeds=seed_ceiling)`. Every seed becomes a
+   region and heavily inked art barely merges afterwards (the ink-boundary guard
+   blocks it), so the ceiling is the target itself: seeding at the hard cap left
+   no headroom (877 seeds -> 895 regions after island splitting -> fail-early
+   guard). `build_markers` labels every colour's interior components **once**
+   into a `_SeedTable` (area + mean detail per component) and, when the count
+   exceeds `max_seeds`, finds the *smallest* `seed_min_area` that fits by
+   doubling then bisecting (the count only falls as the threshold rises), then
+   places seeds once. `max_seeds=None` reproduces the original behaviour
+   bit-for-bit (verified against the old per-component loop on corner, middle and
+   edge crops, and the "nothing qualifies" fallback). A seed count below 2 still
+   falls back to the full-canvas Photo pipeline as before.
+
+   Two earlier bugs lived here. (a) The old seeding tested `components == comp`
+   against the whole frame for each component — quadratic — so a detailed 1800px
+   source (57k components) spent ~15 minutes in "Building closed-region
+   markers" *per attempt* (up to 5 calls with the retry loop); it is now ~2 s.
+   (b) The retry loop multiplied `seed_min_area` by `count/max_seeds` and then by
+   1.7 each retry, overshooting from 12,664 seeds to **74** (ceiling 877), which
+   produced a 68-region artwork with fidelity 0.552.
 
 2. **First merge** — `adaptive_merge_regions(...)`, unchanged in the default
    case. It gained two opt-in keyword args, both `None` by default: `size_ceiling`
@@ -114,9 +126,10 @@ down. The pipeline now works on the problem in three layers, in order
    relaxed, so original line work stays protected.
 
 Net effect: detailed samples that used to over-segment and abort now compile —
-`midnight-jazz` reached 524 regions (previously ~2100–2300 against its 648–756
-cap) and `afrofuturist-stargazer` compiles at 612 under its 648 cap. The
-`validate_package` region-count check and the fail-early guard are untouched.
+`midnight-jazz` compiles at 697 regions (cap 756; it was ~2100–2300 before the
+budget existed) scoring 0.751, and `afrofuturist-stargazer` at 520 (cap 648)
+scoring 0.737. The `validate_package` region-count check and the fail-early
+guard are untouched.
 
 When tuning this for a new artwork, adjust in the order above — a wider seed
 budget (stage 1) is much cheaper than more merge attempts (stage 3), and
@@ -136,8 +149,33 @@ passed validation".
 
 The guard is now `time.monotonic() - recovery_started_at > RECOVERY_TIME_BUDGET_SECONDS`
 (900s), so every planned strategy gets a chance on a fast image while a slow one
-still can't run for hours. Verified on the failing source: the orchestrator now
-selects `full-canvas-photo-recovery` at 0.70026 (passed) instead of raising.
+still can't run for hours. Note the budget is checked *between* attempts: a first
+attempt that alone exceeds it (the marker slowness above did) means no fallback
+ever runs.
+
+## Hatched / scribbled line art cannot reach the 0.68 fidelity gate
+
+`validate_package` scores `0.72*tonal + 0.28*edgeIoU` of the flat-fill
+`preview.png` against the source, pixel by pixel. A dense hand-hatched
+illustration (e.g. the "Afro chibi boy" upload: thousands of pen strokes on
+white) loses structurally on both terms — a flat region covering 50% ink/50%
+paper is ~127 off per pixel, and the preview's edges never line up with the
+hatching (edgeIoU ~0.07). Measured with ~500-670 regions: `smart-auto` 0.622,
+`full-canvas-illustration-recovery` 0.614, `full-canvas-photo-recovery` 0.641 —
+all structurally valid (region cap, tiny-region ratio, required files), all
+below 0.68, and more regions barely help.
+
+So when **no** strategy passes, the orchestrator falls back to the best attempt
+whose *only* error is fidelity (`validate_package` reports `fidelityOnly`) **and**
+whose score is at least `ACCEPTABLE_SIMILARITY_FLOOR = 0.60`, instead of failing
+the upload. That package is delivered with `metadata.v12ValidationPassed = false`,
+`v12FidelityBelowThreshold = true`, and a final progress message saying it is the
+closest match. Anything under 0.60, or with any other validation error, still
+fails. A strategy that passes 0.68 always wins over the fallback, so curated
+samples are unaffected. All three strategies run before the fallback picks, so a
+hatched upload takes ~15-18 minutes (each attempt ~5-7 min at ~500-670 regions:
+`adaptive_merge_regions`, `repair_region_coverage` and the paintability pass are
+all O(regions x pixels)).
 
 ## Player template changes need a recompile to show up
 
