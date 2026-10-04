@@ -59,6 +59,17 @@ recovery path, so it raised `UnboundLocalError` for the illustration pipeline):
 
 Verify with `diff -w -B` against `2cba359` — only that block should differ.
 
+`2cba359` also added `"illustrationRegionCount": illustration_region_count` to the
+`update(64, "Closed paint regions created")` call in the **line-art** branch, but
+that variable was only ever assigned on the nested illustration-recovery path.
+Every other line-art compile — the normal `marker_count >= 3` case and the sparse
+`marker_count < 2` photo fallback — died with
+`UnboundLocalError: cannot access local variable 'illustration_region_count'`,
+which the V12 orchestrator reports as "cannot access local variable ...". The
+variable is now defaulted to `marker_count` before the `if marker_count < 3:`
+block and refreshed in the photo fallback, so the progress report is always
+defined.
+
 ## Behavior note: the illustration region cap is a hard failure
 
 The cap check is still a deliberate "fail early" guard: when the illustration

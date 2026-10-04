@@ -4057,6 +4057,9 @@ def compile_artwork(
         fg = regions > 0
         detail_map = np.where(fg, 0.55, 0.0).astype(np.float32)
         marker_count = int(len(np.unique(regions[regions > 0])))
+        # Only the illustration recovery path below recomputes this; default it
+        # to the line-art region count so the progress report is always defined.
+        illustration_region_count = marker_count
 
         if marker_count < 3:
             update(
@@ -4109,6 +4112,7 @@ def compile_artwork(
                     ).astype(np.float32) / 255.0,
                 )
                 marker_count = int(len(np.unique(regions[regions > 0])))
+                illustration_region_count = marker_count
             else:
                 regions = illustration_watershed(
                     processed,
