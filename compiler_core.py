@@ -2095,6 +2095,16 @@ try{
   const saved=JSON.parse(safeLocalGet(STORAGE_KEY)||'null');
   if(saved?.painted) painted=saved.painted;
   else if(saved && typeof saved==='object') painted=saved;
+  // Resume where the painter stopped: the color they were filling and the
+  // section they last painted, which the marker rotates on from. A color or id
+  // from an older compile is ignored so a recompiled artwork still opens clean.
+  if(saved && typeof saved==='object'){
+    if(saved.selectedColor && PALETTE.some(c=>String(c.colorId)===String(saved.selectedColor))){
+      selectedColor=String(saved.selectedColor);
+    }
+    if(Array.isArray(saved.skippedColors)) skippedColors=new Set(saved.skippedColors);
+    if(typeof saved.hintedRegionId==='string') hintedRegionId=saved.hintedRegionId;
+  }
 }catch(e){painted={}}
 
 
@@ -2937,6 +2947,7 @@ function progressPayload(){
     selectedColor,
     painted,
     skippedColors:[...skippedColors],
+    hintedRegionId,
     savedAt:new Date().toISOString()
   };
 }
@@ -3603,6 +3614,18 @@ applySaved();
 refreshSelectedRegions();
 numberFocus=false;
 refreshNumberLabels();
+if(hintedRegionId){
+  const resumeAnchor=REGIONS.find(r=>r.regionId===hintedRegionId);
+  if(resumeAnchor && painted[resumeAnchor.regionId]){
+    // The saved section is the one just painted, so the marker comes back on
+    // the next section of the color that was being filled.
+    markNextSection(selectedColor);
+  }else if(resumeAnchor){
+    showHintMarker(resumeAnchor);
+  }else{
+    hintedRegionId=null;
+  }
+}
 document.getElementById('toggleNumberFocus').textContent='Focus Selected Number';
 difficulty();
 setMode('review');

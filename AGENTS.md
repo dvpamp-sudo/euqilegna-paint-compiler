@@ -165,6 +165,23 @@ Only when the whole color is finished does `nextColorAfter` hand the selection
 over to the next unfinished color. The pan/zoom that used to sit inside the Hint
 button now lives in `focusMarkedSection()`, which only the button calls.
 
+## Painting progress is saved per artwork and resumes where you stopped
+
+The player saves silently after every fill (`save(false)` in `handleRegion` and
+`paintRegionProgrammatically`) into `localStorage` under
+`euqilegna-paint-event-` + the artwork's path, so progress belongs to that one
+artwork. On load it restores the whole working position, not just the fills:
+`selectedColor` (only if that color still exists in `PALETTE`), `skippedColors`,
+and `hintedRegionId`. The saved id is the section last painted — the marker's
+rotation anchor — so startup calls `markNextSection(selectedColor)` to put the
+pink marker back on the next unpainted section of the color you were filling,
+falling back to `showHintMarker` when the saved id is an unpainted section a
+Hint had marked. A saved id or color that no longer exists (an artwork
+recompiled since) is ignored, so the page still opens clean.
+
+Like any template change, this only reaches an already-compiled artwork after
+that artwork is recompiled (see above).
+
 ## Painting never moves the artwork
 
 Two guards keep a tap from shifting the canvas:
