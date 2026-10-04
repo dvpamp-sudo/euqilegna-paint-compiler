@@ -55,14 +55,56 @@ Verify with `diff -w -B` against `2cba359` — only that block should differ.
 
 ## Behavior note: the illustration region cap is a hard failure
 
-The cap check is a deliberate "fail early" guard: when the illustration pipeline
-produces more regions than `max(target_regions*1.35, target_regions+60)`, the
-attempt raises instead of exporting an unusable package. Most premium samples
-compile fine (`afrofuturist-stargazer` → 612 regions under its 648 cap), but
-heavily detailed ones can over-segment and fail (`midnight-jazz` → ~2100–2300
-regions vs its 648–756 cap). This is pre-existing: the un-corrupted `2cba359`
-version fails the same artwork through `validate_package`'s region-count check,
-so it is not a regression from the indentation fix.
+The cap check is still a deliberate "fail early" guard: when the illustration
+pipeline produces more regions than `max(target_regions*1.35, target_regions+60)`,
+the attempt raises instead of exporting an unusable package. It now only fires if
+all three budget layers below fail to bring the count down.
+
+## Illustration region budget is enforced in three stages
+
+Region count was previously controlled only *after* watershed, by a merge that
+folds away regions which are already small and near-identical. That is enough for
+gentle images but stalls on very detailed sources, where thousands of similarly
+sized regions come out of watershed and no cheap post-merge brings them back
+down. The pipeline now works on the problem in three layers, in order
+(`compile_artwork`, illustration branch):
+
+1. **Seed budget before watershed** — `seed_ceiling = max(60, max(target_regions*1.35, target_regions+60))`
+   is passed to `build_markers(..., max_seeds=seed_ceiling)`. `build_markers` is
+   now a thin wrapper over `_build_markers_at_threshold`: it builds seeds once,
+   and if the count exceeds `max_seeds` it raises `seed_min_area` (initial scale
+   `max(2.0, count/max_seeds)`, ×1.7 per retry, up to 4 retries) so microscopic
+   colour specks are absorbed by their neighbours instead of becoming regions of
+   their own. `max_seeds=None` (the default) reproduces the old behaviour
+   exactly, so other callers are unaffected. A seed count below 2 still falls
+   back to the full-canvas Photo pipeline as before.
+
+2. **First merge** — `adaptive_merge_regions(...)`, unchanged in the default
+   case. It gained two opt-in keyword args, both `None` by default: `size_ceiling`
+   replaces the adaptive area limit (`min_region_area * mode_area_factor * (1.75 - 1.30*detail) * pressure`)
+   with a flat value, and `color_tolerance` replaces the mode/detail colour limit
+   (11.0 high-detail, 20.0 relaxed, 16.0 otherwise). Omitting both keeps the
+   previous heuristic bit-for-bit.
+
+3. **`reduce_regions_to_budget(...)` safety net** — runs straight after the first
+   merge, targeting `max(8, int(paint_budget * 0.85))` with `max_attempts=3`
+   (0.85 deliberately leaves headroom for the paintability repair that follows).
+   Each attempt grows the merge pressure: the size ceiling becomes the area at
+   the index implied by the region excess (`round(excess * (1.0 + 0.4*attempt))`),
+   and colour tolerance becomes `base + 12.0 * attempt` (`base` = 20.0 relaxed,
+   16.0 otherwise). It stops as soon as the count hits the target or a pass makes
+   no progress. The ink-boundary guard inside `adaptive_merge_regions` is never
+   relaxed, so original line work stays protected.
+
+Net effect: detailed samples that used to over-segment and abort now compile —
+`midnight-jazz` reached 524 regions (previously ~2100–2300 against its 648–756
+cap) and `afrofuturist-stargazer` compiles at 612 under its 648 cap. The
+`validate_package` region-count check and the fail-early guard are untouched.
+
+When tuning this for a new artwork, adjust in the order above — a wider seed
+budget (stage 1) is much cheaper than more merge attempts (stage 3), and
+loosening `color_tolerance` in stage 3 is what changes the look of the result
+most, since it accepts less similar neighbours.
 
 ## Player template changes need a recompile to show up
 
