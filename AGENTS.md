@@ -196,6 +196,38 @@ Two guards keep a tap from shifting the canvas:
   phase, so it runs after the canvas handlers and leaves ordinary taps and drags
   untouched), and window `blur` clears the set.
 
+## Customers can compile their own uploads into a playable artwork
+
+`/studio/upload` (`studio/upload.html`) is the "bring your own image" interface.
+It posts the chosen file straight to the existing `POST /jobs` endpoint — the
+same compiler path `/create` uses — with premium-grade settings (`preset` from
+the difficulty card, `design_style=smart_auto`, `outline_width=0.24`,
+`simplify_tolerance=0.18`), polls `GET /jobs/{id}` for progress, and on
+completion links to the playable result.
+
+Unlike `/create`, which ends in a ZIP download, this flow opens the baked
+`interactive_player.html` for the job:
+
+    GET /my-artwork/{job_id}/play   →  outputDir/interactive_player.html
+
+`outputDir` lives under `RUNTIME_DATA_DIR/jobs/<id>/package`, i.e. the
+`euqilegna_data` volume (`/var/data/euqilegna`), so customer uploads survive a
+container restart. The page keeps a local record of compiled uploads in
+`localStorage['euqilegna-my-artwork-v1']` (jobId + downscaled thumbnail) and
+renders them in its "Your images" grid; there is no server-side upload index.
+
+Entry points to the page: the premium library hero CTA (`/samples`), the studio
+nav (`/`), and the premium launcher panel (`/samples/{sample}`).
+
+## `GET /jobs/{job_id}/download` had the same indentation mangling
+
+`test_job`, `qa_job` and `download_job` all carried a dead
+`if job["status"] ...` block nested after `raise HTTPException(404)`, leaving
+`player_path`/`qa_path`/`zip_path` unbound and every call a 500
+(`UnboundLocalError`). `download_job` is fixed (the upload interface links to
+it). `test_job` and `qa_job` are still broken the same way — untouched because
+nothing in the current preview flow calls them.
+
 ## Secondary service (not in preview)
 
 `platform_api/app:app` is a separate modular compiler platform (port 8100 in

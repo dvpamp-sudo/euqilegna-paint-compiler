@@ -460,6 +460,12 @@ def studio_challenges():
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/studio/upload", response_class=HTMLResponse)
+def studio_upload():
+    path = PROJECT_ROOT / "studio" / "upload.html"
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_page():
@@ -1120,6 +1126,7 @@ def premium_launcher_html(sample_name: str, item: dict[str, Any]) -> str:
 <button id="start" class="btn primary">Build This Paint-by-Number</button>
 <a id="open" class="btn primary hidden" href="/premium/{sample_name}/play">Open Interactive Painting</a>
 <a id="download" class="btn hidden" href="#">Download Paint Package</a>
+<a class="btn" href="/studio/upload">Create From Your Own Image</a>
 <div class="notice">The first build can take several minutes because it is generating hundreds of real regions from the official artwork. After it finishes, the result is cached.</div>
 </aside></div>
 <script>
@@ -1272,6 +1279,20 @@ def play_premium_sample(sample_name: str):
     return HTMLResponse(player.read_text(encoding="utf-8"))
 
 
+@app.get("/my-artwork/{job_id}/play", response_class=HTMLResponse)
+def play_my_artwork(job_id: str):
+    """Serve the interactive painting compiled from a customer's own upload."""
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Uploaded artwork not found.")
+    if job.get("status") != "complete":
+        raise HTTPException(status_code=409, detail="This artwork has not finished compiling yet.")
+    player = Path(job["outputDir"]) / "interactive_player.html"
+    if not player.is_file():
+        raise HTTPException(status_code=404, detail="Interactive player was not generated for this artwork.")
+    return HTMLResponse(player.read_text(encoding="utf-8"))
+
+
 @app.get("/premium/{sample_name}/download")
 def download_premium_sample(sample_name: str):
     if sample_name not in PREMIUM_SAMPLE_SETTINGS:
@@ -1421,9 +1442,9 @@ def download_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        zip_path = Path(job["zipPath"])
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    zip_path = Path(job["zipPath"])
 
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Generated package was not found.")

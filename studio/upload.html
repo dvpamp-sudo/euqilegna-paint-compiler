@@ -1,0 +1,278 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Create From Your Own Image — Euqilegna</title>
+<style>
+:root{--gold:#d9ad59;--purple:#8f45bd;--cream:#f5ead7;--muted:#c4b59f;--line:#5e4527;--bg:#070707;--good:#3d9a5c}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#090807,#11100e 48%,#070707);color:var(--cream);font-family:Arial,sans-serif}
+a{color:inherit;text-decoration:none}.wrap{max-width:1180px;margin:auto;padding:26px 30px 70px}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:6px 0 22px}.back{color:var(--gold);font-weight:800}
+.navlinks{display:flex;gap:10px;flex-wrap:wrap}.navlinks a{padding:8px 12px;border-radius:999px;border:1px solid #433424;color:#d8cab7;font-size:14px}
+.hero h1{font-family:Georgia,serif;font-size:52px;line-height:1.03;margin:12px 0}
+.hero p{font-size:19px;color:#dfd1bf;line-height:1.55;max-width:760px}
+.eyebrow{color:var(--gold);font-weight:900;letter-spacing:2px;text-transform:uppercase}
+.card{background:#141016;border:1px solid var(--line);border-radius:20px;padding:24px;margin-top:22px}
+.card h2{font-family:Georgia,serif;font-size:26px;margin:0 0 4px}.card p.hint{color:var(--muted);margin:0 0 16px}
+.drop{border:2px dashed #6a4f31;border-radius:16px;background:#0e0b0f;padding:38px;text-align:center;cursor:pointer;transition:.2s}
+.drop:hover,.drop.over{border-color:var(--gold);background:#151017}
+.drop .icon{font-size:52px}.drop strong{display:block;font-size:19px;margin:10px 0 4px}.drop small{color:var(--muted)}
+.preview-wrap{display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start;margin-top:18px}
+.preview-box{border:1px solid var(--line);border-radius:14px;background:#0c0a0d;height:300px;display:grid;place-items:center;overflow:hidden}
+.preview-box img{max-width:100%;max-height:100%;object-fit:contain}
+.file-meta{color:var(--muted);font-size:14px;margin-top:8px;word-break:break-all}
+label.field{display:block;margin-top:16px;font-weight:700}
+select,input[type=file]{width:100%;padding:11px;margin-top:6px;border:1px solid #5c4630;border-radius:10px;background:#100c12;color:#fff;font-size:15px}
+.choice-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mode-card{border:1px solid #4c3827;border-radius:14px;padding:15px;background:#160f17;cursor:pointer;transition:.2s}
+.mode-card:hover{transform:translateY(-3px)}.mode-card.active{border:2px solid var(--purple);background:#22142c}
+.mode-card strong{display:block;font-size:16px}.mode-card small{display:block;color:var(--muted);margin-top:5px}.mode-card .badge{display:inline-block;margin-top:8px;background:#f7e6c7;color:#714d00;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900}
+.cta{margin-top:24px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.btn{border:0;border-radius:12px;padding:15px 22px;font-weight:900;font-size:16px;cursor:pointer}
+.primary{background:var(--purple);color:#fff}.primary:disabled{opacity:.5;cursor:not-allowed}
+.secondary{background:#241a2b;color:#fff;border:1px solid #5d3f72;display:inline-block;text-decoration:none}
+.hidden{display:none!important}
+.progress-shell{height:18px;background:#2a211a;border-radius:999px;overflow:hidden;margin:14px 0}
+#progressBar{height:100%;width:0;background:linear-gradient(90deg,var(--purple),var(--gold));transition:width .35s}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}#percent{font-size:24px;font-weight:900}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.stat{border:1px solid #4c3827;border-radius:10px;padding:12px;background:#110e12}.stat small{display:block;color:var(--muted);margin-bottom:5px}.stat strong{font-size:17px}
+.msg{margin-top:14px;font-weight:700}.msg.error{color:#e8837f}.msg.success{color:#7dd39a}
+.result{margin-top:20px;padding:20px;border:1px solid #5d3f72;border-radius:16px;background:#1b1224}
+.result h3{margin:0 0 6px;font-family:Georgia,serif}.result .cta{margin-top:14px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:16px}
+.art{border:1px solid #493625;border-radius:15px;overflow:hidden;background:#151116;display:flex;flex-direction:column}
+.art img{width:100%;height:170px;object-fit:cover;background:#0c0a0d}
+.art .copy{padding:13px}.art h4{margin:0 0 4px;font-family:Georgia,serif;font-size:17px;word-break:break-word}
+.art small{color:var(--muted)}
+.art a.open{margin-top:10px;display:inline-block;background:var(--purple);color:#fff;border-radius:9px;padding:9px 12px;font-weight:800;font-size:14px}
+.empty{grid-column:1/-1;border:1px dashed #60472e;border-radius:16px;padding:34px;text-align:center;color:#bfae9a}
+@media(max-width:960px){.preview-wrap{grid-template-columns:1fr}.choice-grid{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.wrap{padding:16px}.hero h1{font-size:38px}.choice-grid,.grid{grid-template-columns:1fr}.navlinks{display:none}}
+</style></head>
+<body><div class="wrap">
+<nav class="nav"><a class="back" href="/samples">← Premium Library</a>
+<div class="navlinks"><a href="/">Studio Home</a><a href="/samples">Collections</a><a href="/studio/gallery">My Gallery</a><a href="/create">Advanced Compiler</a></div></nav>
+
+<header class="hero"><span class="eyebrow">Bring Your Own Artwork</span>
+<h1>Paint your own image</h1>
+<p>Upload any photo or illustration and the studio compiles it into a real interactive paint-by-number — numbered regions, guided painting, and a finished reveal. No need to pick from the ready-made collection.</p></header>
+
+<section class="card">
+  <h2>1. Choose your image</h2>
+  <p class="hint">PNG, JPG, or WEBP. Higher resolution gives cleaner regions and a more detailed result.</p>
+  <div id="drop" class="drop"><div class="icon">🖼️</div><strong>Click to choose an image</strong><small>or drag &amp; drop it here</small></div>
+  <input id="file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden">
+  <div id="previewWrap" class="preview-wrap hidden">
+    <div><div class="preview-box"><img id="preview" alt="Selected image preview"></div><div id="fileMeta" class="file-meta"></div></div>
+    <div>
+      <label class="field">Experience difficulty</label>
+      <div class="choice-grid" id="difficultyCards">
+        <div class="mode-card" data-preset="beginner" data-experience="relaxed" data-regions="360" data-minarea="70"><strong>😊 Beginner</strong><small>Large, easy regions</small></div>
+        <div class="mode-card" data-preset="balanced" data-experience="relaxed" data-regions="500" data-minarea="52"><strong>🙂 Relaxing</strong><small>Calm and comfortable</small></div>
+        <div class="mode-card active" data-preset="illustration" data-experience="balanced" data-regions="650" data-minarea="38"><strong>🎨 Detailed</strong><small>Best balance of detail</small><span class="badge">Recommended</span></div>
+        <div class="mode-card" data-preset="advanced" data-experience="detailed" data-regions="900" data-minarea="24"><strong>🏆 Masterpiece</strong><small>Maximum detail</small></div>
+      </div>
+      <label class="field">Number of colors
+        <select id="colorsSelect"><option value="24">24 — Simple</option><option value="32">32 — Relaxing</option><option value="40" selected>40 — Recommended</option><option value="48">48 — Rich detail</option></select>
+      </label>
+    </div>
+  </div>
+  <div class="cta"><button id="createBtn" class="btn primary" disabled>✨ Create my interactive painting</button>
+  <a class="btn secondary" href="/create">Need fine-grained controls?</a></div>
+</section>
+
+<section id="progressPanel" class="card hidden">
+  <div class="progress-head"><div><h2 id="stage">Uploading your image…</h2></div><div id="percent">0%</div></div>
+  <div class="progress-shell"><div id="progressBar"></div></div>
+  <div class="stats">
+    <div class="stat"><small>Elapsed</small><strong id="elapsed">0:00</strong></div>
+    <div class="stat"><small>Estimated remaining</small><strong id="eta">Calculating</strong></div>
+    <div class="stat"><small>Regions</small><strong id="regions">—</strong></div>
+    <div class="stat"><small>Ink paths</small><strong id="inkPaths">—</strong></div>
+  </div>
+  <div id="statusMessage" class="msg"></div>
+  <div id="resultBox" class="result hidden">
+    <h3>Your interactive painting is ready 🎉</h3>
+    <p>Your uploaded image has been compiled into a playable paint-by-number.</p>
+    <div class="cta"><a id="playLink" class="btn primary" href="#">🖌️ Open interactive painting</a><a id="downloadLink" class="btn secondary" href="#">⬇ Download package</a></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Your images</h2>
+  <p class="hint">Artworks you compiled from your own uploads. They stay playable on this device.</p>
+  <div id="gallery" class="grid"></div>
+</section>
+</div>
+<script>
+const drop=document.getElementById('drop');
+const fileInput=document.getElementById('file');
+const previewWrap=document.getElementById('previewWrap');
+const preview=document.getElementById('preview');
+const fileMeta=document.getElementById('fileMeta');
+const createBtn=document.getElementById('createBtn');
+const progressPanel=document.getElementById('progressPanel');
+const progressBar=document.getElementById('progressBar');
+const percentEl=document.getElementById('percent');
+const stageEl=document.getElementById('stage');
+const elapsedEl=document.getElementById('elapsed');
+const etaEl=document.getElementById('eta');
+const regionsEl=document.getElementById('regions');
+const inkPathsEl=document.getElementById('inkPaths');
+const statusMessage=document.getElementById('statusMessage');
+const resultBox=document.getElementById('resultBox');
+const playLink=document.getElementById('playLink');
+const downloadLink=document.getElementById('downloadLink');
+const colorsSelect=document.getElementById('colorsSelect');
+const STORE_KEY='euqilegna-my-artwork-v1';
+
+let selectedFile=null;
+let activeJobId=null;
+let pollTimer=null;
+let difficulty=()=>({preset:'illustration',experience:'balanced',regions:'650',minarea:'38'});
+
+document.querySelectorAll('.mode-card').forEach(card=>{
+  card.addEventListener('click',()=>{
+    document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('active'));
+    card.classList.add('active');
+    difficulty=()=>({preset:card.dataset.preset,experience:card.dataset.experience,regions:card.dataset.regions,minarea:card.dataset.minarea});
+  });
+});
+
+drop.addEventListener('click',()=>fileInput.click());
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer?.files?.[0];if(f)acceptFile(f)});
+fileInput.addEventListener('change',()=>{const f=fileInput.files?.[0];if(f)acceptFile(f)});
+
+function acceptFile(file){
+  if(!file.type.startsWith('image/')){alert('Please choose an image file (PNG, JPG, or WEBP).');return}
+  selectedFile=file;
+  preview.src=URL.createObjectURL(file);
+  fileMeta.textContent=`${file.name} — ${(file.size/1024/1024).toFixed(2)} MB`;
+  previewWrap.classList.remove('hidden');
+  createBtn.disabled=false;
+}
+
+function formatTime(seconds){
+  if(seconds===null||seconds===undefined)return 'Calculating';
+  const v=Math.max(0,Math.round(seconds));
+  return `${Math.floor(v/60)}:${String(v%60).padStart(2,'0')}`;
+}
+
+function render(job){
+  const percent=Number(job.percent||0);
+  progressBar.style.width=`${percent}%`;
+  percentEl.textContent=`${percent}%`;
+  stageEl.textContent=job.stage||'Working…';
+  elapsedEl.textContent=formatTime(job.elapsedSeconds||0);
+  etaEl.textContent=percent>=100?'0:00':formatTime(job.estimatedSecondsRemaining);
+  const stats=job.stats||{};
+  regionsEl.textContent=stats.finalRegions??stats.regionCandidates??stats.vectorized??'—';
+  inkPathsEl.textContent=stats.inkPaths??stats.markerSeeds??'—';
+
+  if(job.status==='complete'){
+    statusMessage.className='msg success';
+    statusMessage.textContent=`Finished${job.metadata?.regions?` with ${job.metadata.regions} regions`:''}.`;
+    resultBox.classList.remove('hidden');
+    playLink.href=`/my-artwork/${job.id}/play`;
+    downloadLink.href=`/jobs/${job.id}/download`;
+    createBtn.disabled=false;
+    saveRecord(job.id);
+  }else if(job.status==='failed'||job.status==='cancelled'){
+    statusMessage.className='msg error';
+    statusMessage.textContent=job.error||(job.status==='cancelled'?'Compilation cancelled.':'Compilation failed.');
+    createBtn.disabled=false;
+  }else{
+    statusMessage.className='msg';
+    statusMessage.textContent='Keep this page open while your artwork compiles.';
+  }
+}
+
+async function poll(){
+  if(!activeJobId)return;
+  try{
+    const response=await fetch(`/jobs/${activeJobId}`);
+    if(!response.ok)throw new Error('Could not read progress.');
+    const job=await response.json();
+    render(job);
+    if(!['complete','failed','cancelled'].includes(job.status))pollTimer=setTimeout(poll,900);
+  }catch(error){
+    statusMessage.className='msg error';
+    statusMessage.textContent=error.message;
+    pollTimer=setTimeout(poll,1500);
+  }
+}
+
+createBtn.addEventListener('click',async()=>{
+  if(!selectedFile)return drop.click();
+  clearTimeout(pollTimer);
+  createBtn.disabled=true;
+  resultBox.classList.add('hidden');
+  progressPanel.classList.remove('hidden');
+  statusMessage.className='msg';statusMessage.textContent='';
+  render({percent:0,stage:'Uploading your image…',status:'queued'});
+  progressPanel.scrollIntoView({behavior:'smooth',block:'start'});
+
+  const d=difficulty();
+  const form=new FormData();
+  form.append('file',selectedFile);
+  form.append('preset',d.preset);
+  form.append('design_style','smart_auto');
+  form.append('colors',colorsSelect.value);
+  form.append('min_region_area',d.minarea);
+  form.append('experience_mode',d.experience);
+  form.append('target_regions',d.regions);
+  form.append('outline_width','0.24');
+  form.append('simplify_tolerance','0.18');
+  form.append('auto_crop','true');
+  form.append('generate_pdf','true');
+  form.append('finish_mode','original');
+
+  try{
+    const response=await fetch('/jobs',{method:'POST',body:form});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Unable to start compilation.');
+    activeJobId=result.jobId;
+    pendingThumb=await makeThumb(selectedFile);
+    poll();
+  }catch(error){
+    createBtn.disabled=false;
+    statusMessage.className='msg error';
+    statusMessage.textContent=error.message;
+  }
+});
+
+let pendingThumb='';
+function makeThumb(file){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const scale=200/Math.max(img.width,img.height);
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg',0.6));
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve('')};
+    img.src=url;
+  });
+}
+
+function loadRecords(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||'[]')}catch(e){return[]}}
+function saveRecord(jobId){
+  const records=loadRecords().filter(r=>r.jobId!==jobId);
+  records.push({jobId,title:selectedFile?.name||'My artwork',thumb:pendingThumb||'',date:new Date().toISOString()});
+  try{localStorage.setItem(STORE_KEY,JSON.stringify(records))}catch(e){}
+  renderGallery();
+}
+function renderGallery(){
+  const records=loadRecords().slice().reverse();
+  const grid=document.getElementById('gallery');
+  if(!records.length){grid.innerHTML='<div class="empty"><h3>No uploads yet</h3><p>Images you compile will appear here.</p></div>';return}
+  grid.innerHTML=records.map(r=>`<article class="art">${r.thumb?`<img src="${r.thumb}" alt="">`:''}<div class="copy"><h4>${escapeHtml(r.title)}</h4><small>${new Date(r.date).toLocaleDateString()}</small><br><a class="open" href="/my-artwork/${r.jobId}/play">Open painting</a></div></article>`).join('');
+}
+function escapeHtml(value){const d=document.createElement('div');d.textContent=value;return d.innerHTML}
+renderGallery();
+</script></body></html>
