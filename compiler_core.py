@@ -745,14 +745,14 @@ def adaptive_seed_threshold(
     return max(5, int(round(adaptive)))
 
 
-def build_markers(
+def _build_markers_at_threshold(
     color_map: np.ndarray,
     fg: np.ndarray,
     barrier: np.ndarray,
     detail_map: np.ndarray,
     seed_min_area: int,
     experience_mode: str,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, int]:
     markers = np.zeros(fg.shape, dtype=np.int32)
     marker_id = 1
     interior = fg & ~barrier
@@ -796,6 +796,53 @@ def build_markers(
             if area >= required_area:
                 markers[mask] = marker_id
                 marker_id += 1
+
+    return markers, marker_id - 1
+
+
+def build_markers(
+    color_map: np.ndarray,
+    fg: np.ndarray,
+    barrier: np.ndarray,
+    detail_map: np.ndarray,
+    seed_min_area: int,
+    experience_mode: str,
+    max_seeds: int | None = None,
+) -> np.ndarray:
+    """
+    Build watershed seeds, optionally capped to a paintable budget.
+
+    Very detailed artwork can ask for thousands of seeds, and no amount of
+    post-merge brings that back down cheaply. When ``max_seeds`` is set the
+    seed area threshold is raised until the seeds fit, so microscopic colour
+    specks are absorbed by their neighbours instead of becoming regions of
+    their own.
+    """
+    markers, count = _build_markers_at_threshold(
+        color_map,
+        fg,
+        barrier,
+        detail_map,
+        seed_min_area,
+        experience_mode,
+    )
+    if max_seeds is None or count <= max_seeds:
+        return markers
+
+    scale = max(2.0, count / float(max(1, max_seeds)))
+    for _ in range(4):
+        seed_min_area = max(seed_min_area + 1, int(round(seed_min_area * scale)))
+        markers, count = _build_markers_at_threshold(
+            color_map,
+            fg,
+            barrier,
+            detail_map,
+            seed_min_area,
+            experience_mode,
+        )
+        if count <= max_seeds:
+            return markers
+        scale *= 1.7
 
     return markers
 
@@ -961,10 +1008,17 @@ def adaptive_merge_regions(
     min_region_area: int,
     experience_mode: str,
     target_regions: int,
+    size_ceiling: int | None = None,
+    color_tolerance: float | None = None,
 ) -> np.ndarray:
     """
     Simplify low-detail regions while protecting expressive/detail-rich areas.
     The function never merges across a strong ink boundary.
+
+    ``size_ceiling`` and ``color_tolerance`` let a caller push harder than the
+    default heuristic: a larger ceiling lets bigger regions merge, and a larger
+    color tolerance accepts neighbours that are less similar. Both defaults keep
+    the original behaviour.
     """
     result = labels.copy()
     mode_area_factor = {
@@ -994,12 +1048,15 @@ def adaptive_merge_regions(
         for rid in sorted(areas, key=areas.get):
             area = areas[rid]
             detail = details[rid]
-            adaptive_limit = int(
-                min_region_area
-                * mode_area_factor
-                * (1.75 - 1.30 * detail)
-                * (1.0 + min(1.25, region_pressure))
-            )
+            if size_ceiling is None:
+                adaptive_limit = int(
+                    min_region_area
+                    * mode_area_factor
+                    * (1.75 - 1.30 * detail)
+                    * (1.0 + min(1.25, region_pressure))
+                )
+            else:
+                adaptive_limit = int(size_ceiling)
             if area >= max(8, adaptive_limit):
                 continue
 
@@ -1036,7 +1093,10 @@ def adaptive_merge_regions(
             _, barrier_mean, barrier_high, color_distance, best = min(candidates)
             safe_boundary = barrier_high < 0.045 and barrier_mean < 0.24
             high_detail = detail > 0.62
-            color_limit = 11.0 if high_detail else (20.0 if experience_mode == "relaxed" else 16.0)
+            if color_tolerance is None:
+                color_limit = 11.0 if high_detail else (20.0 if experience_mode == "relaxed" else 16.0)
+            else:
+                color_limit = color_tolerance
 
             if safe_boundary and color_distance <= color_limit:
                 result[result == rid] = best
@@ -1045,6 +1105,66 @@ def adaptive_merge_regions(
         result = relabel(result)
         if not changed:
             break
+
+    return result
+
+
+def reduce_regions_to_budget(
+    rgb: np.ndarray,
+    labels: np.ndarray,
+    barrier_strength: np.ndarray,
+    detail_map: np.ndarray,
+    min_region_area: int,
+    experience_mode: str,
+    target_regions: int,
+    max_attempts: int = 5,
+) -> np.ndarray:
+    """
+    Bring an over-segmented illustration down to a paintable region count.
+
+    ``adaptive_merge_regions`` only folds away regions that are already small
+    and near-identical, which is enough for gentle images but stalls on very
+    detailed sources (thousands of similarly sized regions). Here the merge
+    pressure grows until the count fits: each attempt allows larger regions to
+    merge and accepts progressively less similar neighbours. The ink-boundary
+    guard inside ``adaptive_merge_regions`` is never relaxed, so original line
+    work is still protected.
+    """
+    result = labels
+    target = max(8, int(target_regions))
+    base_color_tolerance = 20.0 if experience_mode == "relaxed" else 16.0
+
+    for attempt in range(max(1, max_attempts)):
+        current = int(len(np.unique(result[result > 0])))
+        if current <= target:
+            break
+
+        areas = np.sort(np.unique(result[result > 0], return_counts=True)[1])
+        excess = current - target
+        index = int(
+            min(
+                len(areas) - 1,
+                max(0, round(excess * (1.0 + 0.4 * attempt))),
+            )
+        )
+        ceiling = max(min_region_area, int(areas[index]))
+        color_tolerance = base_color_tolerance + 12.0 * attempt
+
+        merged = adaptive_merge_regions(
+            rgb,
+            result,
+            barrier_strength,
+            detail_map,
+            min_region_area,
+            experience_mode,
+            target,
+            size_ceiling=ceiling,
+            color_tolerance=color_tolerance,
+        )
+        merged_count = int(len(np.unique(merged[merged > 0])))
+        if merged_count >= current:
+            break
+        result = merged
 
     return result
 
@@ -4024,6 +4144,12 @@ def compile_artwork(
         )
 
         update(43, "Building closed-region markers")
+        # Keep the seed count inside the paintable budget up front: a watershed
+        # seeded with thousands of specks cannot be merged back down cheaply.
+        seed_ceiling = max(
+            60,
+            int(max(target_regions * 1.35, target_regions + 60)),
+        )
         markers = build_markers(
             pixel_colors,
             fg,
@@ -4031,6 +4157,7 @@ def compile_artwork(
             detail_map,
             seed_min_area,
             experience_mode,
+            max_seeds=seed_ceiling,
         )
         marker_count = int(markers.max())
         if marker_count < 2:
@@ -4083,6 +4210,20 @@ def compile_artwork(
                 merge_min_area,
                 experience_mode,
                 merge_target_regions,
+            )
+            # Safety net: if the merge still leaves more regions than the
+            # paintable budget allows, merge down with headroom to spare for the
+            # paintability repair that follows, instead of failing the compile.
+            paint_budget = max(int(target_regions * 1.35), target_regions + 60)
+            regions = reduce_regions_to_budget(
+                processed,
+                regions,
+                barrier_strength,
+                detail_map,
+                merge_min_area,
+                experience_mode,
+                max(8, int(paint_budget * 0.85)),
+                max_attempts=3,
             )
 
         # Safety check: if Smart Auto chose illustration but the foreground
