@@ -4094,93 +4094,93 @@ def compile_artwork(
         if rid > 0
     ]
 
-if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
-    raise ValueError(
-        f"Illustration region cap was not achieved before export: "
-        f"{len(region_ids)} > {illustration_hard_cap}"
-    )
-
-if not region_ids:
-    raise ValueError(
-        "No usable paint regions were generated. Reduce minimum region area."
-    )
-
-update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
-if active_pipeline == "lineart":
-    region_to_color, centers, original_region_means = assign_premium_lineart_palette(
-        regions,
-        processed,
-    )
-else:
-    region_to_color, centers, original_region_means = assign_region_palette(
-        processed,
-        regions,
-        region_ids,
-        color_count,
-    )
-
-update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
-h, w = processed.shape[:2]
-records: List[dict] = []
-region_labels: dict[str, int] = {}
-rendered_coverage = np.zeros((h, w), dtype=bool)
-
-total_region_ids = len(region_ids)
-for index, rid in enumerate(region_ids, start=1):
-    if index == 1 or index % 100 == 0 or index == total_region_ids:
-        update(
-            min(89, 80 + int(9 * index / max(1, total_region_ids))),
-            "Vectorizing closed paint regions",
-            {"vectorized": index - 1, "regionCandidates": total_region_ids},
-        )
-    mask = regions == rid
-    area = int(mask.sum())
-    region_detail = float(detail_map[mask].mean()) if area else 0.0
-    poly = mask_polygon(mask, validation_tolerance)
-    if poly is None:
+    if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
         raise ValueError(
-            f"Validated region {rid} became non-vectorizable during export."
-        )
-    path = polygon_path(poly)
-    if not path:
-        raise ValueError(
-            f"Validated region {rid} produced an empty SVG path."
+            f"Illustration region cap was not achieved before export: "
+            f"{len(region_ids)} > {illustration_hard_cap}"
         )
 
-    rendered_coverage |= mask
-    color_id = region_to_color[rid]
-    palette_fill = rgb_to_hex(centers[color_id])
-    original_fill = rgb_to_hex(
-        np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
-    )
-    x, y, radius = label_point(mask)
-    region_id = f"region_{index}"
-    region_labels[region_id] = int(rid)
-    records.append(
-        {
-            "regionId": region_id,
-            "colorId": str(color_id + 1),
-            "fillColor": palette_fill,
-            "paletteColor": palette_fill,
-            "originalColor": original_fill,
-            "painted": False,
-            "area": area,
-            "detailScore": round(region_detail, 4),
-            "paintability": (
-                "tiny" if area < 80
-                else "small" if area < 180
-                else "comfortable"
-            ),
-            "path": path,
-            "label": {
-                "x": x,
-                "y": y,
-                "radius": radius,
-                "fontSize": max(5.2, min(14.0, radius * 0.68)),
-                "visible": True,
-            },
-        }
-    )
+    if not region_ids:
+        raise ValueError(
+            "No usable paint regions were generated. Reduce minimum region area."
+        )
+
+    update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
+    if active_pipeline == "lineart":
+        region_to_color, centers, original_region_means = assign_premium_lineart_palette(
+            regions,
+            processed,
+        )
+    else:
+        region_to_color, centers, original_region_means = assign_region_palette(
+            processed,
+            regions,
+            region_ids,
+            color_count,
+        )
+
+    update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
+    h, w = processed.shape[:2]
+    records: List[dict] = []
+    region_labels: dict[str, int] = {}
+    rendered_coverage = np.zeros((h, w), dtype=bool)
+
+    total_region_ids = len(region_ids)
+    for index, rid in enumerate(region_ids, start=1):
+        if index == 1 or index % 100 == 0 or index == total_region_ids:
+            update(
+                min(89, 80 + int(9 * index / max(1, total_region_ids))),
+                "Vectorizing closed paint regions",
+                {"vectorized": index - 1, "regionCandidates": total_region_ids},
+            )
+        mask = regions == rid
+        area = int(mask.sum())
+        region_detail = float(detail_map[mask].mean()) if area else 0.0
+        poly = mask_polygon(mask, validation_tolerance)
+        if poly is None:
+            raise ValueError(
+                f"Validated region {rid} became non-vectorizable during export."
+            )
+        path = polygon_path(poly)
+        if not path:
+            raise ValueError(
+                f"Validated region {rid} produced an empty SVG path."
+            )
+
+        rendered_coverage |= mask
+        color_id = region_to_color[rid]
+        palette_fill = rgb_to_hex(centers[color_id])
+        original_fill = rgb_to_hex(
+            np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
+        )
+        x, y, radius = label_point(mask)
+        region_id = f"region_{index}"
+        region_labels[region_id] = int(rid)
+        records.append(
+            {
+                "regionId": region_id,
+                "colorId": str(color_id + 1),
+                "fillColor": palette_fill,
+                "paletteColor": palette_fill,
+                "originalColor": original_fill,
+                "painted": False,
+                "area": area,
+                "detailScore": round(region_detail, 4),
+                "paintability": (
+                    "tiny" if area < 80
+                    else "small" if area < 180
+                    else "comfortable"
+                ),
+                "path": path,
+                "label": {
+                    "x": x,
+                    "y": y,
+                    "radius": radius,
+                    "fontSize": max(5.2, min(14.0, radius * 0.68)),
+                    "visible": True,
+                },
+            }
+        )
 
     if not records:
         raise ValueError("No vector paint regions could be created.")
