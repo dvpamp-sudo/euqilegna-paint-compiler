@@ -15,6 +15,12 @@ and beta-feedback state.
 
 `docker compose -f docker-compose.base44.yml up -d --build`
 
+The Base44 dev-environment files (`docker-compose.base44.yml`,
+`Dockerfile.base44`, `.base44/environment.json`) are **sandbox-local and
+untracked** — excluded through `.git/info/exclude` so they never show up in the
+repo or in pull requests. They exist on disk in the sandbox (the preview needs
+them); re-add one with `git add -f <path>` if it should be versioned.
+
 - Image: `python:3.12-slim` + system libs (`libgl1`, `libglib2.0-0`, `libgomp1`)
   for opencv/scikit-image. Deps installed at build time from `requirements.txt`.
 - Source is bind-mounted at `/app`; uvicorn `--reload` picks up edits live.
