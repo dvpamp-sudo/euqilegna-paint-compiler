@@ -224,9 +224,9 @@ nav (`/`), and the premium launcher panel (`/samples/{sample}`).
 `test_job`, `qa_job` and `download_job` all carried a dead
 `if job["status"] ...` block nested after `raise HTTPException(404)`, leaving
 `player_path`/`qa_path`/`zip_path` unbound and every call a 500
-(`UnboundLocalError`). `download_job` is fixed (the upload interface links to
-it). `test_job` and `qa_job` are still broken the same way — untouched because
-nothing in the current preview flow calls them.
+(`UnboundLocalError`). All three are now fixed: `download_job` (the upload
+interface links to it) plus `test_job` and `qa_job`, whose status checks were
+de-nested so `player_path`/`qa_path` are always defined.
 
 ## Secondary service (not in preview)
 
