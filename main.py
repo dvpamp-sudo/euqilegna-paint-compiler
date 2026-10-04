@@ -1409,9 +1409,9 @@ def test_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        player_path = Path(job["outputDir"]) / "interactive_player.html"
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    player_path = Path(job["outputDir"]) / "interactive_player.html"
 
     if not player_path.exists():
         raise HTTPException(status_code=404, detail="Interactive test player was not generated.")
@@ -1426,9 +1426,9 @@ def qa_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        qa_path = Path(job["outputDir"]) / "quality_dashboard.html"
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    qa_path = Path(job["outputDir"]) / "quality_dashboard.html"
 
     if not qa_path.exists():
         raise HTTPException(status_code=404, detail="Quality report was not generated.")
