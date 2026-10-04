@@ -2455,6 +2455,7 @@ function handleRegion(region,el){
 
   painted[region.regionId]=true;
   revealPaintedRegion(region.regionId);
+  clearHoverOutline();
   if(hintedRegionId===region.regionId){hintedRegionId=null;clearHintMarker();}
 
   // Give immediate visual confirmation with the selected palette color.
@@ -3162,6 +3163,38 @@ function finishPinch(){
   setTimeout(()=>{pinchGuard=false;hasDragged=false;},400);
 }
 
+// Bold outline on the region under the cursor, so it is obvious which section
+// is about to be painted while zoomed in. Region strokes use
+// vector-effect:non-scaling-stroke, so this stays bold at every zoom level.
+let hoveredRegionId=null;
+let hoveredStroke=null;
+
+function clearHoverOutline(){
+  if(hoveredRegionId && hoveredStroke){
+    const el=document.getElementById(hoveredRegionId);
+    if(el){
+      el.style.stroke=hoveredStroke.stroke;
+      el.style.strokeWidth=hoveredStroke.strokeWidth;
+    }
+  }
+  hoveredRegionId=null;
+  hoveredStroke=null;
+}
+
+function applyHoverOutline(target){
+  const resolved=resolveClickedRegion(target);
+  const id=resolved?resolved.region.regionId:null;
+  if(id===hoveredRegionId) return;
+  clearHoverOutline();
+  if(!id) return;
+  const el=document.getElementById(id);
+  if(!el) return;
+  hoveredRegionId=id;
+  hoveredStroke={stroke:el.style.stroke,strokeWidth:el.style.strokeWidth};
+  el.style.stroke='#9c4a22';
+  el.style.strokeWidth='3';
+}
+
 artboard.addEventListener('pointerdown',event=>{
   if(event.button===2) return;
   activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -3188,8 +3221,16 @@ artboard.addEventListener('pointermove',event=>{
 
   if(isPinching){
     event.preventDefault();
+    clearHoverOutline();
     applyPinch();
     return;
+  }
+
+  // While a finger or button is down we are painting or panning, so no outline.
+  if(pointerIsDown||isDragging){
+    clearHoverOutline();
+  }else{
+    applyHoverOutline(event.target);
   }
 
   if(!pointerIsDown || zoom<=1) return;
@@ -3251,6 +3292,7 @@ artboard.addEventListener('lostpointercapture',event=>{
   isDragging=false;
   artboard.classList.remove('dragging');
 });
+artboard.addEventListener('pointerleave',()=>clearHoverOutline());
 
 artboard.addEventListener('wheel',event=>{
   event.preventDefault();
