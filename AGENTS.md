@@ -145,10 +145,28 @@ stray click a lifting finger can emit, which would otherwise paint a region.
 
 `handleRegion` adopts the clicked section's own color, so one click fills a
 numbered region without selecting that color in the palette first (the old
-"finish color X before moving to color Y" warning is gone). After each fill,
-`nextColorAfter` moves the selection on to the next color in palette order that
-still has sections left, wrapping around and preferring colors that were not
-skipped — the old advance only fired once a whole color was complete.
+"finish color X before moving to color Y" warning is gone). After each fill the
+selection **stays on that color and moves on to the next section of it**:
+`markNextSection(colorId)` — shared with the Hint button — rotates on from the
+section just painted and drops the pink marker on the next unpainted section
+whose number is usable, so the next tap lands where the painting was heading.
+Only when the whole color is finished does `nextColorAfter` hand the selection
+over to the next unfinished color. The pan/zoom that used to sit inside the Hint
+button now lives in `focusMarkedSection()`, which only the button calls.
+
+## Painting never moves the artwork
+
+Two guards keep a tap from shifting the canvas:
+
+- `lockCanvasView()` is taken at the top of `handleRegion` and restored at the
+  end, so a paint leaves `zoom`/`panX`/`panY` exactly as they were, whatever the
+  input path changed on the way in.
+- A pointer released **off** the canvas used to stay in `activePointers`, which
+  made the next single tap look like a second finger and be read as a pinch
+  (`startPinch`), panning and zooming the artwork while painting.
+  `forgetReleasedPointer` is bound to window `pointerup`/`pointercancel` (bubble
+  phase, so it runs after the canvas handlers and leaves ordinary taps and drags
+  untouched), and window `blur` clears the set.
 
 ## Secondary service (not in preview)
 

@@ -2567,6 +2567,10 @@ function handleRegion(region,el){
 
   playMode=currentPlayMode();
 
+  // A paint must never move the artwork, whichever input path delivered the
+  // tap: remember the view and put it back before control returns.
+  const restoreCanvasView=lockCanvasView();
+
   // The section you point at decides the color: one click paints the numbered
   // region in its own color, so there is no palette switch first.
   if(String(region.colorId)!==String(selectedColor)){
@@ -2580,7 +2584,10 @@ function handleRegion(region,el){
   painted[region.regionId]=true;
   revealPaintedRegion(region.regionId);
   clearHoverOutline();
-  if(hintedRegionId===region.regionId){hintedRegionId=null;clearHintMarker();}
+  // The painted section can no longer carry the marker, but its id stays the
+  // anchor the next section rotates on from.
+  hintedRegionId=region.regionId;
+  clearHintMarker();
 
   // Give immediate visual confirmation with the selected palette color.
   el.style.fill=region.fillColor || region.paletteColor;
@@ -2599,24 +2606,33 @@ function handleRegion(region,el){
   renderProgress();
   updateColorStatus();
 
-  // Move on as soon as the section is filled, so the next click already lands
-  // on the color that is up next.
-  const finishedColor=selectedColor;
-  const finishedState=colorCompletionMap()[String(finishedColor)];
-  const next=nextColorAfter(finishedColor);
+  // Stay on the color that was just clicked and move the selection on to the
+  // next section of it, so the next tap lands on the section that is up next.
+  // Only a finished color hands the selection over to the next unfinished one.
+  const finishedColor=String(selectedColor);
+  const finishedState=colorCompletionMap()[finishedColor];
+  let activeColor=finishedColor;
 
-  if(next && String(next.colorId)!==String(finishedColor)){
-    selectedColor=next.colorId;
-    hintedRegionId=null;
-    renderPalette();
-    refreshSelectedRegions();
-    updateColorStatus();
-    message.textContent=finishedState?.complete
-      ? `Color ${finishedColor} complete ✓ Moving to color ${selectedColor}.`
-      : `Color ${finishedColor} section painted. Next up: color ${selectedColor}.`;
+  if(finishedState?.complete){
+    const next=nextColorAfter(finishedColor);
+    if(next && String(next.colorId)!==finishedColor){
+      activeColor=String(next.colorId);
+      selectedColor=next.colorId;
+      skippedColors.delete(activeColor);
+      renderPalette();
+      updateColorStatus();
+    }
+  }
+
+  if(markNextSection(activeColor)==='marked'){
+    message.textContent=activeColor!==finishedColor
+      ? `Color ${finishedColor} complete ✓ Moving to color ${activeColor}.`
+      : `Color ${finishedColor} section painted. Next section of color ${activeColor} is marked.`;
   }else if(finishedState?.complete){
     message.textContent=`Color ${finishedColor} complete ✓`;
   }
+
+  restoreCanvasView();
 }
 
 // The next color in palette order that still has sections to fill, wrapping
@@ -2954,6 +2970,17 @@ function applyTransform(){
   panX=Math.round(panX);panY=Math.round(panY);
   canvasContent.style.transform=`translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`;
 }
+// A paint must never move the artwork. Take the view before a tap changes
+// anything and put it back before control returns to the browser.
+function lockCanvasView(){
+  const view={zoom,panX,panY};
+  return function restoreCanvasView(){
+    if(zoom===view.zoom && panX===view.panX && panY===view.panY) return;
+    zoom=view.zoom;panX=view.panX;panY=view.panY;
+    applyTransform();
+    document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+  };
+}
 function setZoom(next){
   zoom=Math.max(.6,Math.min(8,next));
   if(zoom<=1){
@@ -3032,74 +3059,84 @@ function resolveHiddenSelectedRegions(){
   return repaired;
 }
 
-document.getElementById('hintOneBtn').onclick=()=>{
+// Mark the next paintable section of a color, rotating on from the section that
+// carries the marker now. 'marked' means it is showing and hintedRegionId holds
+// it; 'none' means the color has nothing left to show; 'unusable' means the
+// sections that remain cannot carry a marker yet.
+function markNextSection(colorId){
   const remaining=REGIONS.filter(
     r=>
-      String(r.colorId)===String(selectedColor) &&
+      String(r.colorId)===String(colorId) &&
       !painted[r.regionId] &&
       regionHasUsableNumber(r) &&
       regionIsVisuallyPaintable(r)
   );
 
   if(!remaining.length){
-    const resolved=resolveHiddenSelectedRegions();
     hintedRegionId=null;
     clearHintMarker();
-    refreshSelectedRegions();
-    renderProgress();
-    updateColorStatus();
-    message.textContent=resolved
-      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} restored.`
-      : `No visible unpainted color ${selectedColor} sections remain.`;
-    return;
+    return 'none';
   }
 
   // Rotate only through regions that can be visibly marked and selected.
-  let currentIndex=remaining.findIndex(r=>r.regionId===hintedRegionId);
-  let next=null;
+  const currentIndex=remaining.findIndex(r=>r.regionId===hintedRegionId);
   for(let offset=1;offset<=remaining.length;offset++){
     const candidate=remaining[(currentIndex+offset)%remaining.length];
-    if(showHintMarker(candidate)){
-      next=candidate;
-      break;
-    }
+    if(!showHintMarker(candidate)) continue;
+    hintedRegionId=candidate.regionId;
+    repairRegionNumber(candidate);
+    refreshSelectedRegions();
+    showHintMarker(candidate); // redraw after refresh so marker stays above all labels.
+    return 'marked';
   }
 
-  if(!next){
+  hintedRegionId=null;
+  clearHintMarker();
+  return 'unusable';
+}
+
+// Bring the marked section into view. Only the Hint button moves the artwork;
+// painting never does.
+function focusMarkedSection(){
+  if(!hintedRegionId) return;
+  const region=REGIONS.find(r=>r.regionId===hintedRegionId);
+  const el=document.getElementById(hintedRegionId);
+  const svg=svgHost.querySelector('svg');
+  if(!region || !el || !svg) return;
+
+  const point=findVisibleInteriorPoint(region,el);
+  const svgBox=svg.viewBox.baseVal;
+  const cx=point?.x ?? (el.getBBox().x+el.getBBox().width/2);
+  const cy=point?.y ?? (el.getBBox().y+el.getBBox().height/2);
+  const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
+  const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
+  if(zoom<3) zoom=3;
+  const rect=artboard.getBoundingClientRect();
+  panX=Math.round(-normalizedX*rect.width*zoom);
+  panY=Math.round(-normalizedY*rect.height*zoom);
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+}
+
+document.getElementById('hintOneBtn').onclick=()=>{
+  const status=markNextSection(selectedColor);
+
+  if(status!=='marked'){
     const resolved=resolveHiddenSelectedRegions();
-    hintedRegionId=null;
-    clearHintMarker();
     refreshSelectedRegions();
     renderProgress();
     updateColorStatus();
-    message.textContent=resolved
-      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} repaired.`
-      : `No usable color ${selectedColor} hint remains.`;
+    message.textContent=status==='none'
+      ? (resolved
+          ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} restored.`
+          : `No visible unpainted color ${selectedColor} sections remain.`)
+      : (resolved
+          ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} repaired.`
+          : `No usable color ${selectedColor} hint remains.`);
     return;
   }
 
-  hintedRegionId=next.regionId;
-  repairRegionNumber(next);
-  refreshSelectedRegions();
-  showHintMarker(next); // redraw after refresh so marker stays above all labels.
-
-  const el=document.getElementById(hintedRegionId);
-  if(el){
-    const point=findVisibleInteriorPoint(next,el);
-    const svg=svgHost.querySelector('svg');
-    const svgBox=svg.viewBox.baseVal;
-    const cx=point?.x ?? (el.getBBox().x+el.getBBox().width/2);
-    const cy=point?.y ?? (el.getBBox().y+el.getBBox().height/2);
-    const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
-    const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
-    if(zoom<3) zoom=3;
-    const rect=artboard.getBoundingClientRect();
-    panX=Math.round(-normalizedX*rect.width*zoom);
-    panY=Math.round(-normalizedY*rect.height*zoom);
-    applyTransform();
-    document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
-  }
-
+  focusMarkedSection();
   message.textContent=`Hint: the pink marker identifies one visible number ${selectedColor} section.`;
 };
 
@@ -3433,6 +3470,30 @@ artboard.addEventListener('pointercancel',event=>{
 artboard.addEventListener('lostpointercapture',event=>{
   activePointers.delete(event.pointerId);
   if(isPinching && activePointers.size<2) finishPinch();
+  pointerIsDown=false;
+  isDragging=false;
+  artboard.classList.remove('dragging');
+});
+// A pointer released off the canvas used to stay in activePointers, so the next
+// single tap looked like a second finger and was read as a pinch — which moved
+// the artwork while painting. Window-level cleanup keeps the set honest; it runs
+// after the canvas handlers, so ordinary taps and drags are untouched.
+function forgetReleasedPointer(event){
+  if(!activePointers.has(event.pointerId)) return;
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
+  if(activePointers.size) return;
+  pointerIsDown=false;
+  isDragging=false;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+}
+window.addEventListener('pointerup',forgetReleasedPointer);
+window.addEventListener('pointercancel',forgetReleasedPointer);
+window.addEventListener('blur',()=>{
+  if(!activePointers.size) return;
+  activePointers.clear();
+  if(isPinching) finishPinch();
   pointerIsDown=false;
   isDragging=false;
   artboard.classList.remove('dragging');
