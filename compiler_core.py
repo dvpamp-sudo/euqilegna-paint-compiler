@@ -1897,7 +1897,7 @@ textarea{width:100%;min-height:90px;border:1px solid #ccb7a7;border-radius:8px;p
       <button id="zoomReset" class="secondary">Reset View</button>
       <button id="centerSelected" class="secondary">Center Selected Color</button><button id="toggleNumberFocus" class="secondary">Show All Numbers</button>
     </div>
-    <p class="hint">Looking for a number? Zoom in with the +/− buttons or by scrolling over the picture, then drag the picture to move around. A quick tap still paints as usual.</p>
+    <p class="hint">Looking for a number? Zoom in with the +/− buttons, by scrolling over the picture, or by pinching with two fingers on a touchscreen. Then drag the picture to move around. A quick tap still paints as usual.</p>
 
     <div class="review-only review-card">
       <h3>Review tools</h3>
@@ -2428,7 +2428,7 @@ function resolveClickedRegion(target){
 // Event delegation is the permanent interaction path. It continues working
 // even when SVG paths are rebuilt, labels are repaired, or hit targets overlap.
 svgHost.addEventListener('click',event=>{
-  if(hasDragged) return;
+  if(hasDragged||pinchGuard) return;
   const resolved=resolveClickedRegion(event.target);
   if(!resolved) return;
   event.preventDefault();
@@ -3090,11 +3090,85 @@ document.getElementById('paintAgainBtn').onclick=()=>{
 
 // Any drag past a few pixels moves the picture. A quick tap still paints,
 // so customers never have to switch modes to look around a zoomed image.
+// Two fingers pinch to zoom, anchored on the point between the fingers so the
+// spot being studied stays under them while the picture grows or shrinks.
 const PAN_THRESHOLD=5;
 let panPointerId=null;
+const activePointers=new Map();
+let isPinching=false;
+let pinchRect=null;
+let pinchStartDistance=0;
+let pinchStartZoom=1;
+let pinchFocalX=0;
+let pinchFocalY=0;
+let pinchGuard=false;
+
+function pointerMidpoint(){
+  const points=[...activePointers.values()];
+  return {
+    x:(points[0].x+points[1].x)/2,
+    y:(points[0].y+points[1].y)/2,
+    distance:Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y)||1
+  };
+}
+
+function startPinch(){
+  const rect=artboard.getBoundingClientRect();
+  const mid=pointerMidpoint();
+  const cx=rect.width/2;
+  const cy=rect.height/2;
+  pinchRect=rect;
+  pinchStartDistance=mid.distance;
+  pinchStartZoom=zoom;
+  // Picture point under the fingers, so it can be kept under them as we scale.
+  pinchFocalX=cx+(mid.x-rect.left-cx-panX)/zoom;
+  pinchFocalY=cy+(mid.y-rect.top-cy-panY)/zoom;
+  isPinching=true;
+  isDragging=false;
+  pointerIsDown=false;
+  hasDragged=true;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor='grabbing';
+  activePointers.forEach((_,id)=>{
+    try{artboard.setPointerCapture(id)}catch(e){}
+  });
+}
+
+function applyPinch(){
+  if(activePointers.size<2) return;
+  const mid=pointerMidpoint();
+  const rect=pinchRect||artboard.getBoundingClientRect();
+  const cx=rect.width/2;
+  const cy=rect.height/2;
+  zoom=Math.max(.6,Math.min(8,pinchStartZoom*(mid.distance/pinchStartDistance)));
+  if(zoom<=1){
+    panX=0;panY=0;
+  }else{
+    panX=mid.x-rect.left-cx-zoom*(pinchFocalX-cx);
+    panY=mid.y-rect.top-cy-zoom*(pinchFocalY-cy);
+  }
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+}
+
+function finishPinch(){
+  if(!isPinching) return;
+  isPinching=false;
+  pinchRect=null;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+  // A finger lifting off a pinch can still emit a click; swallow that one.
+  pinchGuard=true;
+  setTimeout(()=>{pinchGuard=false;hasDragged=false;},400);
+}
 
 artboard.addEventListener('pointerdown',event=>{
   if(event.button===2) return;
+  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(activePointers.size>=2){
+    if(!isPinching) startPinch();
+    return;
+  }
   pointerIsDown=true;
   pointerStartX=event.clientX;
   pointerStartY=event.clientY;
@@ -3108,6 +3182,16 @@ artboard.addEventListener('pointerdown',event=>{
 });
 
 artboard.addEventListener('pointermove',event=>{
+  if(activePointers.has(event.pointerId)){
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  }
+
+  if(isPinching){
+    event.preventDefault();
+    applyPinch();
+    return;
+  }
+
   if(!pointerIsDown || zoom<=1) return;
 
   if(!isDragging){
@@ -3127,6 +3211,16 @@ artboard.addEventListener('pointermove',event=>{
 });
 
 artboard.addEventListener('pointerup',event=>{
+  activePointers.delete(event.pointerId);
+
+  if(isPinching){
+    event.preventDefault();
+    event.stopPropagation();
+    try{artboard.releasePointerCapture(event.pointerId)}catch(e){}
+    if(activePointers.size<2) finishPinch();
+    return;
+  }
+
   pointerIsDown=false;
   panPointerId=null;
   if(isDragging){
@@ -3142,13 +3236,17 @@ artboard.addEventListener('pointerup',event=>{
   setTimeout(()=>{hasDragged=false;},0);
 });
 
-artboard.addEventListener('pointercancel',()=>{
+artboard.addEventListener('pointercancel',event=>{
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
   pointerIsDown=false;
   isDragging=false;
   hasDragged=false;
   artboard.classList.remove('dragging');
 });
-artboard.addEventListener('lostpointercapture',()=>{
+artboard.addEventListener('lostpointercapture',event=>{
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
   pointerIsDown=false;
   isDragging=false;
   artboard.classList.remove('dragging');

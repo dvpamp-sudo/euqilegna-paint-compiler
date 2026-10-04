@@ -64,6 +64,33 @@ regions vs its 648–756 cap). This is pre-existing: the un-corrupted `2cba359`
 version fails the same artwork through `validate_package`'s region-count check,
 so it is not a regression from the indentation fix.
 
+## Player template changes need a recompile to show up
+
+The interactive paint page is not rendered per request: `compiler_core.py` bakes
+`interactive_player.html` into the artwork's package at compile time, and
+`/premium/{sample}/play` just serves that file. It lands in the container's own
+filesystem (not the repo, not the volume): `/root/AppData/Local/EuqilegnaDigitalArtStudio/generated/premium/<sample>/package/`.
+
+So a template edit (e.g. the canvas gesture code) only appears on already
+compiled artworks after regenerating them — `/api/premium/{sample}/compile`
+short-circuits when the player file exists, so delete the package dir first:
+
+    docker compose -f docker-compose.base44.yml exec -T web \
+      sh -c 'rm -rf /root/AppData/Local/EuqilegnaDigitalArtStudio/generated/premium/<sample>'
+    curl -s -X POST http://localhost:3000/api/premium/<sample>/compile
+
+Then poll `/runtime/jobs/<jobId>` until `status` is `complete` (~4–5 min for
+`afrofuturist-stargazer`). Artworks compiled by an earlier session keep serving
+the old template until this is done.
+
+## Canvas gestures on the paint page
+
+One pointer = tap paints, drag pans (only when zoomed past 100%). Two pointers =
+pinch to zoom, anchored on the midpoint between the fingers so the spot being
+studied stays put; `touch-action:none` on `#artboard` is what lets the browser
+hand these to us. `finishPinch()` arms a short `pinchGuard` that swallows the
+stray click a lifting finger can emit, which would otherwise paint a region.
+
 ## Secondary service (not in preview)
 
 `platform_api/app:app` is a separate modular compiler platform (port 8100 in
