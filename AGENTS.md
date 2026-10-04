@@ -123,6 +123,22 @@ budget (stage 1) is much cheaper than more merge attempts (stage 3), and
 loosening `color_tolerance` in stage 3 is what changes the look of the result
 most, since it accepts less similar neighbours.
 
+## V12 recovery is bounded by time, not attempt count
+
+`compiler_v12/orchestrator.py` used to `break` after the second attempt whenever
+no attempt had passed (`if index >= 2 and best is None`). On a line-art source
+the first two strategies (`smart-auto`, `full-canvas-illustration-recovery`) can
+both land just under the 0.68 fidelity gate — e.g. 0.585 and 0.672 — while the
+third, `full-canvas-photo-recovery`, passes (the photo pipeline's tonal
+similarity is much higher on these images). The early break threw away that
+viable package and the user saw "Version 12 could not produce a package that
+passed validation".
+
+The guard is now `time.monotonic() - recovery_started_at > RECOVERY_TIME_BUDGET_SECONDS`
+(900s), so every planned strategy gets a chance on a fast image while a slow one
+still can't run for hours. Verified on the failing source: the orchestrator now
+selects `full-canvas-photo-recovery` at 0.70026 (passed) instead of raising.
+
 ## Player template changes need a recompile to show up
 
 The interactive paint page is not rendered per request: `compiler_core.py` bakes

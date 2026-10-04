@@ -5,12 +5,19 @@ from typing import Callable, Any
 import json
 import shutil
 import tempfile
+import time
 
 from compiler_core import compile_artwork as compile_core
 from .analyzer import analyze_source
 from .models import AttemptResult
 from .recovery import build_attempts
 from .validation import validate_package
+
+
+# Recovery is bounded by wall-clock time, not attempt count: a fast pipeline
+# should get to try every planned strategy, while a slow one still cannot burn
+# through hours of retries.
+RECOVERY_TIME_BUDGET_SECONDS = 900.0
 
 
 def _copy_tree_contents(source: Path, destination: Path) -> None:
@@ -82,6 +89,7 @@ def compile_artwork(
 
     with tempfile.TemporaryDirectory(prefix="euqilegna_v12_") as temp_root:
         root = Path(temp_root)
+        recovery_started_at = time.monotonic()
 
         for index, settings in enumerate(attempts, start=1):
             if cancel_check and cancel_check():
@@ -167,8 +175,10 @@ def compile_artwork(
             if result.success and result.score >= 0.82:
                 break
 
-            # Runtime guard: never burn through four multi-hour retries.
-            if index >= 2 and best is None:
+            # Runtime guard: keep trying every planned strategy until the time
+            # budget is spent, so a viable later attempt (e.g. the photo
+            # recovery on a line-art source) is not cut off by attempt count.
+            if best is None and time.monotonic() - recovery_started_at > RECOVERY_TIME_BUDGET_SECONDS:
                 break
 
         if best is None:
