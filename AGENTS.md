@@ -133,11 +133,22 @@ the old template until this is done.
 
 ## Canvas gestures on the paint page
 
-One pointer = tap paints, drag pans (only when zoomed past 100%). Two pointers =
+One pointer = tap paints, drag pans (only when zoomed past 100%). A drag has to
+travel `PAN_THRESHOLD` (12px) before it counts as a pan, so the hand-shake of an
+ordinary click can never swallow the paint or shift the artwork. Two pointers =
 pinch to zoom, anchored on the midpoint between the fingers so the spot being
 studied stays put; `touch-action:none` on `#artboard` is what lets the browser
 hand these to us. `finishPinch()` arms a short `pinchGuard` that swallows the
 stray click a lifting finger can emit, which would otherwise paint a region.
+
+## Painting flow: the section you click sets the color
+
+`handleRegion` adopts the clicked section's own color, so one click fills a
+numbered region without selecting that color in the palette first (the old
+"finish color X before moving to color Y" warning is gone). After each fill,
+`nextColorAfter` moves the selection on to the next color in palette order that
+still has sections left, wrapping around and preferring colors that were not
+skipped — the old advance only fired once a whole color was complete.
 
 ## Secondary service (not in preview)
 

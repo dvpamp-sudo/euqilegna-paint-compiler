@@ -2567,10 +2567,14 @@ function handleRegion(region,el){
 
   playMode=currentPlayMode();
 
+  // The section you point at decides the color: one click paints the numbered
+  // region in its own color, so there is no palette switch first.
   if(String(region.colorId)!==String(selectedColor)){
-    message.textContent=`You are working on color ${selectedColor}. Finish every color ${selectedColor} section before moving to color ${region.colorId}.`;
-    el.animate([{opacity:1},{opacity:.42},{opacity:1}],{duration:360});
-    return;
+    selectedColor=region.colorId;
+    skippedColors.delete(String(selectedColor));
+    renderPalette();
+    refreshSelectedRegions();
+    updateColorStatus();
   }
 
   painted[region.regionId]=true;
@@ -2595,22 +2599,42 @@ function handleRegion(region,el){
   renderProgress();
   updateColorStatus();
 
+  // Move on as soon as the section is filled, so the next click already lands
+  // on the color that is up next.
   const finishedColor=selectedColor;
   const finishedState=colorCompletionMap()[String(finishedColor)];
-  if(finishedState?.complete){
-    const next=chooseNextAvailableColor();
+  const next=nextColorAfter(finishedColor);
 
-    if(next){
-      selectedColor=next.colorId;
-      hintedRegionId=null;
-      renderPalette();
-      refreshSelectedRegions();
-      updateColorStatus();
-      message.textContent=`Color ${finishedColor} complete ✓ Moving to color ${selectedColor}.`;
-    }else{
-      message.textContent=`Color ${finishedColor} complete ✓`;
-    }
+  if(next && String(next.colorId)!==String(finishedColor)){
+    selectedColor=next.colorId;
+    hintedRegionId=null;
+    renderPalette();
+    refreshSelectedRegions();
+    updateColorStatus();
+    message.textContent=finishedState?.complete
+      ? `Color ${finishedColor} complete ✓ Moving to color ${selectedColor}.`
+      : `Color ${finishedColor} section painted. Next up: color ${selectedColor}.`;
+  }else if(finishedState?.complete){
+    message.textContent=`Color ${finishedColor} complete ✓`;
   }
+}
+
+// The next color in palette order that still has sections to fill, wrapping
+// around at the end. Skipped colors are only used when nothing else is left.
+function nextColorAfter(colorId){
+  const map=colorCompletionMap();
+  const start=PALETTE.findIndex(item=>String(item.colorId)===String(colorId));
+  const ordered=PALETTE.slice(start+1).concat(PALETTE.slice(0,start+1));
+  const hasWork=item=>{
+    const state=map[String(item.colorId)];
+    return Boolean(state && !state.complete);
+  };
+
+  return (
+    ordered.find(item=>hasWork(item) && !skippedColors.has(String(item.colorId))) ||
+    ordered.find(hasWork) ||
+    null
+  );
 }
 
 
@@ -3209,11 +3233,12 @@ document.getElementById('paintAgainBtn').onclick=()=>{
   resetArtworkForRepaint();
 };
 
-// Any drag past a few pixels moves the picture. A quick tap still paints,
-// so customers never have to switch modes to look around a zoomed image.
+// A deliberate drag moves the picture; a tap always paints. The threshold is
+// generous so the hand-shake of an ordinary click never becomes a pan, which
+// used to swallow the paint and shift the artwork out from under the cursor.
 // Two fingers pinch to zoom, anchored on the point between the fingers so the
 // spot being studied stays under them while the picture grows or shrinks.
-const PAN_THRESHOLD=5;
+const PAN_THRESHOLD=12;
 let panPointerId=null;
 const activePointers=new Map();
 let isPinching=false;
