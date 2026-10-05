@@ -293,6 +293,29 @@ Unlike `/create`, which ends in a ZIP download, this flow opens the baked
 container restart. The page keeps a local record of compiled uploads in
 `localStorage['euqilegna-my-artwork-v1']` (jobId + downscaled thumbnail) and
 renders them in its "Your images" grid; there is no server-side upload index.
+Each record also carries `style` (from the job's `metadata.artworkProfile`,
+mapped to Portrait / Line art / Illustration / Landscape / Photo / Graphic, else
+title-cased), `difficulty` from `metadata.regions` (<=400 Easy, <=650 Medium,
+else Detailed, 0 Unrated) and free-form `labels` the reader types.
+
+### "Your images" filters
+
+Three chip rows sit above the grid — Style, Difficulty, My labels — each with an
+`All` chip and per-category counts; the three selections combine with AND and the
+grid shows a "Nothing in this category" panel when a combination is empty. The
+rows are rebuilt from the records on every render, so a category disappears when
+its last artwork does.
+
+Labels are edited in place: `＋ label` on a card swaps the tag row for an inline
+`input.tag-input`, committing on Enter or blur (Escape cancels) into that
+record's `labels`. Clicking a card's label tag removes just that label and drops
+the active label filter back to `All`. Labels are deliberately *not* a
+comma-free format — they are typed comma-separated in that one field.
+
+`saveRecord(jobId, job)` needs the job payload to derive style/difficulty;
+`render(job)` passes it. A record written before the filters existed has neither
+field and shows as `Other` / `Unrated` until backfilled (fetch `GET /jobs/{id}`
+for each stored jobId and re-save with `styleOf`/`difficultyOf`).
 
 Entry points to the page: the premium library hero CTA (`/samples`), the studio
 nav (`/`), and the premium launcher panel (`/samples/{sample}`).

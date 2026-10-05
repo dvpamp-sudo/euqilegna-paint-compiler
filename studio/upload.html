@@ -45,6 +45,21 @@ select,input[type=file]{width:100%;padding:11px;margin-top:6px;border:1px solid 
 .art small{color:var(--muted)}
 .art a.open{margin-top:10px;display:inline-block;background:var(--purple);color:#fff;border-radius:9px;padding:9px 12px;font-weight:800;font-size:14px}
 .empty{grid-column:1/-1;border:1px dashed #60472e;border-radius:16px;padding:34px;text-align:center;color:#bfae9a}
+.filters{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+.filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.row-label{color:var(--muted);font-size:12px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase;min-width:86px}
+.row-hint{color:var(--muted);font-size:13px}
+.chip{border:1px solid #4c3827;background:#160f17;color:#e6d8c6;border-radius:999px;padding:7px 13px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;transition:.2s}
+.chip:hover{border-color:var(--gold)}
+.chip.active{border-color:var(--purple);background:#2a1a36;color:#fff}
+.chip span{color:var(--muted);font-weight:800;margin-left:6px}
+.chip.active span{color:#d9c2ee}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 2px}
+.tag{border:1px solid #4c3827;background:#1d1522;color:#d9c7e8;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer}
+.tag:hover{border-color:var(--gold);color:#fff}
+.tag.add{background:transparent;color:var(--muted);border-style:dashed}
+.tag-input{flex:1 1 150px;min-width:120px;border:1px dashed #6a4f31;background:#0e0b0f;color:#fff;border-radius:999px;padding:5px 10px;font-size:12px;font-family:inherit}
+.tag-input:focus{outline:none;border-color:var(--gold)}
 @media(max-width:960px){.preview-wrap{grid-template-columns:1fr}.choice-grid{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.wrap{padding:16px}.hero h1{font-size:38px}.choice-grid,.grid{grid-template-columns:1fr}.navlinks{display:none}}
 </style></head>
@@ -99,6 +114,7 @@ select,input[type=file]{width:100%;padding:11px;margin-top:6px;border:1px solid 
 <section class="card">
   <h2>Your images</h2>
   <p class="hint">Artworks you compiled from your own uploads. They stay playable on this device.</p>
+  <div id="filters" class="filters"></div>
   <div id="gallery" class="grid"></div>
 </section>
 </div>
@@ -176,7 +192,7 @@ function render(job){
     playLink.href=`/my-artwork/${job.id}/play`;
     downloadLink.href=`/jobs/${job.id}/download`;
     createBtn.disabled=false;
-    saveRecord(job.id);
+    saveRecord(job.id,job);
   }else if(job.status==='failed'||job.status==='cancelled'){
     statusMessage.className='msg error';
     statusMessage.textContent=job.error||(job.status==='cancelled'?'Compilation cancelled.':'Compilation failed.');
@@ -259,19 +275,128 @@ function makeThumb(file){
   });
 }
 
+const STYLE_LABELS={portrait:'Portrait',line_art:'Line art',illustration:'Illustration',landscape_or_scene:'Landscape',photo:'Photo',graphic:'Graphic'};
+const DIFFICULTY_ORDER=['Easy','Medium','Detailed','Unrated'];
+const activeFilters={style:'all',difficulty:'all',label:'all'};
+
+function titleCase(value){return String(value||'').replace(/[_-]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
+// Style comes from the profile the compiler detected for the job; difficulty from its region count.
+function styleOf(job){const raw=(job?.metadata||{}).artworkProfile;if(!raw)return 'Other';return STYLE_LABELS[raw]||titleCase(raw)}
+function difficultyOf(job){
+  const regions=Number((job?.metadata||{}).regions)||0;
+  if(!regions)return 'Unrated';
+  if(regions<=400)return 'Easy';
+  if(regions<=650)return 'Medium';
+  return 'Detailed';
+}
 function loadRecords(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||'[]')}catch(e){return[]}}
-function saveRecord(jobId){
-  const records=loadRecords().filter(r=>r.jobId!==jobId);
-  records.push({jobId,title:selectedFile?.name||'My artwork',thumb:pendingThumb||'',date:new Date().toISOString()});
-  try{localStorage.setItem(STORE_KEY,JSON.stringify(records))}catch(e){}
+function writeRecords(records){try{localStorage.setItem(STORE_KEY,JSON.stringify(records))}catch(e){}}
+function saveRecord(jobId,job){
+  const records=loadRecords();
+  const existing=records.find(r=>r.jobId===jobId);
+  const next=records.filter(r=>r.jobId!==jobId);
+  next.push({
+    jobId,
+    title:selectedFile?.name||existing?.title||'My artwork',
+    thumb:pendingThumb||existing?.thumb||'',
+    date:new Date().toISOString(),
+    style:job?styleOf(job):(existing?.style||'Other'),
+    difficulty:job?difficultyOf(job):(existing?.difficulty||'Unrated'),
+    labels:existing?.labels||[]
+  });
+  writeRecords(next);
   renderGallery();
+}
+
+function countBy(items,key){
+  const counts=new Map();
+  items.forEach(item=>{const value=item[key]||'Other';counts.set(value,(counts.get(value)||0)+1)});
+  return Array.from(counts,([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
+}
+function chipRow(label,key,chips,total,hint){
+  if(!chips.length)return `<div class="filter-row"><span class="row-label">${label}</span><span class="row-hint">${hint}</span></div>`;
+  const all=`<button class="chip ${activeFilters[key]==='all'?'active':''}" data-filter="${key}" data-value="all">All<span>${total}</span></button>`;
+  return `<div class="filter-row"><span class="row-label">${label}</span>${all}${chips.map(c=>`<button class="chip ${activeFilters[key]===c.name?'active':''}" data-filter="${key}" data-value="${escapeAttr(c.name)}">${escapeHtml(c.name)}<span>${c.count}</span></button>`).join('')}</div>`;
+}
+function renderFilters(records){
+  const box=document.getElementById('filters');
+  if(!records.length){box.innerHTML='';return}
+  const styles=countBy(records.map(r=>({style:r.style||'Other'})),'style');
+  const difficulties=countBy(records.map(r=>({difficulty:r.difficulty||'Unrated'})),'difficulty')
+    .sort((a,b)=>DIFFICULTY_ORDER.indexOf(a.name)-DIFFICULTY_ORDER.indexOf(b.name));
+  const labels=new Map();
+  records.forEach(r=>(r.labels||[]).forEach(name=>labels.set(name,(labels.get(name)||0)+1)));
+  const labelChips=Array.from(labels,([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));
+  box.innerHTML=chipRow('Style','style',styles,records.length)
+    +chipRow('Difficulty','difficulty',difficulties,records.length)
+    +chipRow('My labels','label',labelChips,records.length,'Use “＋ label” on an artwork to tag it');
+}
+function matchesFilters(record){
+  if(activeFilters.style!=='all'&&(record.style||'Other')!==activeFilters.style)return false;
+  if(activeFilters.difficulty!=='all'&&(record.difficulty||'Unrated')!==activeFilters.difficulty)return false;
+  if(activeFilters.label!=='all'&&!(record.labels||[]).includes(activeFilters.label))return false;
+  return true;
 }
 function renderGallery(){
   const records=loadRecords().slice().reverse();
+  renderFilters(records);
   const grid=document.getElementById('gallery');
   if(!records.length){grid.innerHTML='<div class="empty"><h3>No uploads yet</h3><p>Images you compile will appear here.</p></div>';return}
-  grid.innerHTML=records.map(r=>`<article class="art">${r.thumb?`<img src="${r.thumb}" alt="">`:''}<div class="copy"><h4>${escapeHtml(r.title)}</h4><small>${new Date(r.date).toLocaleDateString()}</small><br><a class="open" href="/my-artwork/${r.jobId}/play">Open painting</a></div></article>`).join('');
+  const shown=records.filter(matchesFilters);
+  if(!shown.length){grid.innerHTML='<div class="empty"><h3>Nothing in this category</h3><p>Pick “All” or another chip to see your other artworks.</p></div>';return}
+  grid.innerHTML=shown.map(r=>{
+    const tags=(r.labels||[]).map(name=>`<button class="tag" data-tag="${escapeAttr(name)}" data-job="${r.jobId}" title="Remove label">${escapeHtml(name)} ✕</button>`).join('');
+    return `<article class="art">${r.thumb?`<img src="${r.thumb}" alt="">`:''}<div class="copy"><h4>${escapeHtml(r.title)}</h4><small>${new Date(r.date).toLocaleDateString()}</small><div class="tags">${tags}<button class="tag add" data-add="${r.jobId}">＋ label</button></div><a class="open" href="/my-artwork/${r.jobId}/play">Open painting</a></div></article>`;
+  }).join('');
 }
+
+function startLabelEdit(jobId,holder){
+  const record=loadRecords().find(r=>r.jobId===jobId);
+  if(!record)return;
+  holder.innerHTML=`<input class="tag-input" type="text" placeholder="labels, comma separated" value="${escapeAttr((record.labels||[]).join(', '))}">`;
+  const input=holder.querySelector('input');
+  let settled=false;
+  const commit=()=>{
+    if(settled)return;
+    settled=true;
+    const rows=loadRecords();
+    const target=rows.find(r=>r.jobId===jobId);
+    if(target){
+      target.labels=Array.from(new Set(input.value.split(',').map(value=>value.trim()).filter(Boolean)));
+      writeRecords(rows);
+    }
+    renderGallery();
+  };
+  input.addEventListener('keydown',event=>{
+    if(event.key==='Enter'){event.preventDefault();commit()}
+    else if(event.key==='Escape'){settled=true;renderGallery()}
+  });
+  input.addEventListener('blur',commit);
+  input.focus();
+  input.select();
+}
+
+document.getElementById('filters').addEventListener('click',event=>{
+  const chip=event.target.closest('.chip');
+  if(!chip)return;
+  activeFilters[chip.dataset.filter]=chip.dataset.value;
+  renderGallery();
+});
+document.getElementById('gallery').addEventListener('click',event=>{
+  const addButton=event.target.closest('[data-add]');
+  if(addButton){startLabelEdit(addButton.dataset.add,addButton.parentElement);return}
+  const tag=event.target.closest('[data-tag]');
+  if(!tag)return;
+  const records=loadRecords();
+  const record=records.find(r=>r.jobId===tag.dataset.job);
+  if(!record)return;
+  record.labels=(record.labels||[]).filter(name=>name!==tag.dataset.tag);
+  writeRecords(records);
+  if(activeFilters.label===tag.dataset.tag)activeFilters.label='all';
+  renderGallery();
+});
+
 function escapeHtml(value){const d=document.createElement('div');d.textContent=value;return d.innerHTML}
+function escapeAttr(value){return escapeHtml(value).replace(/"/g,'&quot;')}
 renderGallery();
 </script></body></html>
