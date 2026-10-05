@@ -2695,10 +2695,8 @@ function handleRegion(region,el){
     }
   }
 
-  if(markNextSection(activeColor)==='marked'){
-    message.textContent=activeColor!==finishedColor
-      ? `Color ${finishedColor} complete ✓ Moving to color ${activeColor}.`
-      : `Color ${finishedColor} section painted. Next section of color ${activeColor} is marked.`;
+  if(activeColor!==finishedColor){
+    message.textContent=`Color ${finishedColor} complete ✓ Moving to color ${activeColor}.`;
   }else if(finishedState?.complete){
     message.textContent=`Color ${finishedColor} complete ✓`;
   }
@@ -3672,21 +3670,12 @@ setupMasterReveal();
 ensureEveryPaintableRegionHasNumber();
 renderPalette();
 applySaved();
+// Hints stay hidden unless the reader asks for one, so a reload never reopens
+// a marker or glow on a restored anchor.
+hintedRegionId=null;
 refreshSelectedRegions();
 numberFocus=false;
 refreshNumberLabels();
-if(hintedRegionId){
-  const resumeAnchor=REGIONS.find(r=>r.regionId===hintedRegionId);
-  if(resumeAnchor && painted[resumeAnchor.regionId]){
-    // The saved section is the one just painted, so the marker comes back on
-    // the next section of the color that was being filled.
-    markNextSection(selectedColor);
-  }else if(resumeAnchor){
-    showHintMarker(resumeAnchor);
-  }else{
-    hintedRegionId=null;
-  }
-}
 document.getElementById('toggleNumberFocus').textContent='Focus Selected Number';
 difficulty();
 setMode('review');

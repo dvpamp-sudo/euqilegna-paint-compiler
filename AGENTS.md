@@ -211,10 +211,11 @@ stray click a lifting finger can emit, which would otherwise paint a region.
 `handleRegion` adopts the clicked section's own color, so one click fills a
 numbered region without selecting that color in the palette first (the old
 "finish color X before moving to color Y" warning is gone). After each fill the
-selection **stays on that color and moves on to the next section of it**:
-`markNextSection(colorId)` — shared with the Hint button — rotates on from the
-section just painted and drops the pink marker on the next unpainted section
-whose number is usable, so the next tap lands where the painting was heading.
+selection **stays on that color**: the painted section's id is kept as the
+rotation anchor, and no hint is drawn — `markNextSection(colorId)`, shared with
+the Hint button, runs **only** when the reader presses **Show One Hint**, where
+it rotates on from that anchor and drops the pink marker on the next unpainted
+section whose number is usable. Hints therefore stay hidden unless requested.
 Only when the whole color is finished does `nextColorAfter` hand the selection
 over to the next unfinished color. The pan/zoom that used to sit inside the Hint
 button now lives in `focusMarkedSection()`, which only the button calls.
@@ -226,12 +227,11 @@ The player saves silently after every fill (`save(false)` in `handleRegion` and
 `euqilegna-paint-event-` + the artwork's path, so progress belongs to that one
 artwork. On load it restores the whole working position, not just the fills:
 `selectedColor` (only if that color still exists in `PALETTE`), `skippedColors`,
-and `hintedRegionId`. The saved id is the section last painted — the marker's
-rotation anchor — so startup calls `markNextSection(selectedColor)` to put the
-pink marker back on the next unpainted section of the color you were filling,
-falling back to `showHintMarker` when the saved id is an unpainted section a
-Hint had marked. A saved id or color that no longer exists (an artwork
-recompiled since) is ignored, so the page still opens clean.
+and `hintedRegionId`. A restored anchor never reopens a hint: startup clears
+`hintedRegionId` before the first repaint, so a reload shows no marker and no
+glow, and the next **Show One Hint** starts from the color's first unpainted
+section. A saved id or color that no longer exists (an artwork recompiled
+since) is ignored, so the page still opens clean.
 
 Like any template change, this only reaches an already-compiled artwork after
 that artwork is recompiled (see above).
