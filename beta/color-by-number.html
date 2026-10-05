@@ -18,6 +18,9 @@ button{font:inherit;touch-action:manipulation}
 .board{display:block;width:100%;height:auto;touch-action:manipulation}
 .zone{fill:#fff;stroke:#302636;stroke-width:2.2;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
 .zone.target{fill:#ded7e1;stroke:#7c2fb2;stroke-width:4;filter:drop-shadow(0 0 4px #fff)}
+.zone.next{fill:#ffe3a3;stroke:#ff8a1f;stroke-width:5;filter:drop-shadow(0 0 10px #ffb347);animation:nextPulse 1.1s ease-in-out infinite alternate}
+.zone-label.next{fill:#ff8a1f;stroke:#fff}
+@keyframes nextPulse{from{opacity:.55}to{opacity:1}}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{animation:paintPop .48s ease}
 .zone.done{stroke:#ffffff55;stroke-width:1.2}
@@ -229,14 +232,22 @@ function renderPalette(){
     paletteEl.appendChild(button);
   });
 }
+function nextZoneIndex(){
+  return zones.findIndex((zone,index)=>Number(zone.dataset.c)===selected&&!completed.has(index));
+}
 function highlight(){
+  const nextIndex=nextZoneIndex();
   zones.forEach((zone,index)=>{
+    const isNext=index===nextIndex;
     zone.classList.toggle('target',!completed.has(index)&&Number(zone.dataset.c)===selected);
+    zone.classList.toggle('next',isNext);
+    if(zone._label) zone._label.classList.toggle('next',isNext);
+    if(!completed.has(index)) zone.style.fill=isNext?'#ffe3a3':'#fff';
   });
   currentColorEl.textContent=String(selected);
   remainingEl.textContent=String(remainingFor(selected));
   statusEl.textContent=remainingFor(selected)
-    ? `Color ${selected} selected. Tap a gray highlighted zone.`
+    ? `Color ${selected}: paint the glowing zone — the next one lights up when you finish it.`
     : `Color ${selected} is complete. Choose another color.`;
 }
 function render(){
@@ -280,8 +291,9 @@ zones.forEach((zone,index)=>{
   });
 });
 function showNext(){
-  const item=zones.find((zone,index)=>Number(zone.dataset.c)===selected&&!completed.has(index));
-  if(!item){statusEl.textContent=`Color ${selected} is complete.`;return}
+  const index=nextZoneIndex();
+  if(index<0){statusEl.textContent=`Color ${selected} is complete.`;return}
+  const item=zones[index];
   item.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
   item.animate([{opacity:1},{opacity:.2},{opacity:1},{opacity:.2},{opacity:1}],{duration:1000});
 }
