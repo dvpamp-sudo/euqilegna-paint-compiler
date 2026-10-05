@@ -3990,7 +3990,7 @@ def compile_artwork(
     exclude_background: bool = True,
     generate_pdf: bool = True,
     experience_mode: str = "relaxed",
-    target_regions: int = 650,
+    target_regions: int = 900,
     design_style: str = "smart_auto",
     finish_mode: str = "original",
     progress_callback: Callable[[int, str, dict], None] | None = None,
@@ -4238,8 +4238,8 @@ def compile_artwork(
         update(16, "Simplifying photographic gradients and visual noise")
         processed = preprocess_basic_scenic(rgb)
         color_count = min(color_count, 24)
-        min_area = max(min_area, 70)
-        target_regions = min(max(180, target_regions), 520)
+        min_area = max(min_area, 48)
+        target_regions = min(max(340, target_regions), 900)
         experience_mode = "relaxed"
         Image.fromarray(processed).save(output_dir / "photo_pipeline_preview.png")
 
@@ -4272,7 +4272,7 @@ def compile_artwork(
             processed = preprocess_graphic_monochrome(rgb)
             color_count = min(max(color_count, 8), 12)
             min_area = min(min_area, 14)
-            target_regions = min(max(target_regions, 650), 1100)
+            target_regions = min(max(target_regions, 520), 1250)
             tolerance = min(tolerance, 0.10)
             experience_mode = "detailed"
             update(
@@ -4364,7 +4364,7 @@ def compile_artwork(
             merge_target_regions = target_regions
             if artwork_profile.name == "graphic_monochrome":
                 merge_min_area = max(6, min(min_area, 12))
-                merge_target_regions = max(target_regions, 750)
+                merge_target_regions = max(target_regions, 950)
             regions = adaptive_merge_regions(
                 processed,
                 regions,
@@ -4417,8 +4417,8 @@ def compile_artwork(
             processed = preprocess_basic_scenic(rgb)
 
             color_count = min(color_count, 24)
-            min_area = max(min_area, 70)
-            target_regions = min(max(180, target_regions), 520)
+            min_area = max(min_area, 48)
+            target_regions = min(max(340, target_regions), 900)
             experience_mode = "relaxed"
 
             regions = photo_slic_regions(

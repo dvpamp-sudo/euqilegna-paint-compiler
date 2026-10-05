@@ -60,7 +60,7 @@ def compile_artwork(
     exclude_background: bool = True,
     generate_pdf: bool = True,
     experience_mode: str = "relaxed",
-    target_regions: int = 650,
+    target_regions: int = 900,
     design_style: str = "smart_auto",
     finish_mode: str = "original",
     progress_callback: Callable[[int, str, dict], None] | None = None,
@@ -159,7 +159,7 @@ def compile_artwork(
                     attempt_dir,
                     source_path=input_path,
                     minimum_similarity=PUBLISH_SIMILARITY,
-                    target_regions=int(settings.get("target_regions") or target_regions or 480),
+                    target_regions=int(settings.get("target_regions") or target_regions or 900),
                 )
                 result = AttemptResult(
                     name=attempt_name,

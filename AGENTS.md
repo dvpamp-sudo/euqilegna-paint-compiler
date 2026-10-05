@@ -334,3 +334,32 @@ de-nested so `player_path`/`qa_path` are always defined.
 `platform_api/app:app` is a separate modular compiler platform (port 8100 in
 the original `.bat` scripts). It is not part of the preview setup; the main
 `main:app` on port 3000 is the primary studio.
+
+## Finer sections come from the region targets — never from the minimum area
+
+Section fineness is driven by `target_regions`, which is clamped in four places
+and all of them had to move together: the profile ceilings in
+`artwork_profiles.py`, the per-pipeline clamps in `compiler_core.compile_artwork`
+(photo 520 -> 900, graphic_monochrome 1100 -> 1250, default 650 -> 900), the V12
+recovery caps in `compiler_v12/recovery.py` (illustration/graphic recovery
+480 -> 760, photo 650 -> 950), and the user-facing ladders in `main.py`,
+`studio/upload.html`, `premium_catalog.py` and `platform_ui/index.html`
+(360/500/650/900 -> 480/700/950/1400 for the create and upload presets).
+Verified on `afrofuturist-stargazer`, which previously compiled at 520 regions:
+the illustration path now yields 613 and the photo path 900, both passing
+`validate_package`.
+
+Do **not** buy detail by lowering `minimum_region_area`. `validate_package`
+rejects a package when regions under 80px ("tiny") exceed 40% of the total, and
+a lower merge floor pushes that ratio up fast: the illustration pipeline at
+`target_regions=760` with `min_region_area=26` scored 0.6996 — over the 0.68
+gate — yet was rejected at 260/630 tiny (41.3%), while the identical target with
+the original floor of 36 passed at 0.396. The profile floors (18-70), the
+recovery floors (36/42) and the catalogue `min_region_area` values therefore stay
+as they were. The photo pipeline is the exception: its SLIC superpixels produced
+0 tiny regions at 900 regions, which is why that pipeline's own floor could drop
+from 70 to 48.
+
+Expect slower compiles at the higher targets (every pass is
+O(regions x pixels)); on these samples one illustration attempt still finishes
+inside the 900s V12 recovery budget.
