@@ -196,6 +196,30 @@ Then poll `/runtime/jobs/<jobId>` until `status` is `complete` (~4–5 min for
 `afrofuturist-stargazer`). Artworks compiled by an earlier session keep serving
 the old template until this is done.
 
+When the template edit is confined to the player script (as most are), a full
+recompile is unnecessary: every package already stores the exact inputs
+`build_interactive_player` needs, so the player alone can be regenerated in
+place in seconds —
+
+```python
+from compiler_core import build_interactive_player
+build_interactive_player(
+    pkg,
+    json.loads((pkg / "regions.json").read_text()),
+    json.loads((pkg / "palette.json").read_text()),
+    (pkg / "paintMap.svg").read_text(),            # blank_svg
+    (pkg / "paintMap_reference.svg").read_text(),  # reference_svg
+)
+```
+
+This produced a **byte-identical** file to a real full recompile for the
+already-fixed `2408e644...` package (`regions.json` records carry the same
+`label`/`path`/`paintability` object the compiler passes in). Because region ids
+are preserved, players' saved paint progress stays valid — a full recompile can
+land on a different V12 attempt and renumber regions instead. Refresh the
+package ZIP afterwards (flat `zipfile` over `outputDir/*`, as `run_job` does), or
+`/jobs/{id}/download` and the premium download still hand out a stale player.
+
 ## Canvas gestures on the paint page
 
 One pointer = tap paints, drag pans (only when zoomed past 100%). A drag has to
