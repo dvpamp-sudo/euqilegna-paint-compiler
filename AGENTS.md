@@ -230,6 +230,24 @@ studied stays put; `touch-action:none` on `#artboard` is what lets the browser
 hand these to us. `finishPinch()` arms a short `pinchGuard` that swallows the
 stray click a lifting finger can emit, which would otherwise paint a region.
 
+## Canvas zoom stays a plain 2D transform
+
+`#canvasContent` is zoomed with `translate(...) scale(...)` and must not carry
+`will-change:transform`, `backface-visibility:hidden`, or a `translate3d()`
+transform. Any of those promote the canvas to its own composited layer, and
+Chrome then magnifies a rasterized bitmap of that layer instead of re-rendering
+the vectors, so the small region numbers look smeared once the customer zooms in
+(a 400% zoom needed a 4000px-wide layer raster, which the browser caps). With no
+promotion the SVG is re-rendered as vectors at the zoomed scale and the digits
+stay crisp at every zoom level. Note the artwork's `.paint-region` outlines use
+`vector-effect:non-scaling-stroke`, so they stay one screen pixel wide at any
+zoom — only the labels are affected by this quirk.
+
+This is a player-only fix, so it reaches already-compiled artworks through the
+in-place player regeneration above; no recompile is needed. Verified on
+`noir-vinyl` (846 regions): at 400% the canvas reports `will-change:auto` and a
+2D `matrix`, all 837 unpainted numbers render, and a drag still pans.
+
 ## Painting flow: the section you click sets the color
 
 `handleRegion` adopts the clicked section's own color, so one click fills a

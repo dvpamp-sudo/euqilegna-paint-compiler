@@ -1972,7 +1972,7 @@ header h1{margin:0;font-family:Georgia,serif;font-size:23px}
 .mode-switch{display:flex;gap:8px}
 .app{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 68px)}
 .canvas-wrap{position:relative;overflow:hidden;background:#f3ede8;display:flex;align-items:center;justify-content:center;padding:18px}
-#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;will-change:transform;backface-visibility:hidden;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
 #svgHost,#completion,#referenceOverlay,#masterReveal{position:absolute;inset:0;width:100%;height:100%}#svgHost{z-index:2;transition:opacity .35s ease,filter .35s ease}#masterReveal{z-index:4;pointer-events:none;overflow:hidden;display:block}#masterReveal image{image-rendering:auto}
 #svgHost svg{width:100%;height:100%;display:block;shape-rendering:geometricPrecision;text-rendering:geometricPrecision}
 #completion,#referenceOverlay{object-fit:contain;pointer-events:none;transition:opacity .5s ease}
@@ -2925,7 +2925,7 @@ function luminance(rgb){return (.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2])/255}
 
 function runCompletionReveal(){
   zoom=1;panX=0;panY=0;
-  canvasContent.style.transform='translate3d(0px, 0px, 0) scale(1)';
+  canvasContent.style.transform='translate(0px, 0px) scale(1)';
   document.getElementById('zoomReadout').textContent='100%';
 
   referenceOverlay.style.display='none';
@@ -3038,7 +3038,12 @@ function restoreProgressPayload(payload){
 }
 function applyTransform(){
   panX=Math.round(panX);panY=Math.round(panY);
-  canvasContent.style.transform=`translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`;
+  // A plain 2D transform keeps the browser re-rendering the artwork as vectors
+  // at the zoomed scale. A 3D transform (or will-change:transform) promotes the
+  // canvas to its own layer, and Chrome then stretches a cached bitmap of that
+  // layer instead of re-rasterizing it, which smears the small region numbers as
+  // soon as the customer zooms past a couple of hundred percent.
+  canvasContent.style.transform=`translate(${panX}px, ${panY}px) scale(${zoom})`;
 }
 // A paint must never move the artwork. Take the view before a tap changes
 // anything and put it back before control returns to the browser.
