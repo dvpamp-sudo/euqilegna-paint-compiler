@@ -511,6 +511,56 @@ def dashboard_data():
     }
 
 
+# Generated artwork shown first, then the progressive reveal, then the source upload.
+PAINTING_PREVIEW_FILES = ("finished_masterpiece.png", "completion_reveal.png", "original.png")
+
+
+def painting_preview_path(painting) -> Path | None:
+    """Image to show for a painting: the generated artwork, else its source upload."""
+    if painting.package_dir:
+        package_dir = Path(painting.package_dir)
+        for name in PAINTING_PREVIEW_FILES:
+            candidate = package_dir / name
+            if candidate.is_file():
+                return candidate
+    if painting.source_image and Path(painting.source_image).is_file():
+        return Path(painting.source_image)
+    return None
+
+
+@app.get("/api/paintings")
+def paintings_data():
+    """All recorded paintings, newest first, each with a preview image URL."""
+    return {
+        "items": [
+            {
+                "id": painting.id,
+                "title": painting.title,
+                "date_created": painting.date_created,
+                "medium": painting.medium,
+                "status": str(painting.status),
+                "region_count": painting.region_count,
+                "color_count": painting.color_count,
+                "previewUrl": f"/api/paintings/{painting.id}/preview",
+            }
+            for painting in RUNTIME_DB.list_paintings()
+        ]
+    }
+
+
+@app.get("/api/paintings/{painting_id}/preview")
+def painting_preview(painting_id: str):
+    painting = RUNTIME_DB.load_painting(painting_id)
+    if painting is None:
+        raise HTTPException(status_code=404, detail="Painting not found.")
+
+    path = painting_preview_path(painting)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No preview image for this painting.")
+
+    return FileResponse(path)
+
+
 @app.get("/api/catalog")
 def catalog_data():
     return {"items": PREMIUM_CATALOG, "count": len(PREMIUM_CATALOG)}
