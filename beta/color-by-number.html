@@ -5,42 +5,70 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
 <title>Euqilegna Color-by-Number Beta</title>
 <style>
-:root{--bg:#100b14;--panel:#0b090e;--purple:#8a3fc1;--purple2:#bf78e5;--line:#583968;--text:#fff;--muted:#cbbbd2;--good:#39a766}
+:root{--bg:#0a0710;--panel:#120d18;--card:#1a1322;--card2:#221a2c;--purple:#8a3fc1;--purple2:#bf78e5;--gold:#d9ad59;--line:#3b2b49;--text:#fff;--muted:#c8b9d3;--good:#3fae6d}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 button{font:inherit;touch-action:manipulation}
-.top{padding:18px 22px;background:#09070b;border-bottom:1px solid var(--line)}
-.top a{color:#ddaaff;font-weight:800}.top h1{font-family:Georgia,serif;font-size:34px;margin:16px 0 8px}
-.top p{color:var(--muted);margin:0}
-.app{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:calc(100vh - 132px)}
-.stage{display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;overscroll-behavior:contain}
-.board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px #0008}
+.top{position:relative;padding:22px 24px 20px;background:radial-gradient(1100px 280px at 0% 0%,rgba(138,63,193,.30),transparent 70%),linear-gradient(180deg,#0d0912,#080609);border-bottom:1px solid var(--line)}
+.top a{display:inline-block;color:var(--gold);font-weight:800;font-size:12px;letter-spacing:1.7px;text-transform:uppercase;text-decoration:none}
+.top h1{font-family:Georgia,"Times New Roman",serif;font-size:40px;line-height:1.05;letter-spacing:-.5px;margin:14px 0 10px;color:#fbf6ee}
+.top p{color:var(--muted);margin:0;max-width:660px;line-height:1.55}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:calc(100vh - 152px)}
+.stage{position:relative;display:flex;align-items:center;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
+.board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:20px;overflow:hidden;border:1px solid #4a3a5c;box-shadow:0 40px 90px -30px #000,0 0 0 8px rgba(255,255,255,.03),0 0 60px -20px rgba(138,63,193,.45)}
 .board{display:block;width:100%;height:auto;touch-action:manipulation}
-.zone{fill:#fff;stroke:#302636;stroke-width:2.2;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
-.zone.target{fill:#ded7e1;stroke:#7c2fb2;stroke-width:4;filter:drop-shadow(0 0 4px #fff)}
+.zone{fill:#fff;stroke:#2b2233;stroke-width:1.5;stroke-linejoin:round;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
+.zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:2.6;filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{animation:paintPop .48s ease}
-.zone.done{stroke:#ffffff55;stroke-width:1.2}
-.zone-label{pointer-events:none;font-weight:900;fill:#171219;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+.zone.done{stroke:#ffffff66;stroke-width:.9}
+.zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 @keyframes paintPop{0%{filter:brightness(1.7);opacity:.65}100%{filter:none;opacity:1}}
-.complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:#100b14cc;text-align:center;padding:24px}
-.complete-overlay.show{display:grid}.complete-card{background:#fff;color:#281a2d;border-radius:18px;padding:24px;max-width:420px}.complete-card h2{font-family:Georgia,serif;font-size:32px;margin:0 0 8px}
-.panel{padding:20px;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
-.panel h2{margin:0 0 12px}.current{border:1px solid var(--line);border-radius:14px;padding:13px;background:#15101a;margin-bottom:14px}
-.current-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{background:#211829;border-radius:10px;padding:10px}.metric small{display:block;color:var(--muted);margin-bottom:4px}
-.palette{display:grid;grid-template-columns:1fr 1fr;gap:10px}.swatch{min-height:68px;border-radius:12px;border:3px solid transparent;font-weight:900;color:#fff;cursor:pointer;position:relative}
-.swatch.active{border-color:#fff;box-shadow:0 0 0 3px var(--purple)}.swatch.complete:after{content:"✓";position:absolute;right:8px;top:6px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center}
-.swatch small{display:block;margin-top:4px}
-.progress{height:13px;background:#34273d;border-radius:999px;overflow:hidden;margin-top:8px}.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2));width:0;transition:width .3s}
-.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.toolbar button,.toolbar a{padding:11px;border-radius:10px;border:1px solid var(--line);background:#201627;color:#fff;text-decoration:none;text-align:center;font-weight:800;cursor:pointer}
-.toolbar .primary{background:var(--purple);border-color:var(--purple)}.save-note{color:var(--muted);font-size:13px;margin-top:10px;min-height:18px}
-.review{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}.review textarea{width:100%;min-height:90px;background:#151019;color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
-.mobile-palette-toggle{display:none;position:sticky;bottom:10px;z-index:20;margin:10px auto;border:0;border-radius:999px;background:var(--purple);color:#fff;padding:13px 20px;font-weight:900}
+.complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
+.complete-overlay.show{display:grid}
+.complete-card{background:linear-gradient(180deg,#fff,#f3ecf8);color:#281a2d;border-radius:20px;padding:28px;max-width:430px;box-shadow:0 30px 70px -20px #000}
+.complete-card h2{font-family:Georgia,serif;font-size:30px;margin:0 0 10px}
+.complete-card p{color:#4b3b57;margin:0 0 16px}
+.complete-card button{padding:12px 18px;border-radius:11px;border:0;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;font-weight:900;cursor:pointer}
+.complete-card a{display:block;margin-top:12px;color:var(--purple);font-weight:800}
+.panel{padding:22px;background:linear-gradient(180deg,#141019,#100c16);border-left:1px solid var(--line);overflow:auto}
+.panel h2{margin:0 0 14px;font-family:Georgia,serif;font-size:22px}
+.current{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card);margin-bottom:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.current-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric{background:var(--card2);border:1px solid #2f2440;border-radius:12px;padding:11px}
+.metric small{display:block;color:var(--gold);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
+.metric strong{font-size:22px}
+#status{color:var(--muted);margin:14px 0 10px;line-height:1.5}
+#count{display:block;font-size:14px;color:#e8ddf1}
+.progress{height:12px;background:#2b2136;border-radius:999px;overflow:hidden;margin-top:9px;box-shadow:inset 0 1px 3px #0006}
+.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2) 60%,var(--gold));width:0;transition:width .35s ease}
+.palette{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.swatch{min-height:72px;border-radius:14px;border:2px solid rgba(0,0,0,.28);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);font-weight:900;color:#fff;cursor:pointer;position:relative;text-shadow:0 1px 3px rgba(0,0,0,.55);transition:transform .15s ease,box-shadow .2s ease}
+.swatch:hover{transform:translateY(-2px)}
+.swatch.active{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,173,89,.35),inset 0 0 0 1px rgba(255,255,255,.2)}
+.swatch.complete:after{content:"✓";position:absolute;right:8px;top:7px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px}
+.swatch small{display:block;margin-top:5px;font-weight:700;font-size:12px;opacity:.92}
+.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}
+.toolbar button,.toolbar a{padding:12px;border-radius:11px;border:1px solid var(--line);background:#1d1626;color:#f2e9f8;text-decoration:none;text-align:center;font-weight:800;font-size:14px;cursor:pointer;transition:.18s}
+.toolbar button:hover,.toolbar a:hover{border-color:var(--gold);background:#251c31;transform:translateY(-1px)}
+.toolbar .primary{background:linear-gradient(180deg,var(--purple2),var(--purple));border-color:transparent;color:#fff}
+.save-note{color:var(--muted);font-size:13px;margin-top:12px;min-height:18px}
+.review{margin-top:20px;border-top:1px solid var(--line);padding-top:18px}
+.review h3{margin:0 0 10px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
+.review textarea{width:100%;min-height:92px;background:#0e0a13;color:#fff;border:1px solid var(--line);border-radius:11px;padding:11px;font:inherit;resize:vertical}
+.review button{margin-top:9px;padding:11px;border-radius:10px;border:0;color:#fff;font-weight:800;cursor:pointer;background:linear-gradient(180deg,var(--purple2),var(--purple))}
+.mobile-palette-toggle{display:none;position:sticky;bottom:12px;z-index:20;margin:12px auto;border:0;border-radius:999px;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;padding:14px 22px;font-weight:900;box-shadow:0 14px 30px -10px #000}
 @media(max-width:780px){
- .top h1{font-size:28px}.app{display:block}.stage{padding:10px;min-height:auto}.board-wrap{width:100%}
- .panel{border-left:0;border-top:1px solid var(--line);padding:16px}.palette{grid-template-columns:repeat(4,1fr)}
- .swatch{min-height:58px}.mobile-palette-toggle{display:block}.panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
+ .top{padding:18px 18px 16px}.top h1{font-size:30px}
+ .app{display:block}
+ .stage{padding:12px;min-height:auto}
+ .board-wrap{width:100%;border-radius:14px;box-shadow:0 22px 50px -20px #000,0 0 40px -18px rgba(138,63,193,.5)}
+ .panel{border-left:0;border-top:1px solid var(--line);padding:18px}
+ .palette{grid-template-columns:repeat(3,1fr)}
+ .swatch{min-height:60px}
+ .mobile-palette-toggle{display:block}
+ .panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
 }
 </style>
 </head>
@@ -54,18 +82,7 @@ button{font:inherit;touch-action:manipulation}
 <div class="app">
 <main class="stage">
 <div class="board-wrap">
-<svg id="board" class="board" viewBox="0 0 800 600" aria-label="Interactive color-by-number artwork">
-<rect width="800" height="600" fill="#e7daf0"/>
-<path class="zone" data-c="1" d="M0 430 C180 350 310 400 430 440 C580 490 700 440 800 390 L800 600 L0 600 Z"/>
-<circle class="zone" data-c="2" cx="400" cy="205" r="90"/>
-<path class="zone" data-c="3" d="M312 210 C315 105 500 90 500 215 C465 165 430 145 395 150 C355 155 330 175 312 210 Z"/>
-<path class="zone" data-c="4" d="M330 305 C365 270 440 266 478 306 L530 540 L280 540 Z"/>
-<path class="zone" data-c="5" d="M360 300 L404 405 L448 300 L470 532 L330 532 Z"/>
-<path class="zone" data-c="6" d="M210 190 C245 120 320 145 325 220 C290 185 250 180 210 205 Z"/>
-<path class="zone" data-c="7" d="M520 200 C570 125 655 155 660 245 C620 200 570 190 520 220 Z"/>
-<ellipse class="zone" data-c="8" cx="180" cy="450" rx="100" ry="45"/>
-<ellipse class="zone" data-c="8" cx="640" cy="460" rx="110" ry="48"/>
-</svg>
+<svg id="board" class="board" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" aria-label="Dahlia Mandala color-by-number artwork"><rect width="800" height="600" fill="#fff"/><ellipse class="zone" data-c="2" cx="400.0" cy="115.0" rx="34" ry="88" transform="rotate(0.0 400.0 115.0)"/><ellipse class="zone" data-c="3" cx="470.8" cy="129.1" rx="34" ry="88" transform="rotate(22.5 470.8 129.1)"/><ellipse class="zone" data-c="4" cx="530.8" cy="169.2" rx="34" ry="88" transform="rotate(45.0 530.8 169.2)"/><ellipse class="zone" data-c="5" cx="570.9" cy="229.2" rx="34" ry="88" transform="rotate(67.5 570.9 229.2)"/><ellipse class="zone" data-c="2" cx="585.0" cy="300.0" rx="34" ry="88" transform="rotate(90.0 585.0 300.0)"/><ellipse class="zone" data-c="3" cx="570.9" cy="370.8" rx="34" ry="88" transform="rotate(112.5 570.9 370.8)"/><ellipse class="zone" data-c="4" cx="530.8" cy="430.8" rx="34" ry="88" transform="rotate(135.0 530.8 430.8)"/><ellipse class="zone" data-c="5" cx="470.8" cy="470.9" rx="34" ry="88" transform="rotate(157.5 470.8 470.9)"/><ellipse class="zone" data-c="2" cx="400.0" cy="485.0" rx="34" ry="88" transform="rotate(180.0 400.0 485.0)"/><ellipse class="zone" data-c="3" cx="329.2" cy="470.9" rx="34" ry="88" transform="rotate(202.5 329.2 470.9)"/><ellipse class="zone" data-c="4" cx="269.2" cy="430.8" rx="34" ry="88" transform="rotate(225.0 269.2 430.8)"/><ellipse class="zone" data-c="5" cx="229.1" cy="370.8" rx="34" ry="88" transform="rotate(247.5 229.1 370.8)"/><ellipse class="zone" data-c="2" cx="215.0" cy="300.0" rx="34" ry="88" transform="rotate(270.0 215.0 300.0)"/><ellipse class="zone" data-c="3" cx="229.1" cy="229.2" rx="34" ry="88" transform="rotate(292.5 229.1 229.2)"/><ellipse class="zone" data-c="4" cx="269.2" cy="169.2" rx="34" ry="88" transform="rotate(315.0 269.2 169.2)"/><ellipse class="zone" data-c="5" cx="329.2" cy="129.1" rx="34" ry="88" transform="rotate(337.5 329.2 129.1)"/><ellipse class="zone" data-c="3" cx="429.2" cy="173.3" rx="32" ry="72" transform="rotate(13.0 429.2 173.3)"/><ellipse class="zone" data-c="4" cx="481.3" cy="198.6" rx="32" ry="72" transform="rotate(38.714285714285715 481.3 198.6)"/><ellipse class="zone" data-c="5" cx="517.3" cy="243.9" rx="32" ry="72" transform="rotate(64.42857142857143 517.3 243.9)"/><ellipse class="zone" data-c="6" cx="530.0" cy="300.3" rx="32" ry="72" transform="rotate(90.14285714285714 530.0 300.3)"/><ellipse class="zone" data-c="3" cx="517.0" cy="356.7" rx="32" ry="72" transform="rotate(115.85714285714286 517.0 356.7)"/><ellipse class="zone" data-c="4" cx="480.8" cy="401.8" rx="32" ry="72" transform="rotate(141.57142857142858 480.8 401.8)"/><ellipse class="zone" data-c="5" cx="428.6" cy="426.8" rx="32" ry="72" transform="rotate(167.28571428571428 428.6 426.8)"/><ellipse class="zone" data-c="6" cx="370.8" cy="426.7" rx="32" ry="72" transform="rotate(193.0 370.8 426.7)"/><ellipse class="zone" data-c="3" cx="318.7" cy="401.4" rx="32" ry="72" transform="rotate(218.71428571428572 318.7 401.4)"/><ellipse class="zone" data-c="4" cx="282.7" cy="356.1" rx="32" ry="72" transform="rotate(244.42857142857142 282.7 356.1)"/><ellipse class="zone" data-c="5" cx="270.0" cy="299.7" rx="32" ry="72" transform="rotate(270.14285714285717 270.0 299.7)"/><ellipse class="zone" data-c="6" cx="283.0" cy="243.3" rx="32" ry="72" transform="rotate(295.85714285714283 283.0 243.3)"/><ellipse class="zone" data-c="3" cx="319.2" cy="198.2" rx="32" ry="72" transform="rotate(321.57142857142856 319.2 198.2)"/><ellipse class="zone" data-c="4" cx="371.4" cy="173.2" rx="32" ry="72" transform="rotate(347.2857142857143 371.4 173.2)"/><ellipse class="zone" data-c="4" cx="400.0" cy="218.0" rx="28" ry="55" transform="rotate(0.0 400.0 218.0)"/><ellipse class="zone" data-c="5" cx="441.0" cy="229.0" rx="28" ry="55" transform="rotate(30.0 441.0 229.0)"/><ellipse class="zone" data-c="6" cx="471.0" cy="259.0" rx="28" ry="55" transform="rotate(60.0 471.0 259.0)"/><ellipse class="zone" data-c="2" cx="482.0" cy="300.0" rx="28" ry="55" transform="rotate(90.0 482.0 300.0)"/><ellipse class="zone" data-c="4" cx="471.0" cy="341.0" rx="28" ry="55" transform="rotate(120.0 471.0 341.0)"/><ellipse class="zone" data-c="5" cx="441.0" cy="371.0" rx="28" ry="55" transform="rotate(150.0 441.0 371.0)"/><ellipse class="zone" data-c="6" cx="400.0" cy="382.0" rx="28" ry="55" transform="rotate(180.0 400.0 382.0)"/><ellipse class="zone" data-c="2" cx="359.0" cy="371.0" rx="28" ry="55" transform="rotate(210.0 359.0 371.0)"/><ellipse class="zone" data-c="4" cx="329.0" cy="341.0" rx="28" ry="55" transform="rotate(240.0 329.0 341.0)"/><ellipse class="zone" data-c="5" cx="318.0" cy="300.0" rx="28" ry="55" transform="rotate(270.0 318.0 300.0)"/><ellipse class="zone" data-c="6" cx="329.0" cy="259.0" rx="28" ry="55" transform="rotate(300.0 329.0 259.0)"/><ellipse class="zone" data-c="2" cx="359.0" cy="229.0" rx="28" ry="55" transform="rotate(330.0 359.0 229.0)"/><ellipse class="zone" data-c="5" cx="400.0" cy="258.0" rx="22" ry="40" transform="rotate(0.0 400.0 258.0)"/><ellipse class="zone" data-c="6" cx="429.7" cy="270.3" rx="22" ry="40" transform="rotate(45.0 429.7 270.3)"/><ellipse class="zone" data-c="3" cx="442.0" cy="300.0" rx="22" ry="40" transform="rotate(90.0 442.0 300.0)"/><ellipse class="zone" data-c="5" cx="429.7" cy="329.7" rx="22" ry="40" transform="rotate(135.0 429.7 329.7)"/><ellipse class="zone" data-c="6" cx="400.0" cy="342.0" rx="22" ry="40" transform="rotate(180.0 400.0 342.0)"/><ellipse class="zone" data-c="3" cx="370.3" cy="329.7" rx="22" ry="40" transform="rotate(225.0 370.3 329.7)"/><ellipse class="zone" data-c="5" cx="358.0" cy="300.0" rx="22" ry="40" transform="rotate(270.0 358.0 300.0)"/><ellipse class="zone" data-c="6" cx="370.3" cy="270.3" rx="22" ry="40" transform="rotate(315.0 370.3 270.3)"/><ellipse class="zone" data-c="1" cx="400" cy="300" rx="32" ry="32" transform="rotate(0 400 300)"/></svg>
 <div id="completeOverlay" class="complete-overlay"><div class="complete-card"><h2>Masterpiece Complete!</h2><p>You finished the Color-by-Number beta design.</p><button id="closeComplete">View Artwork</button><a href="/beta/feedback" style="display:block;margin-top:12px">Give Beta Feedback</a></div></div>
 </div>
 </main>
@@ -102,8 +119,8 @@ button{font:inherit;touch-action:manipulation}
 
 <script>
 'use strict';
-const COLORS=['#2a2237','#b96f61','#292132','#96506f','#d89270','#765f88','#ae657f','#82937d'];
-const STORAGE_KEY='euqilegna-color-by-number-beta-v2';
+const COLORS=['#2A2633','#73546F','#A96F7B','#D18B87','#E7B49A','#D6B76D'];
+const STORAGE_KEY='euqilegna-color-by-number-beta-v3';
 const REVIEW_KEY=STORAGE_KEY+'-review';
 
 const board=document.getElementById('board');
@@ -130,7 +147,7 @@ function safeGet(key){
   try{return localStorage.getItem(key)}catch(error){return null}
 }
 function saveProgress(show=false){
-  const data={version:2,selected,completed:[...completed],savedAt:new Date().toISOString()};
+  const data={version:3,selected,completed:[...completed],savedAt:new Date().toISOString()};
   const ok=safeSet(STORAGE_KEY,JSON.stringify(data));
   if(show) saveNoteEl.textContent=ok?'Progress saved.':'Storage is blocked; use Download Progress.';
   return data;
@@ -146,7 +163,7 @@ function addLabels(){
     label.setAttribute('y',box.y+box.height/2);
     label.setAttribute('text-anchor','middle');
     label.setAttribute('dominant-baseline','middle');
-    label.setAttribute('font-size',Math.max(17,Math.min(30,Math.min(box.width,box.height)*.3)));
+    label.setAttribute('font-size',Math.max(14,Math.min(26,Math.min(box.width,box.height)*.3)));
     label.setAttribute('class','zone-label');
     label.textContent=zone.dataset.c;
     board.appendChild(label);
