@@ -47,7 +47,7 @@ def build_attempts(source_analysis: dict[str, Any], requested: dict[str, Any]) -
         "design_style": "photo",
         "auto_crop": False,
         "min_region_area": max(42, int(requested.get("min_region_area") or 42)),
-        "target_regions": min(max(420, int(requested.get("target_regions") or 700)), 1000),
+        "target_regions": min(max(420, int(requested.get("target_regions") or 700)), 1250),
         "experience_mode": "relaxed",
     })
     attempts.append(photo)

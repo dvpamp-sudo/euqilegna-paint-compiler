@@ -67,7 +67,7 @@ PREMIUM_CATALOG = {
         "collection": "Gilded Geometry",
         "difficulty": "Expert",
         "colors": 28,
-        "target_regions": 1000,
+        "target_regions": 1250,
         "min_region_area": 18,
         "description": "A jewel-toned peacock surrounded by intricate gilded ornament.",
     },
