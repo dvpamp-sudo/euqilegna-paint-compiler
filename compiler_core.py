@@ -4244,7 +4244,7 @@ def compile_artwork(
         processed = preprocess_basic_scenic(rgb)
         color_count = min(color_count, 24)
         min_area = max(min_area, 48)
-        target_regions = min(max(340, target_regions), 900)
+        target_regions = min(max(340, target_regions), 1000)
         experience_mode = "relaxed"
         Image.fromarray(processed).save(output_dir / "photo_pipeline_preview.png")
 
@@ -4423,7 +4423,7 @@ def compile_artwork(
 
             color_count = min(color_count, 24)
             min_area = max(min_area, 48)
-            target_regions = min(max(340, target_regions), 900)
+            target_regions = min(max(340, target_regions), 1000)
             experience_mode = "relaxed"
 
             regions = photo_slic_regions(
