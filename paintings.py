@@ -20,6 +20,8 @@ class Painting:
     """A painting in the personal collection.
 
     ``date_created`` is an ISO 8601 date string, e.g. ``"2026-10-03"``.
+    ``source_image``, ``package_dir``, ``region_count`` and ``color_count`` are
+    filled in when the compiler core produced the painting.
     """
 
     title: str
@@ -27,6 +29,10 @@ class Painting:
     medium: str
     status: PaintingStatus = PaintingStatus.PLANNED
     id: str = field(default_factory=lambda: uuid4().hex)
+    source_image: str | None = None
+    package_dir: str | None = None
+    region_count: int | None = None
+    color_count: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

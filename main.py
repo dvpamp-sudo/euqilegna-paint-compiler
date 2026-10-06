@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Streamin
 from fastapi.middleware.cors import CORSMiddleware
 
 from compiler import compile_artwork
+from painting_pipeline import BETA_SETTINGS, record_painting
 from studio_config import (
     APP_NAME, APP_VERSION, PROJECT_ROOT, PREMIUM_GENERATED_ROOT,
     GALLERY_FILE, ANALYTICS_FILE, initialize_storage,
@@ -199,6 +200,13 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
                 "status": "complete",
             },
         )
+        record_painting(
+            metadata,
+            source_path=input_path,
+            package_dir=output_dir,
+            runtime=RUNTIME_DB,
+        )
+
         set_job(
             job_id,
             status="complete",
@@ -1286,30 +1294,17 @@ def download_premium_sample(sample_name: str):
     )
 
 
-@app.post("/jobs")
-async def create_job(
-    file: UploadFile = File(...),
-    preset: str = Form("illustration"),
-    design_style: str = Form("smart_auto"),
-    colors: int = Form(40),
-    min_region_area: int = Form(38),
-    experience_mode: str = Form("relaxed"),
-    target_regions: int = Form(650),
-    outline_width: float = Form(0.38),
-    simplify_tolerance: float = Form(0.35),
-    auto_crop: bool = Form(True),
-    generate_pdf: bool = Form(True),
-    finish_mode: str = Form("original"),
-):
+def start_job(input_bytes: bytes, filename: str | None, settings: dict[str, Any]) -> str:
+    """Persist an uploaded artwork and queue it for compilation."""
     job_id = uuid4().hex
     work_dir = RUNTIME_DATA_DIR / "jobs" / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
-    input_path = work_dir / (file.filename or "artwork.png")
+    input_path = work_dir / (filename or "artwork.png")
     output_dir = work_dir / "package"
     zip_path = work_dir / "euqilegna_paint_package_v7.zip"
 
     output_dir.mkdir()
-    input_path.write_bytes(await file.read())
+    input_path.write_bytes(input_bytes)
 
     job = {
         "id": job_id,
@@ -1334,6 +1329,25 @@ async def create_job(
         jobs[job_id] = job
     RUNTIME_DB.save_job(job)
 
+    executor.submit(run_job, job_id, settings)
+    return job_id
+
+
+@app.post("/jobs")
+async def create_job(
+    file: UploadFile = File(...),
+    preset: str = Form("illustration"),
+    design_style: str = Form("smart_auto"),
+    colors: int = Form(40),
+    min_region_area: int = Form(38),
+    experience_mode: str = Form("relaxed"),
+    target_regions: int = Form(650),
+    outline_width: float = Form(0.38),
+    simplify_tolerance: float = Form(0.35),
+    auto_crop: bool = Form(True),
+    generate_pdf: bool = Form(True),
+    finish_mode: str = Form("original"),
+):
     settings = {
         "preset": preset,
         "design_style": design_style,
@@ -1351,7 +1365,14 @@ async def create_job(
         "finish_mode": finish_mode,
     }
 
-    executor.submit(run_job, job_id, settings)
+    job_id = start_job(await file.read(), file.filename, settings)
+    return {"jobId": job_id}
+
+
+@app.post("/api/paintings/upload")
+async def upload_painting(file: UploadFile = File(...)):
+    """Compile an uploaded image into a painting for the Color-by-Number canvas."""
+    job_id = start_job(await file.read(), file.filename, dict(BETA_SETTINGS))
     return {"jobId": job_id}
 
 
@@ -1361,6 +1382,37 @@ def get_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
     return public_job(job)
+
+
+@app.get("/jobs/{job_id}/artwork")
+def get_job_artwork(job_id: str):
+    """Compiled regions and palette for rendering a compiled job as a canvas."""
+    job = get_job_record(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    output_dir = Path(job["outputDir"])
+    regions_path = output_dir / "regions.json"
+    palette_path = output_dir / "palette.json"
+    if not regions_path.exists() or not palette_path.exists():
+        raise HTTPException(status_code=409, detail="No compiled artwork for this job yet.")
+
+    metadata_path = output_dir / "metadata.json"
+    metadata = (
+        json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata_path.exists()
+        else {}
+    )
+
+    return {
+        "jobId": job_id,
+        "width": metadata.get("width"),
+        "height": metadata.get("height"),
+        "regionCount": metadata.get("regions"),
+        "colorCount": metadata.get("colors"),
+        "palette": json.loads(palette_path.read_text(encoding="utf-8")),
+        "regions": json.loads(regions_path.read_text(encoding="utf-8")),
+    }
 
 
 @app.post("/jobs/{job_id}/cancel")

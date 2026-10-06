@@ -96,10 +96,36 @@ class RuntimeDatabase:
                     title TEXT NOT NULL,
                     date_created TEXT NOT NULL,
                     medium TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'planned'
+                    status TEXT NOT NULL DEFAULT 'planned',
+                    source_image TEXT,
+                    package_dir TEXT,
+                    region_count INTEGER,
+                    color_count INTEGER
                 );
                 """
             )
+            self._ensure_columns(
+                connection,
+                "paintings",
+                {
+                    "source_image": "TEXT",
+                    "package_dir": "TEXT",
+                    "region_count": "INTEGER",
+                    "color_count": "INTEGER",
+                },
+            )
+
+    def _ensure_columns(
+        self,
+        connection: sqlite3.Connection,
+        table: str,
+        columns: dict[str, str],
+    ) -> None:
+        """Add columns that were introduced after a database was first created."""
+        existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in columns.items():
+            if name not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
 
     def save_job(self, job: dict[str, Any]) -> None:
         # Persist the full internal job record so another process or a restarted
@@ -215,13 +241,20 @@ class RuntimeDatabase:
         with self.lock, self.connect() as connection:
             connection.execute(
                 """
-                INSERT INTO paintings(id,title,date_created,medium,status)
-                VALUES(?,?,?,?,?)
+                INSERT INTO paintings(
+                    id,title,date_created,medium,status,
+                    source_image,package_dir,region_count,color_count
+                )
+                VALUES(?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     date_created=excluded.date_created,
                     medium=excluded.medium,
-                    status=excluded.status
+                    status=excluded.status,
+                    source_image=excluded.source_image,
+                    package_dir=excluded.package_dir,
+                    region_count=excluded.region_count,
+                    color_count=excluded.color_count
                 """,
                 (
                     painting.id,
@@ -229,6 +262,10 @@ class RuntimeDatabase:
                     painting.date_created,
                     painting.medium,
                     str(painting.status),
+                    painting.source_image,
+                    painting.package_dir,
+                    painting.region_count,
+                    painting.color_count,
                 ),
             )
         return painting
@@ -237,7 +274,8 @@ class RuntimeDatabase:
         with self.connect() as connection:
             row = connection.execute(
                 """
-                SELECT id,title,date_created,medium,status
+                SELECT id,title,date_created,medium,status,
+                       source_image,package_dir,region_count,color_count
                 FROM paintings
                 WHERE id=?
                 """,
@@ -246,7 +284,10 @@ class RuntimeDatabase:
         return _row_to_painting(row) if row else None
 
     def list_paintings(self, status: str | None = None) -> list[Painting]:
-        query = "SELECT id,title,date_created,medium,status FROM paintings"
+        query = (
+            "SELECT id,title,date_created,medium,status,"
+            "source_image,package_dir,region_count,color_count FROM paintings"
+        )
         params: tuple[Any, ...] = ()
         if status is not None:
             query += " WHERE status=?"
@@ -349,6 +390,10 @@ def _row_to_painting(row: sqlite3.Row) -> Painting:
         date_created=row["date_created"],
         medium=row["medium"],
         status=PaintingStatus(row["status"]),
+        source_image=row["source_image"],
+        package_dir=row["package_dir"],
+        region_count=row["region_count"],
+        color_count=row["color_count"],
     )
 
 
