@@ -22,6 +22,8 @@ class Painting:
     ``date_created`` is an ISO 8601 date string, e.g. ``"2026-10-03"``.
     ``source_image``, ``package_dir``, ``region_count`` and ``color_count`` are
     filled in when the compiler core produced the painting.
+    ``svg_path`` and ``player_path`` point at the compiler-generated paint map
+    and interactive player inside ``package_dir``.
     """
 
     title: str
@@ -31,6 +33,8 @@ class Painting:
     id: str = field(default_factory=lambda: uuid4().hex)
     source_image: str | None = None
     package_dir: str | None = None
+    svg_path: str | None = None
+    player_path: str | None = None
     region_count: int | None = None
     color_count: int | None = None
 

@@ -13,6 +13,10 @@ from typing import Any
 from paintings import Painting, PaintingStatus
 from testing_runtime_v10 import RuntimeDatabase
 
+# The compiler core writes these into every package directory.
+SVG_FILENAME = "paintMap.svg"
+PLAYER_FILENAME = "interactive_player.html"
+
 # Beta uploads target a phone-sized canvas: fewer, larger zones than a print run.
 BETA_SETTINGS: dict[str, Any] = {
     "preset": "illustration",
@@ -46,6 +50,7 @@ def record_painting(
     summarises what came out of the compiler core.
     """
     source_path = Path(source_path)
+    package_dir = Path(package_dir)
     painting = Painting(
         title=title or source_path.stem,
         date_created=date.today().isoformat(),
@@ -53,9 +58,17 @@ def record_painting(
         status=PaintingStatus.PLANNED,
         source_image=str(source_path),
         package_dir=str(package_dir),
+        svg_path=_package_asset(package_dir, SVG_FILENAME),
+        player_path=_package_asset(package_dir, PLAYER_FILENAME),
         region_count=int(metadata.get("regions") or 0),
         color_count=int(metadata.get("colors") or 0),
     )
     if runtime is not None:
         runtime.save_painting(painting)
     return painting
+
+
+def _package_asset(package_dir: Path, filename: str) -> str | None:
+    """Reference a compiler-generated file, or ``None`` if it was not written."""
+    candidate = package_dir / filename
+    return str(candidate) if candidate.is_file() else None

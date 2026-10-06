@@ -99,6 +99,8 @@ class RuntimeDatabase:
                     status TEXT NOT NULL DEFAULT 'planned',
                     source_image TEXT,
                     package_dir TEXT,
+                    svg_path TEXT,
+                    player_path TEXT,
                     region_count INTEGER,
                     color_count INTEGER
                 );
@@ -110,6 +112,8 @@ class RuntimeDatabase:
                 {
                     "source_image": "TEXT",
                     "package_dir": "TEXT",
+                    "svg_path": "TEXT",
+                    "player_path": "TEXT",
                     "region_count": "INTEGER",
                     "color_count": "INTEGER",
                 },
@@ -243,9 +247,10 @@ class RuntimeDatabase:
                 """
                 INSERT INTO paintings(
                     id,title,date_created,medium,status,
-                    source_image,package_dir,region_count,color_count
+                    source_image,package_dir,svg_path,player_path,
+                    region_count,color_count
                 )
-                VALUES(?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     date_created=excluded.date_created,
@@ -253,6 +258,8 @@ class RuntimeDatabase:
                     status=excluded.status,
                     source_image=excluded.source_image,
                     package_dir=excluded.package_dir,
+                    svg_path=excluded.svg_path,
+                    player_path=excluded.player_path,
                     region_count=excluded.region_count,
                     color_count=excluded.color_count
                 """,
@@ -264,6 +271,8 @@ class RuntimeDatabase:
                     str(painting.status),
                     painting.source_image,
                     painting.package_dir,
+                    painting.svg_path,
+                    painting.player_path,
                     painting.region_count,
                     painting.color_count,
                 ),
@@ -275,7 +284,8 @@ class RuntimeDatabase:
             row = connection.execute(
                 """
                 SELECT id,title,date_created,medium,status,
-                       source_image,package_dir,region_count,color_count
+                       source_image,package_dir,svg_path,player_path,
+                       region_count,color_count
                 FROM paintings
                 WHERE id=?
                 """,
@@ -286,7 +296,8 @@ class RuntimeDatabase:
     def list_paintings(self, status: str | None = None) -> list[Painting]:
         query = (
             "SELECT id,title,date_created,medium,status,"
-            "source_image,package_dir,region_count,color_count FROM paintings"
+            "source_image,package_dir,svg_path,player_path,"
+            "region_count,color_count FROM paintings"
         )
         params: tuple[Any, ...] = ()
         if status is not None:
@@ -392,6 +403,8 @@ def _row_to_painting(row: sqlite3.Row) -> Painting:
         status=PaintingStatus(row["status"]),
         source_image=row["source_image"],
         package_dir=row["package_dir"],
+        svg_path=row["svg_path"],
+        player_path=row["player_path"],
         region_count=row["region_count"],
         color_count=row["color_count"],
     )
