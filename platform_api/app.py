@@ -73,7 +73,7 @@ def health():
 async def compile_image(
     file: UploadFile = File(...),
     colors: int = Form(30),
-    target_regions: int = Form(600),
+    target_regions: int = Form(900),
     min_region_area: int = Form(24),
     finish_mode: str = Form("original"),
 ):

@@ -745,6 +745,121 @@ def adaptive_seed_threshold(
     return max(5, int(round(adaptive)))
 
 
+@dataclass(frozen=True)
+class _SeedTable:
+    """Every candidate seed component of an image, labelled once."""
+
+    labels: np.ndarray
+    boxes: list
+    areas: np.ndarray
+    details: np.ndarray
+
+
+def _seed_table(
+    color_map: np.ndarray,
+    interior: np.ndarray,
+    detail_map: np.ndarray,
+) -> _SeedTable:
+    """
+    Label the connected components of each colour's interior in one shared
+    label image (colours never overlap), with each component's area and mean
+    detail. Numbering follows colour order, then component order.
+
+    Each component is measured inside its own bounding box. Testing
+    ``labels == comp`` against the whole frame is quadratic in the number of
+    components, which on a detailed 1800px source (tens of thousands of them)
+    turned a single marker pass into minutes.
+    """
+    labels = np.zeros(interior.shape, dtype=np.int32)
+    offset = 0
+    for color_id in [v for v in np.unique(color_map) if v >= 0]:
+        components = measure.label(interior & (color_map == color_id), connectivity=2)
+        count = int(components.max())
+        if count:
+            found = components > 0
+            labels[found] = components[found] + offset
+            offset += count
+    return _measure_components(labels, detail_map)
+
+
+def _measure_components(labels: np.ndarray, detail_map: np.ndarray) -> _SeedTable:
+    height, width = labels.shape
+    boxes = []
+    areas = []
+    details = []
+    for comp, box in enumerate(ndi.find_objects(labels), start=1):
+        # Padded by one pixel so the disk(1) erosion in _place_seeds sees the
+        # same neighbours it would see on the full frame.
+        rows = slice(max(0, box[0].start - 1), min(height, box[0].stop + 1))
+        cols = slice(max(0, box[1].start - 1), min(width, box[1].stop + 1))
+        component_mask = labels[rows, cols] == comp
+        area = int(component_mask.sum())
+        boxes.append((rows, cols))
+        areas.append(area)
+        details.append(
+            float(detail_map[rows, cols][component_mask].mean()) if area else 0.0
+        )
+    return _SeedTable(
+        labels,
+        boxes,
+        np.asarray(areas, dtype=np.int64),
+        np.asarray(details, dtype=np.float64),
+    )
+
+
+def _seeds_kept(
+    table: _SeedTable,
+    seed_min_area: int,
+    experience_mode: str,
+) -> np.ndarray:
+    """Boolean per component: is it big enough, for its local detail, to seed?"""
+    required = np.fromiter(
+        (
+            adaptive_seed_threshold(float(detail), seed_min_area, experience_mode)
+            for detail in table.details
+        ),
+        dtype=np.int64,
+        count=len(table.details),
+    )
+    return table.areas >= required
+
+
+def _place_seeds(
+    table: _SeedTable,
+    keep: np.ndarray,
+    seed_min_area: int,
+    erode: bool,
+) -> np.ndarray:
+    markers = np.zeros(table.labels.shape, dtype=np.int32)
+    footprint = morphology.disk(1)
+    eroded_floor = max(4, seed_min_area // 4)
+    marker_id = 1
+
+    for index in np.flatnonzero(keep):
+        rows, cols = table.boxes[index]
+        component_mask = table.labels[rows, cols] == index + 1
+        if erode:
+            # Erode slightly so markers sit inside visual regions, not on line edges.
+            eroded = morphology.erosion(component_mask, footprint)
+            if eroded.sum() >= eroded_floor:
+                component_mask = eroded
+        markers[rows, cols][component_mask] = marker_id
+        marker_id += 1
+    return markers
+
+
+def _fallback_markers(
+    interior: np.ndarray,
+    detail_map: np.ndarray,
+    seed_min_area: int,
+    experience_mode: str,
+) -> Tuple[np.ndarray, int]:
+    """Conservative fallback: seed from the whole interior, colours ignored."""
+    table = _measure_components(measure.label(interior, connectivity=2), detail_map)
+    keep = _seeds_kept(table, seed_min_area, experience_mode)
+    return _place_seeds(table, keep, seed_min_area, erode=False), int(keep.sum())
+
+
 def build_markers(
     color_map: np.ndarray,
     fg: np.ndarray,
@@ -752,52 +867,45 @@ def build_markers(
     detail_map: np.ndarray,
     seed_min_area: int,
     experience_mode: str,
+    max_seeds: int | None = None,
 ) -> np.ndarray:
-    markers = np.zeros(fg.shape, dtype=np.int32)
-    marker_id = 1
+    """
+    Build watershed seeds, optionally capped to a paintable budget.
+
+    Very detailed artwork can ask for thousands of seeds, and no amount of
+    post-merge brings that back down cheaply. When ``max_seeds`` is set the
+    seed area threshold is raised until the seeds fit, so microscopic colour
+    specks are absorbed by their neighbours instead of becoming regions of
+    their own. The threshold is the *smallest* one that fits: the seed count
+    only ever falls as the threshold rises, so it is found by bracketing and
+    bisection over a once-labelled component table, which keeps as much detail
+    as the budget allows instead of overshooting into a handful of regions.
+    """
     interior = fg & ~barrier
+    table = _seed_table(color_map, interior, detail_map)
+    keep = _seeds_kept(table, seed_min_area, experience_mode)
 
-    for color_id in [v for v in np.unique(color_map) if v >= 0]:
-        mask = interior & (color_map == color_id)
-        components = measure.label(mask, connectivity=2)
+    if max_seeds is not None and int(keep.sum()) > max_seeds:
+        low = seed_min_area  # known to be too many seeds
+        high = seed_min_area
+        while True:
+            high *= 2
+            keep = _seeds_kept(table, high, experience_mode)
+            if int(keep.sum()) <= max_seeds or high > table.labels.size:
+                break
+            low = high
+        while high - low > 1:
+            middle = (low + high) // 2
+            if int(_seeds_kept(table, middle, experience_mode).sum()) <= max_seeds:
+                high = middle
+            else:
+                low = middle
+        seed_min_area = high
+        keep = _seeds_kept(table, seed_min_area, experience_mode)
 
-        for comp in range(1, int(components.max()) + 1):
-            component_mask = components == comp
-            area = int(component_mask.sum())
-            detail_mean = float(detail_map[component_mask].mean()) if area else 0.0
-            required_area = adaptive_seed_threshold(
-                detail_mean,
-                seed_min_area,
-                experience_mode,
-            )
-            if area < required_area:
-                continue
-
-            # Erode slightly so markers sit inside visual regions, not on line edges.
-            eroded = morphology.erosion(component_mask, morphology.disk(1))
-            if eroded.sum() >= max(4, seed_min_area // 4):
-                component_mask = eroded
-
-            markers[component_mask] = marker_id
-            marker_id += 1
-
-    if marker_id == 1:
-        # Conservative fallback.
-        components = measure.label(interior, connectivity=2)
-        for comp in range(1, int(components.max()) + 1):
-            mask = components == comp
-            area = int(mask.sum())
-            detail_mean = float(detail_map[mask].mean()) if area else 0.0
-            required_area = adaptive_seed_threshold(
-                detail_mean,
-                seed_min_area,
-                experience_mode,
-            )
-            if area >= required_area:
-                markers[mask] = marker_id
-                marker_id += 1
-
-    return markers
+    if not keep.any():
+        return _fallback_markers(interior, detail_map, seed_min_area, experience_mode)[0]
+    return _place_seeds(table, keep, seed_min_area, erode=True)
 
 
 def illustration_watershed(
@@ -961,10 +1069,17 @@ def adaptive_merge_regions(
     min_region_area: int,
     experience_mode: str,
     target_regions: int,
+    size_ceiling: int | None = None,
+    color_tolerance: float | None = None,
 ) -> np.ndarray:
     """
     Simplify low-detail regions while protecting expressive/detail-rich areas.
     The function never merges across a strong ink boundary.
+
+    ``size_ceiling`` and ``color_tolerance`` let a caller push harder than the
+    default heuristic: a larger ceiling lets bigger regions merge, and a larger
+    color tolerance accepts neighbours that are less similar. Both defaults keep
+    the original behaviour.
     """
     result = labels.copy()
     mode_area_factor = {
@@ -994,12 +1109,15 @@ def adaptive_merge_regions(
         for rid in sorted(areas, key=areas.get):
             area = areas[rid]
             detail = details[rid]
-            adaptive_limit = int(
-                min_region_area
-                * mode_area_factor
-                * (1.75 - 1.30 * detail)
-                * (1.0 + min(1.25, region_pressure))
-            )
+            if size_ceiling is None:
+                adaptive_limit = int(
+                    min_region_area
+                    * mode_area_factor
+                    * (1.75 - 1.30 * detail)
+                    * (1.0 + min(1.25, region_pressure))
+                )
+            else:
+                adaptive_limit = int(size_ceiling)
             if area >= max(8, adaptive_limit):
                 continue
 
@@ -1036,7 +1154,10 @@ def adaptive_merge_regions(
             _, barrier_mean, barrier_high, color_distance, best = min(candidates)
             safe_boundary = barrier_high < 0.045 and barrier_mean < 0.24
             high_detail = detail > 0.62
-            color_limit = 11.0 if high_detail else (20.0 if experience_mode == "relaxed" else 16.0)
+            if color_tolerance is None:
+                color_limit = 11.0 if high_detail else (20.0 if experience_mode == "relaxed" else 16.0)
+            else:
+                color_limit = color_tolerance
 
             if safe_boundary and color_distance <= color_limit:
                 result[result == rid] = best
@@ -1045,6 +1166,66 @@ def adaptive_merge_regions(
         result = relabel(result)
         if not changed:
             break
+
+    return result
+
+
+def reduce_regions_to_budget(
+    rgb: np.ndarray,
+    labels: np.ndarray,
+    barrier_strength: np.ndarray,
+    detail_map: np.ndarray,
+    min_region_area: int,
+    experience_mode: str,
+    target_regions: int,
+    max_attempts: int = 5,
+) -> np.ndarray:
+    """
+    Bring an over-segmented illustration down to a paintable region count.
+
+    ``adaptive_merge_regions`` only folds away regions that are already small
+    and near-identical, which is enough for gentle images but stalls on very
+    detailed sources (thousands of similarly sized regions). Here the merge
+    pressure grows until the count fits: each attempt allows larger regions to
+    merge and accepts progressively less similar neighbours. The ink-boundary
+    guard inside ``adaptive_merge_regions`` is never relaxed, so original line
+    work is still protected.
+    """
+    result = labels
+    target = max(8, int(target_regions))
+    base_color_tolerance = 20.0 if experience_mode == "relaxed" else 16.0
+
+    for attempt in range(max(1, max_attempts)):
+        current = int(len(np.unique(result[result > 0])))
+        if current <= target:
+            break
+
+        areas = np.sort(np.unique(result[result > 0], return_counts=True)[1])
+        excess = current - target
+        index = int(
+            min(
+                len(areas) - 1,
+                max(0, round(excess * (1.0 + 0.4 * attempt))),
+            )
+        )
+        ceiling = max(min_region_area, int(areas[index]))
+        color_tolerance = base_color_tolerance + 12.0 * attempt
+
+        merged = adaptive_merge_regions(
+            rgb,
+            result,
+            barrier_strength,
+            detail_map,
+            min_region_area,
+            experience_mode,
+            target,
+            size_ceiling=ceiling,
+            color_tolerance=color_tolerance,
+        )
+        merged_count = int(len(np.unique(merged[merged > 0])))
+        if merged_count >= current:
+            break
+        result = merged
 
     return result
 
@@ -1791,7 +1972,7 @@ header h1{margin:0;font-family:Georgia,serif;font-size:23px}
 .mode-switch{display:flex;gap:8px}
 .app{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 68px)}
 .canvas-wrap{position:relative;overflow:hidden;background:#f3ede8;display:flex;align-items:center;justify-content:center;padding:18px}
-#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;will-change:transform;backface-visibility:hidden;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+#artboard{position:relative;width:min(100%,1000px);aspect-ratio:__ASPECT_RATIO__;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
 #svgHost,#completion,#referenceOverlay,#masterReveal{position:absolute;inset:0;width:100%;height:100%}#svgHost{z-index:2;transition:opacity .35s ease,filter .35s ease}#masterReveal{z-index:4;pointer-events:none;overflow:hidden;display:block}#masterReveal image{image-rendering:auto}
 #svgHost svg{width:100%;height:100%;display:block;shape-rendering:geometricPrecision;text-rendering:geometricPrecision}
 #completion,#referenceOverlay{object-fit:contain;pointer-events:none;transition:opacity .5s ease}
@@ -1895,9 +2076,9 @@ textarea{width:100%;min-height:90px;border:1px solid #ccb7a7;border-radius:8px;p
       <span id="zoomReadout" class="zoom-readout">100%</span>
       <button id="zoomIn" class="secondary">+</button>
       <button id="zoomReset" class="secondary">Reset View</button>
-      <button id="canvasLockBtn" class="secondary">Canvas Locked</button>
       <button id="centerSelected" class="secondary">Center Selected Color</button><button id="toggleNumberFocus" class="secondary">Show All Numbers</button>
     </div>
+    <p class="hint">Looking for a number? Zoom in with the +/− buttons, by scrolling over the picture, or by pinching with two fingers on a touchscreen. Then drag the picture to move around. A quick tap still paints as usual.</p>
 
     <div class="review-only review-card">
       <h3>Review tools</h3>
@@ -1966,8 +2147,6 @@ let pointerStartX=0;
 let pointerStartY=0;
 let hasDragged=false;
 let pointerIsDown=false;
-let canvasLocked=true;
-let spacePanActive=false;
 let numberFocus=false;
 let hintedRegionId=null;
 let completionShown=false;
@@ -1977,6 +2156,16 @@ try{
   const saved=JSON.parse(safeLocalGet(STORAGE_KEY)||'null');
   if(saved?.painted) painted=saved.painted;
   else if(saved && typeof saved==='object') painted=saved;
+  // Resume where the painter stopped: the color they were filling and the
+  // section they last painted, which the marker rotates on from. A color or id
+  // from an older compile is ignored so a recompiled artwork still opens clean.
+  if(saved && typeof saved==='object'){
+    if(saved.selectedColor && PALETTE.some(c=>String(c.colorId)===String(saved.selectedColor))){
+      selectedColor=String(saved.selectedColor);
+    }
+    if(Array.isArray(saved.skippedColors)) skippedColors=new Set(saved.skippedColors);
+    if(typeof saved.hintedRegionId==='string') hintedRegionId=saved.hintedRegionId;
+  }
 }catch(e){painted={}}
 
 
@@ -2430,7 +2619,7 @@ function resolveClickedRegion(target){
 // Event delegation is the permanent interaction path. It continues working
 // even when SVG paths are rebuilt, labels are repaired, or hit targets overlap.
 svgHost.addEventListener('click',event=>{
-  if(hasDragged) return;
+  if(hasDragged||pinchGuard) return;
   const resolved=resolveClickedRegion(event.target);
   if(!resolved) return;
   event.preventDefault();
@@ -2449,15 +2638,27 @@ function handleRegion(region,el){
 
   playMode=currentPlayMode();
 
+  // A paint must never move the artwork, whichever input path delivered the
+  // tap: remember the view and put it back before control returns.
+  const restoreCanvasView=lockCanvasView();
+
+  // The section you point at decides the color: one click paints the numbered
+  // region in its own color, so there is no palette switch first.
   if(String(region.colorId)!==String(selectedColor)){
-    message.textContent=`You are working on color ${selectedColor}. Finish every color ${selectedColor} section before moving to color ${region.colorId}.`;
-    el.animate([{opacity:1},{opacity:.42},{opacity:1}],{duration:360});
-    return;
+    selectedColor=region.colorId;
+    skippedColors.delete(String(selectedColor));
+    renderPalette();
+    refreshSelectedRegions();
+    updateColorStatus();
   }
 
   painted[region.regionId]=true;
   revealPaintedRegion(region.regionId);
-  if(hintedRegionId===region.regionId){hintedRegionId=null;clearHintMarker();}
+  clearHoverOutline();
+  // The painted section can no longer carry the marker, but its id stays the
+  // anchor the next section rotates on from.
+  hintedRegionId=region.regionId;
+  clearHintMarker();
 
   // Give immediate visual confirmation with the selected palette color.
   el.style.fill=region.fillColor || region.paletteColor;
@@ -2476,22 +2677,49 @@ function handleRegion(region,el){
   renderProgress();
   updateColorStatus();
 
-  const finishedColor=selectedColor;
-  const finishedState=colorCompletionMap()[String(finishedColor)];
-  if(finishedState?.complete){
-    const next=chooseNextAvailableColor();
+  // Stay on the color that was just clicked and move the selection on to the
+  // next section of it, so the next tap lands on the section that is up next.
+  // Only a finished color hands the selection over to the next unfinished one.
+  const finishedColor=String(selectedColor);
+  const finishedState=colorCompletionMap()[finishedColor];
+  let activeColor=finishedColor;
 
-    if(next){
+  if(finishedState?.complete){
+    const next=nextColorAfter(finishedColor);
+    if(next && String(next.colorId)!==finishedColor){
+      activeColor=String(next.colorId);
       selectedColor=next.colorId;
-      hintedRegionId=null;
+      skippedColors.delete(activeColor);
       renderPalette();
-      refreshSelectedRegions();
       updateColorStatus();
-      message.textContent=`Color ${finishedColor} complete ✓ Moving to color ${selectedColor}.`;
-    }else{
-      message.textContent=`Color ${finishedColor} complete ✓`;
     }
   }
+
+  if(activeColor!==finishedColor){
+    message.textContent=`Color ${finishedColor} complete ✓ Moving to color ${activeColor}.`;
+  }else if(finishedState?.complete){
+    message.textContent=`Color ${finishedColor} complete ✓`;
+  }
+
+  restoreCanvasView();
+}
+
+// The next color in palette order that still has sections to fill, wrapping
+// around at the end. Skipped colors are only used when nothing else is left.
+function nextColorAfter(colorId){
+  const map=colorCompletionMap();
+  const start=PALETTE.findIndex(item=>String(item.colorId)===String(colorId));
+  const ordered=PALETTE.slice(start+1).concat(PALETTE.slice(0,start+1));
+  const hasWork=item=>{
+    const state=map[String(item.colorId)];
+    return Boolean(state && !state.complete);
+  };
+
+  return (
+    ordered.find(item=>hasWork(item) && !skippedColors.has(String(item.colorId))) ||
+    ordered.find(hasWork) ||
+    null
+  );
 }
 
 
@@ -2697,7 +2925,7 @@ function luminance(rgb){return (.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2])/255}
 
 function runCompletionReveal(){
   zoom=1;panX=0;panY=0;
-  canvasContent.style.transform='translate3d(0px, 0px, 0) scale(1)';
+  canvasContent.style.transform='translate(0px, 0px) scale(1)';
   document.getElementById('zoomReadout').textContent='100%';
 
   referenceOverlay.style.display='none';
@@ -2778,6 +3006,7 @@ function progressPayload(){
     selectedColor,
     painted,
     skippedColors:[...skippedColors],
+    hintedRegionId,
     savedAt:new Date().toISOString()
   };
 }
@@ -2809,12 +3038,33 @@ function restoreProgressPayload(payload){
 }
 function applyTransform(){
   panX=Math.round(panX);panY=Math.round(panY);
-  canvasContent.style.transform=`translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`;
+  // A plain 2D transform keeps the browser re-rendering the artwork as vectors
+  // at the zoomed scale. A 3D transform (or will-change:transform) promotes the
+  // canvas to its own layer, and Chrome then stretches a cached bitmap of that
+  // layer instead of re-rasterizing it, which smears the small region numbers as
+  // soon as the customer zooms past a couple of hundred percent.
+  canvasContent.style.transform=`translate(${panX}px, ${panY}px) scale(${zoom})`;
+}
+// A paint must never move the artwork. Take the view before a tap changes
+// anything and put it back before control returns to the browser.
+function lockCanvasView(){
+  const view={zoom,panX,panY};
+  return function restoreCanvasView(){
+    if(zoom===view.zoom && panX===view.panX && panY===view.panY) return;
+    zoom=view.zoom;panX=view.panX;panY=view.panY;
+    applyTransform();
+    document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+  };
 }
 function setZoom(next){
   zoom=Math.max(.6,Math.min(8,next));
-  if(zoom<=1){panX=0;panY=0;}
+  if(zoom<=1){
+    panX=0;panY=0;
+    isDragging=false;pointerIsDown=false;hasDragged=false;
+    artboard.classList.remove('dragging');
+  }
   applyTransform();
+  artboard.style.cursor=zoom>1?'grab':'';
   document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
 }
 function setMode(mode){
@@ -2884,74 +3134,84 @@ function resolveHiddenSelectedRegions(){
   return repaired;
 }
 
-document.getElementById('hintOneBtn').onclick=()=>{
+// Mark the next paintable section of a color, rotating on from the section that
+// carries the marker now. 'marked' means it is showing and hintedRegionId holds
+// it; 'none' means the color has nothing left to show; 'unusable' means the
+// sections that remain cannot carry a marker yet.
+function markNextSection(colorId){
   const remaining=REGIONS.filter(
     r=>
-      String(r.colorId)===String(selectedColor) &&
+      String(r.colorId)===String(colorId) &&
       !painted[r.regionId] &&
       regionHasUsableNumber(r) &&
       regionIsVisuallyPaintable(r)
   );
 
   if(!remaining.length){
-    const resolved=resolveHiddenSelectedRegions();
     hintedRegionId=null;
     clearHintMarker();
-    refreshSelectedRegions();
-    renderProgress();
-    updateColorStatus();
-    message.textContent=resolved
-      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} restored.`
-      : `No visible unpainted color ${selectedColor} sections remain.`;
-    return;
+    return 'none';
   }
 
   // Rotate only through regions that can be visibly marked and selected.
-  let currentIndex=remaining.findIndex(r=>r.regionId===hintedRegionId);
-  let next=null;
+  const currentIndex=remaining.findIndex(r=>r.regionId===hintedRegionId);
   for(let offset=1;offset<=remaining.length;offset++){
     const candidate=remaining[(currentIndex+offset)%remaining.length];
-    if(showHintMarker(candidate)){
-      next=candidate;
-      break;
-    }
+    if(!showHintMarker(candidate)) continue;
+    hintedRegionId=candidate.regionId;
+    repairRegionNumber(candidate);
+    refreshSelectedRegions();
+    showHintMarker(candidate); // redraw after refresh so marker stays above all labels.
+    return 'marked';
   }
 
-  if(!next){
+  hintedRegionId=null;
+  clearHintMarker();
+  return 'unusable';
+}
+
+// Bring the marked section into view. Only the Hint button moves the artwork;
+// painting never does.
+function focusMarkedSection(){
+  if(!hintedRegionId) return;
+  const region=REGIONS.find(r=>r.regionId===hintedRegionId);
+  const el=document.getElementById(hintedRegionId);
+  const svg=svgHost.querySelector('svg');
+  if(!region || !el || !svg) return;
+
+  const point=findVisibleInteriorPoint(region,el);
+  const svgBox=svg.viewBox.baseVal;
+  const cx=point?.x ?? (el.getBBox().x+el.getBBox().width/2);
+  const cy=point?.y ?? (el.getBBox().y+el.getBBox().height/2);
+  const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
+  const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
+  if(zoom<3) zoom=3;
+  const rect=artboard.getBoundingClientRect();
+  panX=Math.round(-normalizedX*rect.width*zoom);
+  panY=Math.round(-normalizedY*rect.height*zoom);
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+}
+
+document.getElementById('hintOneBtn').onclick=()=>{
+  const status=markNextSection(selectedColor);
+
+  if(status!=='marked'){
     const resolved=resolveHiddenSelectedRegions();
-    hintedRegionId=null;
-    clearHintMarker();
     refreshSelectedRegions();
     renderProgress();
     updateColorStatus();
-    message.textContent=resolved
-      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} repaired.`
-      : `No usable color ${selectedColor} hint remains.`;
+    message.textContent=status==='none'
+      ? (resolved
+          ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} restored.`
+          : `No visible unpainted color ${selectedColor} sections remain.`)
+      : (resolved
+          ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} repaired.`
+          : `No usable color ${selectedColor} hint remains.`);
     return;
   }
 
-  hintedRegionId=next.regionId;
-  repairRegionNumber(next);
-  refreshSelectedRegions();
-  showHintMarker(next); // redraw after refresh so marker stays above all labels.
-
-  const el=document.getElementById(hintedRegionId);
-  if(el){
-    const point=findVisibleInteriorPoint(next,el);
-    const svg=svgHost.querySelector('svg');
-    const svgBox=svg.viewBox.baseVal;
-    const cx=point?.x ?? (el.getBBox().x+el.getBBox().width/2);
-    const cy=point?.y ?? (el.getBBox().y+el.getBBox().height/2);
-    const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
-    const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
-    if(zoom<3) zoom=3;
-    const rect=artboard.getBoundingClientRect();
-    panX=Math.round(-normalizedX*rect.width*zoom);
-    panY=Math.round(-normalizedY*rect.height*zoom);
-    applyTransform();
-    document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
-  }
-
+  focusMarkedSection();
   message.textContent=`Hint: the pink marker identifies one visible number ${selectedColor} section.`;
 };
 
@@ -3085,7 +3345,120 @@ document.getElementById('paintAgainBtn').onclick=()=>{
   resetArtworkForRepaint();
 };
 
+// A deliberate drag moves the picture; a tap always paints. The threshold is
+// generous so the hand-shake of an ordinary click never becomes a pan, which
+// used to swallow the paint and shift the artwork out from under the cursor.
+// Two fingers pinch to zoom, anchored on the point between the fingers so the
+// spot being studied stays under them while the picture grows or shrinks.
+const PAN_THRESHOLD=12;
+let panPointerId=null;
+const activePointers=new Map();
+let isPinching=false;
+let pinchRect=null;
+let pinchStartDistance=0;
+let pinchStartZoom=1;
+let pinchFocalX=0;
+let pinchFocalY=0;
+let pinchGuard=false;
+
+function pointerMidpoint(){
+  const points=[...activePointers.values()];
+  return {
+    x:(points[0].x+points[1].x)/2,
+    y:(points[0].y+points[1].y)/2,
+    distance:Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y)||1
+  };
+}
+
+function startPinch(){
+  const rect=artboard.getBoundingClientRect();
+  const mid=pointerMidpoint();
+  const cx=rect.width/2;
+  const cy=rect.height/2;
+  pinchRect=rect;
+  pinchStartDistance=mid.distance;
+  pinchStartZoom=zoom;
+  // Picture point under the fingers, so it can be kept under them as we scale.
+  pinchFocalX=cx+(mid.x-rect.left-cx-panX)/zoom;
+  pinchFocalY=cy+(mid.y-rect.top-cy-panY)/zoom;
+  isPinching=true;
+  isDragging=false;
+  pointerIsDown=false;
+  hasDragged=true;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor='grabbing';
+  activePointers.forEach((_,id)=>{
+    try{artboard.setPointerCapture(id)}catch(e){}
+  });
+}
+
+function applyPinch(){
+  if(activePointers.size<2) return;
+  const mid=pointerMidpoint();
+  const rect=pinchRect||artboard.getBoundingClientRect();
+  const cx=rect.width/2;
+  const cy=rect.height/2;
+  zoom=Math.max(.6,Math.min(8,pinchStartZoom*(mid.distance/pinchStartDistance)));
+  if(zoom<=1){
+    panX=0;panY=0;
+  }else{
+    panX=mid.x-rect.left-cx-zoom*(pinchFocalX-cx);
+    panY=mid.y-rect.top-cy-zoom*(pinchFocalY-cy);
+  }
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+}
+
+function finishPinch(){
+  if(!isPinching) return;
+  isPinching=false;
+  pinchRect=null;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+  // A finger lifting off a pinch can still emit a click; swallow that one.
+  pinchGuard=true;
+  setTimeout(()=>{pinchGuard=false;hasDragged=false;},400);
+}
+
+// Bold outline on the region under the cursor, so it is obvious which section
+// is about to be painted while zoomed in. Region strokes use
+// vector-effect:non-scaling-stroke, so this stays bold at every zoom level.
+let hoveredRegionId=null;
+let hoveredStroke=null;
+
+function clearHoverOutline(){
+  if(hoveredRegionId && hoveredStroke){
+    const el=document.getElementById(hoveredRegionId);
+    if(el){
+      el.style.stroke=hoveredStroke.stroke;
+      el.style.strokeWidth=hoveredStroke.strokeWidth;
+    }
+  }
+  hoveredRegionId=null;
+  hoveredStroke=null;
+}
+
+function applyHoverOutline(target){
+  const resolved=resolveClickedRegion(target);
+  const id=resolved?resolved.region.regionId:null;
+  if(id===hoveredRegionId) return;
+  clearHoverOutline();
+  if(!id) return;
+  const el=document.getElementById(id);
+  if(!el) return;
+  hoveredRegionId=id;
+  hoveredStroke={stroke:el.style.stroke,strokeWidth:el.style.strokeWidth};
+  el.style.stroke='#9c4a22';
+  el.style.strokeWidth='3';
+}
+
 artboard.addEventListener('pointerdown',event=>{
+  if(event.button===2) return;
+  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(activePointers.size>=2){
+    if(!isPinching) startPinch();
+    return;
+  }
   pointerIsDown=true;
   pointerStartX=event.clientX;
   pointerStartY=event.clientY;
@@ -3093,22 +3466,41 @@ artboard.addEventListener('pointerdown',event=>{
   dragStartY=event.clientY-panY;
   hasDragged=false;
   isDragging=false;
-
-  const mousePanGesture=event.pointerType==='mouse' && (
-    event.button===1 || spacePanActive
-  );
-  const touchPanGesture=event.pointerType==='touch' && !canvasLocked;
-
-  if(zoom>1 && (mousePanGesture || touchPanGesture)){
-    isDragging=true;
-    hasDragged=true;
-    artboard.classList.add('dragging');
-    try{artboard.setPointerCapture(event.pointerId)}catch(e){}
-  }
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+  panPointerId=event.pointerId;
 });
 
 artboard.addEventListener('pointermove',event=>{
-  if(!pointerIsDown || !isDragging || zoom<=1) return;
+  if(activePointers.has(event.pointerId)){
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  }
+
+  if(isPinching){
+    event.preventDefault();
+    clearHoverOutline();
+    applyPinch();
+    return;
+  }
+
+  // While a finger or button is down we are painting or panning, so no outline.
+  if(pointerIsDown||isDragging){
+    clearHoverOutline();
+  }else{
+    applyHoverOutline(event.target);
+  }
+
+  if(!pointerIsDown || zoom<=1) return;
+
+  if(!isDragging){
+    const moved=Math.hypot(event.clientX-pointerStartX,event.clientY-pointerStartY);
+    if(moved<PAN_THRESHOLD) return;
+    isDragging=true;
+    hasDragged=true;
+    artboard.classList.add('dragging');
+    artboard.style.cursor='grabbing';
+    try{artboard.setPointerCapture(panPointerId)}catch(e){}
+  }
 
   event.preventDefault();
   panX=event.clientX-dragStartX;
@@ -3117,7 +3509,18 @@ artboard.addEventListener('pointermove',event=>{
 });
 
 artboard.addEventListener('pointerup',event=>{
+  activePointers.delete(event.pointerId);
+
+  if(isPinching){
+    event.preventDefault();
+    event.stopPropagation();
+    try{artboard.releasePointerCapture(event.pointerId)}catch(e){}
+    if(activePointers.size<2) finishPinch();
+    return;
+  }
+
   pointerIsDown=false;
+  panPointerId=null;
   if(isDragging){
     event.preventDefault();
     event.stopPropagation();
@@ -3125,35 +3528,53 @@ artboard.addEventListener('pointerup',event=>{
 
   isDragging=false;
   artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
 
   try{artboard.releasePointerCapture(event.pointerId)}catch(e){}
   setTimeout(()=>{hasDragged=false;},0);
 });
 
-artboard.addEventListener('pointercancel',()=>{
+artboard.addEventListener('pointercancel',event=>{
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
   pointerIsDown=false;
   isDragging=false;
   hasDragged=false;
   artboard.classList.remove('dragging');
 });
-artboard.addEventListener('lostpointercapture',()=>{
+artboard.addEventListener('lostpointercapture',event=>{
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
   pointerIsDown=false;
   isDragging=false;
   artboard.classList.remove('dragging');
 });
+// A pointer released off the canvas used to stay in activePointers, so the next
+// single tap looked like a second finger and was read as a pinch — which moved
+// the artwork while painting. Window-level cleanup keeps the set honest; it runs
+// after the canvas handlers, so ordinary taps and drags are untouched.
+function forgetReleasedPointer(event){
+  if(!activePointers.has(event.pointerId)) return;
+  activePointers.delete(event.pointerId);
+  if(isPinching && activePointers.size<2) finishPinch();
+  if(activePointers.size) return;
+  pointerIsDown=false;
+  isDragging=false;
+  artboard.classList.remove('dragging');
+  artboard.style.cursor=zoom>1?'grab':'';
+}
+window.addEventListener('pointerup',forgetReleasedPointer);
+window.addEventListener('pointercancel',forgetReleasedPointer);
+window.addEventListener('blur',()=>{
+  if(!activePointers.size) return;
+  activePointers.clear();
+  if(isPinching) finishPinch();
+  pointerIsDown=false;
+  isDragging=false;
+  artboard.classList.remove('dragging');
+});
+artboard.addEventListener('pointerleave',()=>clearHoverOutline());
 
-window.addEventListener('keydown',event=>{
-  if(event.code==='Space' && !event.repeat){
-    spacePanActive=true;
-    if(zoom>1) artboard.style.cursor='grab';
-  }
-});
-window.addEventListener('keyup',event=>{
-  if(event.code==='Space'){
-    spacePanActive=false;
-    artboard.style.cursor='';
-  }
-});
 artboard.addEventListener('wheel',event=>{
   event.preventDefault();
   const delta=event.deltaY<0?.25:-.25;
@@ -3162,16 +3583,7 @@ artboard.addEventListener('wheel',event=>{
 
 document.getElementById('zoomIn').onclick=()=>setZoom(Math.round((zoom+.25)*4)/4);
 document.getElementById('zoomOut').onclick=()=>setZoom(Math.round((zoom-.25)*4)/4);
-document.getElementById('zoomReset').onclick=()=>{zoom=1;panX=0;panY=0;applyTransform();document.getElementById('zoomReadout').textContent='100%';};
-document.getElementById('canvasLockBtn').onclick=()=>{
-  canvasLocked=!canvasLocked;
-  const button=document.getElementById('canvasLockBtn');
-  button.textContent=canvasLocked?'Canvas Locked':'Pan Canvas';
-  button.className=canvasLocked?'secondary':'primary';
-  message.textContent=canvasLocked
-    ? 'Canvas locked — tapping paints without moving the artwork.'
-    : 'Canvas unlocked — drag to pan while zoomed in. Lock it again to paint.';
-};
+document.getElementById('zoomReset').onclick=()=>setZoom(1);
 document.getElementById('centerSelected').onclick=centerOnSelectedColor;
 document.getElementById('toggleNumberFocus').onclick=()=>{
   numberFocus=!numberFocus;
@@ -3263,6 +3675,9 @@ setupMasterReveal();
 ensureEveryPaintableRegionHasNumber();
 renderPalette();
 applySaved();
+// Hints stay hidden unless the reader asks for one, so a reload never reopens
+// a marker or glow on a restored anchor.
+hintedRegionId=null;
 refreshSelectedRegions();
 numberFocus=false;
 refreshNumberLabels();
@@ -3580,7 +3995,7 @@ def compile_artwork(
     exclude_background: bool = True,
     generate_pdf: bool = True,
     experience_mode: str = "relaxed",
-    target_regions: int = 650,
+    target_regions: int = 900,
     design_style: str = "smart_auto",
     finish_mode: str = "original",
     progress_callback: Callable[[int, str, dict], None] | None = None,
@@ -3720,6 +4135,9 @@ def compile_artwork(
         fg = regions > 0
         detail_map = np.where(fg, 0.55, 0.0).astype(np.float32)
         marker_count = int(len(np.unique(regions[regions > 0])))
+        # Only the illustration recovery path below recomputes this; default it
+        # to the line-art region count so the progress report is always defined.
+        illustration_region_count = marker_count
 
         if marker_count < 3:
             update(
@@ -3772,6 +4190,7 @@ def compile_artwork(
                     ).astype(np.float32) / 255.0,
                 )
                 marker_count = int(len(np.unique(regions[regions > 0])))
+                illustration_region_count = marker_count
             else:
                 regions = illustration_watershed(
                     processed,
@@ -3824,8 +4243,8 @@ def compile_artwork(
         update(16, "Simplifying photographic gradients and visual noise")
         processed = preprocess_basic_scenic(rgb)
         color_count = min(color_count, 24)
-        min_area = max(min_area, 70)
-        target_regions = min(max(180, target_regions), 520)
+        min_area = max(min_area, 48)
+        target_regions = min(max(340, target_regions), 1250)
         experience_mode = "relaxed"
         Image.fromarray(processed).save(output_dir / "photo_pipeline_preview.png")
 
@@ -3858,7 +4277,7 @@ def compile_artwork(
             processed = preprocess_graphic_monochrome(rgb)
             color_count = min(max(color_count, 8), 12)
             min_area = min(min_area, 14)
-            target_regions = min(max(target_regions, 650), 1100)
+            target_regions = min(max(target_regions, 520), 1250)
             tolerance = min(tolerance, 0.10)
             experience_mode = "detailed"
             update(
@@ -3893,6 +4312,12 @@ def compile_artwork(
         )
 
         update(43, "Building closed-region markers")
+        # Keep the seed count inside the paintable budget up front: a watershed
+        # seeded with thousands of specks cannot be merged back down cheaply.
+        # Every seed becomes a region and heavily inked artwork barely merges
+        # afterwards, so seed at the target itself; seeding at the hard region
+        # cap leaves no headroom and the attempt overshoots that cap.
+        seed_ceiling = max(60, int(target_regions))
         markers = build_markers(
             pixel_colors,
             fg,
@@ -3900,6 +4325,7 @@ def compile_artwork(
             detail_map,
             seed_min_area,
             experience_mode,
+            max_seeds=seed_ceiling,
         )
         marker_count = int(markers.max())
         if marker_count < 2:
@@ -3943,7 +4369,7 @@ def compile_artwork(
             merge_target_regions = target_regions
             if artwork_profile.name == "graphic_monochrome":
                 merge_min_area = max(6, min(min_area, 12))
-                merge_target_regions = max(target_regions, 750)
+                merge_target_regions = max(target_regions, 950)
             regions = adaptive_merge_regions(
                 processed,
                 regions,
@@ -3952,6 +4378,20 @@ def compile_artwork(
                 merge_min_area,
                 experience_mode,
                 merge_target_regions,
+            )
+            # Safety net: if the merge still leaves more regions than the
+            # paintable budget allows, merge down with headroom to spare for the
+            # paintability repair that follows, instead of failing the compile.
+            paint_budget = max(int(target_regions * 1.35), target_regions + 60)
+            regions = reduce_regions_to_budget(
+                processed,
+                regions,
+                barrier_strength,
+                detail_map,
+                merge_min_area,
+                experience_mode,
+                max(8, int(paint_budget * 0.85)),
+                max_attempts=3,
             )
 
         # Safety check: if Smart Auto chose illustration but the foreground
@@ -3982,8 +4422,8 @@ def compile_artwork(
             processed = preprocess_basic_scenic(rgb)
 
             color_count = min(color_count, 24)
-            min_area = max(min_area, 70)
-            target_regions = min(max(180, target_regions), 520)
+            min_area = max(min_area, 48)
+            target_regions = min(max(340, target_regions), 1250)
             experience_mode = "relaxed"
 
             regions = photo_slic_regions(
@@ -4094,93 +4534,94 @@ def compile_artwork(
         if rid > 0
     ]
 
-if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
-    raise ValueError(
-        f"Illustration region cap was not achieved before export: "
-        f"{len(region_ids)} > {illustration_hard_cap}"
-    )
-
-if not region_ids:
-    raise ValueError(
-        "No usable paint regions were generated. Reduce minimum region area."
-    )
-
-update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
-if active_pipeline == "lineart":
-    region_to_color, centers, original_region_means = assign_premium_lineart_palette(
-        regions,
-        processed,
-    )
-else:
-    region_to_color, centers, original_region_means = assign_region_palette(
-        processed,
-        regions,
-        region_ids,
-        color_count,
-    )
-
-update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
-h, w = processed.shape[:2]
-records: List[dict] = []
-region_labels: dict[str, int] = {}
-rendered_coverage = np.zeros((h, w), dtype=bool)
-
-total_region_ids = len(region_ids)
-for index, rid in enumerate(region_ids, start=1):
-    if index == 1 or index % 100 == 0 or index == total_region_ids:
-        update(
-            min(89, 80 + int(9 * index / max(1, total_region_ids))),
-            "Vectorizing closed paint regions",
-            {"vectorized": index - 1, "regionCandidates": total_region_ids},
-        )
-    mask = regions == rid
-    area = int(mask.sum())
-    region_detail = float(detail_map[mask].mean()) if area else 0.0
-    poly = mask_polygon(mask, validation_tolerance)
-    if poly is None:
+    illustration_hard_cap = max(int(target_regions * 1.35), target_regions + 60)
+    if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
         raise ValueError(
-            f"Validated region {rid} became non-vectorizable during export."
-        )
-    path = polygon_path(poly)
-    if not path:
-        raise ValueError(
-            f"Validated region {rid} produced an empty SVG path."
+            f"Illustration region cap was not achieved before export: "
+            f"{len(region_ids)} > {illustration_hard_cap}"
         )
 
-    rendered_coverage |= mask
-    color_id = region_to_color[rid]
-    palette_fill = rgb_to_hex(centers[color_id])
-    original_fill = rgb_to_hex(
-        np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
-    )
-    x, y, radius = label_point(mask)
-    region_id = f"region_{index}"
-    region_labels[region_id] = int(rid)
-    records.append(
-        {
-            "regionId": region_id,
-            "colorId": str(color_id + 1),
-            "fillColor": palette_fill,
-            "paletteColor": palette_fill,
-            "originalColor": original_fill,
-            "painted": False,
-            "area": area,
-            "detailScore": round(region_detail, 4),
-            "paintability": (
-                "tiny" if area < 80
-                else "small" if area < 180
-                else "comfortable"
-            ),
-            "path": path,
-            "label": {
-                "x": x,
-                "y": y,
-                "radius": radius,
-                "fontSize": max(5.2, min(14.0, radius * 0.68)),
-                "visible": True,
-            },
-        }
-    )
+    if not region_ids:
+        raise ValueError(
+            "No usable paint regions were generated. Reduce minimum region area."
+        )
+
+    update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
+    if active_pipeline == "lineart":
+        region_to_color, centers, original_region_means = assign_premium_lineart_palette(
+            regions,
+            processed,
+        )
+    else:
+        region_to_color, centers, original_region_means = assign_region_palette(
+            processed,
+            regions,
+            region_ids,
+            color_count,
+        )
+
+    update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
+    h, w = processed.shape[:2]
+    records: List[dict] = []
+    region_labels: dict[str, int] = {}
+    rendered_coverage = np.zeros((h, w), dtype=bool)
+
+    total_region_ids = len(region_ids)
+    for index, rid in enumerate(region_ids, start=1):
+        if index == 1 or index % 100 == 0 or index == total_region_ids:
+            update(
+                min(89, 80 + int(9 * index / max(1, total_region_ids))),
+                "Vectorizing closed paint regions",
+                {"vectorized": index - 1, "regionCandidates": total_region_ids},
+            )
+        mask = regions == rid
+        area = int(mask.sum())
+        region_detail = float(detail_map[mask].mean()) if area else 0.0
+        poly = mask_polygon(mask, validation_tolerance)
+        if poly is None:
+            raise ValueError(
+                f"Validated region {rid} became non-vectorizable during export."
+            )
+        path = polygon_path(poly)
+        if not path:
+            raise ValueError(
+                f"Validated region {rid} produced an empty SVG path."
+            )
+
+        rendered_coverage |= mask
+        color_id = region_to_color[rid]
+        palette_fill = rgb_to_hex(centers[color_id])
+        original_fill = rgb_to_hex(
+            np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
+        )
+        x, y, radius = label_point(mask)
+        region_id = f"region_{index}"
+        region_labels[region_id] = int(rid)
+        records.append(
+            {
+                "regionId": region_id,
+                "colorId": str(color_id + 1),
+                "fillColor": palette_fill,
+                "paletteColor": palette_fill,
+                "originalColor": original_fill,
+                "painted": False,
+                "area": area,
+                "detailScore": round(region_detail, 4),
+                "paintability": (
+                    "tiny" if area < 80
+                    else "small" if area < 180
+                    else "comfortable"
+                ),
+                "path": path,
+                "label": {
+                    "x": x,
+                    "y": y,
+                    "radius": radius,
+                    "fontSize": max(5.2, min(14.0, radius * 0.68)),
+                    "visible": True,
+                },
+            }
+        )
 
     if not records:
         raise ValueError("No vector paint regions could be created.")

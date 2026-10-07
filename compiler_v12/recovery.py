@@ -24,7 +24,7 @@ def build_attempts(source_analysis: dict[str, Any], requested: dict[str, Any]) -
             "auto_crop": False,
             "colors": min(max(int(requested.get("colors") or 12), 8), 14),
             "min_region_area": max(int(requested.get("min_region_area") or 36), 36),
-            "target_regions": min(int(requested.get("target_regions") or 480), 480),
+            "target_regions": min(int(requested.get("target_regions") or 1000), 1000),
             "simplify_tolerance": max(float(requested.get("simplify_tolerance") or 0.18), 0.18),
             "experience_mode": "detailed",
         })
@@ -36,7 +36,7 @@ def build_attempts(source_analysis: dict[str, Any], requested: dict[str, Any]) -
     "design_style": "illustration",
     "auto_crop": False,
     "min_region_area": max(int(requested.get("min_region_area") or 36), 36),
-    "target_regions": min(int(requested.get("target_regions") or 480), 480),
+    "target_regions": min(int(requested.get("target_regions") or 1000), 1000),
     "experience_mode": "relaxed",
 })
     attempts.append(illustration)
@@ -47,7 +47,7 @@ def build_attempts(source_analysis: dict[str, Any], requested: dict[str, Any]) -
         "design_style": "photo",
         "auto_crop": False,
         "min_region_area": max(42, int(requested.get("min_region_area") or 42)),
-        "target_regions": min(max(300, int(requested.get("target_regions") or 520)), 650),
+        "target_regions": min(max(420, int(requested.get("target_regions") or 700)), 1250),
         "experience_mode": "relaxed",
     })
     attempts.append(photo)

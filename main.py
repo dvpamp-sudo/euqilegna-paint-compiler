@@ -460,6 +460,12 @@ def studio_challenges():
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/studio/upload", response_class=HTMLResponse)
+def studio_upload():
+    path = PROJECT_ROOT / "studio" / "upload.html"
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_page():
@@ -662,16 +668,16 @@ def home():
 
     <h2 class="section-title">2. Choose your experience</h2>
     <div class="choice-grid" id="difficultyCards">
-      <div class="mode-card" data-preset="beginner" data-experience="relaxed" data-regions="360" data-minarea="70">
+      <div class="mode-card" data-preset="beginner" data-experience="relaxed" data-regions="480" data-minarea="70">
         <strong>😊 Beginner</strong><div class="experience-visual">🌸</div><small>Large, easy regions</small><span class="hours">2–3 hours</span>
       </div>
-      <div class="mode-card" data-preset="balanced" data-experience="relaxed" data-regions="500" data-minarea="52">
+      <div class="mode-card" data-preset="balanced" data-experience="relaxed" data-regions="700" data-minarea="52">
         <strong>🙂 Relaxing</strong><div class="experience-visual">🦋</div><small>Calm and comfortable</small><span class="hours">4–6 hours</span>
       </div>
-      <div class="mode-card active" data-preset="illustration" data-experience="balanced" data-regions="650" data-minarea="38">
+      <div class="mode-card active" data-preset="illustration" data-experience="balanced" data-regions="950" data-minarea="38">
         <strong>🎨 Detailed <span class="badge">Recommended</span></strong><div class="experience-visual">👩🏾‍🎨</div><small>Best balance of detail and ease</small><span class="hours">6–10 hours</span>
       </div>
-      <div class="mode-card" data-preset="advanced" data-experience="detailed" data-regions="900" data-minarea="24">
+      <div class="mode-card" data-preset="advanced" data-experience="detailed" data-regions="1400" data-minarea="24">
         <strong>🏆 Masterpiece</strong><div class="experience-visual">🖼️</div><small>More regions and detail</small><span class="hours">10–20+ hours</span>
       </div>
     </div>
@@ -708,13 +714,13 @@ def home():
 
     <input type="hidden" name="preset" id="presetField" value="illustration">
     <input type="hidden" name="experience_mode" id="experienceField" value="balanced">
-    <input type="hidden" name="target_regions" id="regionsField" value="650">
+    <input type="hidden" name="target_regions" id="regionsField" value="950">
     <input type="hidden" name="min_region_area" id="minAreaField" value="38">
 
     <details>
       <summary>⚙ Professional Artist Controls — Advanced Fine Tuning</summary>
       <div class="grid">
-        <div><label>Maximum regions</label><input type="number" id="advancedRegions" value="650"></div>
+        <div><label>Maximum regions</label><input type="number" id="advancedRegions" value="950"></div>
         <div><label>Minimum region area</label><input type="number" id="advancedMinArea" value="38"></div>
         <div><label>Outline width</label><input type="number" step="0.01" name="outline_width" value="0.38"></div>
         <div><label>Simplify tolerance</label><input type="number" step="0.05" name="simplify_tolerance" value="0.35"></div>
@@ -806,7 +812,7 @@ advancedMinArea.addEventListener('input',()=>minAreaField.value=advancedMinArea.
 colorsSelect.addEventListener('change',updatePaintingEstimate);
 
 function updatePaintingEstimate(){
-  const regions=Number(regionsField.value||650);
+  const regions=Number(regionsField.value||950);
   const colors=Number(colorsSelect.value||40);
   const hours=Math.max(2,Math.round((regions/120)+(colors/18)));
   document.getElementById('paintingEstimate').textContent=`About ${hours}–${hours+2} hours`;
@@ -1120,6 +1126,7 @@ def premium_launcher_html(sample_name: str, item: dict[str, Any]) -> str:
 <button id="start" class="btn primary">Build This Paint-by-Number</button>
 <a id="open" class="btn primary hidden" href="/premium/{sample_name}/play">Open Interactive Painting</a>
 <a id="download" class="btn hidden" href="#">Download Paint Package</a>
+<a class="btn" href="/studio/upload">Create From Your Own Image</a>
 <div class="notice">The first build can take several minutes because it is generating hundreds of real regions from the official artwork. After it finishes, the result is cached.</div>
 </aside></div>
 <script>
@@ -1272,6 +1279,20 @@ def play_premium_sample(sample_name: str):
     return HTMLResponse(player.read_text(encoding="utf-8"))
 
 
+@app.get("/my-artwork/{job_id}/play", response_class=HTMLResponse)
+def play_my_artwork(job_id: str):
+    """Serve the interactive painting compiled from a customer's own upload."""
+    job = get_job_record(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Uploaded artwork not found.")
+    if job.get("status") != "complete":
+        raise HTTPException(status_code=409, detail="This artwork has not finished compiling yet.")
+    player = Path(job["outputDir"]) / "interactive_player.html"
+    if not player.is_file():
+        raise HTTPException(status_code=404, detail="Interactive player was not generated for this artwork.")
+    return HTMLResponse(player.read_text(encoding="utf-8"))
+
+
 @app.get("/premium/{sample_name}/download")
 def download_premium_sample(sample_name: str):
     if sample_name not in PREMIUM_SAMPLE_SETTINGS:
@@ -1294,7 +1315,7 @@ async def create_job(
     colors: int = Form(40),
     min_region_area: int = Form(38),
     experience_mode: str = Form("relaxed"),
-    target_regions: int = Form(650),
+    target_regions: int = Form(950),
     outline_width: float = Form(0.38),
     simplify_tolerance: float = Form(0.35),
     auto_crop: bool = Form(True),
@@ -1388,9 +1409,9 @@ def test_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        player_path = Path(job["outputDir"]) / "interactive_player.html"
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    player_path = Path(job["outputDir"]) / "interactive_player.html"
 
     if not player_path.exists():
         raise HTTPException(status_code=404, detail="Interactive test player was not generated.")
@@ -1405,9 +1426,9 @@ def qa_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        qa_path = Path(job["outputDir"]) / "quality_dashboard.html"
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    qa_path = Path(job["outputDir"]) / "quality_dashboard.html"
 
     if not qa_path.exists():
         raise HTTPException(status_code=404, detail="Quality report was not generated.")
@@ -1421,9 +1442,9 @@ def download_job(job_id: str):
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
-        if job["status"] != "complete":
-            raise HTTPException(status_code=409, detail="Compilation is not complete.")
-        zip_path = Path(job["zipPath"])
+    if job["status"] != "complete":
+        raise HTTPException(status_code=409, detail="Compilation is not complete.")
+    zip_path = Path(job["zipPath"])
 
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Generated package was not found.")
