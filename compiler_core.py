@@ -1516,8 +1516,16 @@ def region_mask_validation(
     tolerance: float,
     min_area: int,
     min_label_radius: float,
+    offset: Tuple[int, int] = (0, 0),
+    geometry_out: dict | None = None,
+    region_id: int | None = None,
 ) -> dict:
-    """Validate one candidate region before any SVG or palette count is exported."""
+    """Validate one candidate region before any SVG or palette count is exported.
+
+    ``geometry_out`` (keyed by ``region_id``) receives the SVG path and label
+    point of every valid region so the export loop can reuse them instead of
+    tracing each region a second time.
+    """
     area = int(mask.sum())
     result = {
         "area": area,
@@ -1559,7 +1567,7 @@ def region_mask_validation(
     if radius < min_label_radius:
         result["reasons"].append("label_does_not_fit")
 
-    poly = mask_polygon(mask, tolerance)
+    poly = mask_polygon(mask, tolerance, offset)
     path = polygon_path(poly) if poly is not None else ""
     result["vectorizable"] = bool(path)
     result["pathLength"] = len(path)
@@ -1573,6 +1581,11 @@ def region_mask_validation(
         and radius >= min_label_radius
         and result["vectorizable"]
     )
+    if geometry_out is not None and region_id is not None and result["valid"]:
+        # The already-offset SVG path plus the crop-local label point; the export
+        # loop offsets the point back to the canvas. Only the path string is
+        # kept so the polygon objects do not accumulate in memory.
+        geometry_out[int(region_id)] = (path, float(x), float(y), float(radius))
     return result
 
 
@@ -1657,6 +1670,7 @@ def guarantee_paintable_regions(
     min_area: int,
     min_label_radius: float = 2.25,
     max_passes: int = 8,
+    geometry: dict | None = None,
 ) -> tuple[np.ndarray, dict]:
     """
     Fast validation/repair pass.
@@ -1664,7 +1678,13 @@ def guarantee_paintable_regions(
     Version 12.2 avoids full-canvas distance transforms, contour conversion, and
     neighbor-size scans for every region on every pass. Repair decisions use
     tight crops; full vectorizability validation runs only once after repair.
+
+    When ``geometry`` is supplied it is filled with the vectorized polygon, SVG
+    path and label point of every valid region, so the caller can export those
+    regions without tracing them again.
     """
+    if geometry is not None:
+        geometry.clear()
     repaired = _compact_connected_labels(labels.astype(np.int32))
     history: list[dict] = []
     merged_total = 0
@@ -1732,7 +1752,7 @@ def guarantee_paintable_regions(
     ]
 
     for rid in final_region_ids:
-        mask, _slc = _cropped_region_mask(repaired, rid, final_boxes[rid - 1])
+        mask, slc = _cropped_region_mask(repaired, rid, final_boxes[rid - 1])
         if mask is None:
             continue
         validation = region_mask_validation(
@@ -1740,6 +1760,9 @@ def guarantee_paintable_regions(
             tolerance=tolerance,
             min_area=min_area,
             min_label_radius=min_label_radius,
+            offset=(slc[1].start, slc[0].start),
+            geometry_out=geometry,
+            region_id=rid,
         )
         final_validations[rid] = validation
         if not validation["valid"]:
@@ -1916,7 +1939,12 @@ def mask_polygon(
         if len(contour) < 8:
             continue
 
-        coords = [(float(c) + offset_x, float(r) + offset_y) for r, c in contour]
+        # Assemble the ring as one float array: shapely ingests an (N, 2)
+        # array far faster than a Python list of (x, y) tuples, and this loop
+        # runs once per region on every large upload.
+        coords = np.empty((len(contour), 2), dtype=np.float64)
+        coords[:, 0] = contour[:, 1] + offset_x
+        coords[:, 1] = contour[:, 0] + offset_y
         poly = Polygon(coords)
         if not poly.is_valid:
             poly = poly.buffer(0)
@@ -4330,11 +4358,16 @@ def compile_artwork(
         else tolerance
     )
     minimum_paintable_area = max(10, min(28, min_area // 2))
+    # The paintability engine already vectorizes every surviving region to prove
+    # it is exportable. Keep that geometry so the export loop can reuse it
+    # instead of tracing each region a second time.
+    region_geometry: dict = {}
     regions, paintability_engine_report = guarantee_paintable_regions(
         regions,
         tolerance=validation_tolerance,
         min_area=minimum_paintable_area,
         min_label_radius=2.25,
+        geometry=region_geometry,
     )
     if not paintability_engine_report["passed"]:
         remaining = list(paintability_engine_report.get("remainingInvalid", []))
@@ -4360,6 +4393,7 @@ def compile_artwork(
                 min_area=minimum_paintable_area,
                 min_label_radius=2.25,
                 max_passes=2,
+                geometry=region_geometry,
             )
             paintability_engine_report["fallbackMergedRegions"] = fallback_merged
             paintability_engine_report["fallbackStrategy"] = "merge-last-invalid-once"
@@ -4447,16 +4481,23 @@ def compile_artwork(
         mask = regions[crop] == rid
         area = int(mask.sum())
         region_detail = float(detail_map[crop][mask].mean()) if area else 0.0
-        poly = mask_polygon(mask, validation_tolerance, crop_offset)
-        if poly is None:
-            raise ValueError(
-                f"Validated region {rid} became non-vectorizable during export."
-            )
-        path = polygon_path(poly)
-        if not path:
-            raise ValueError(
-                f"Validated region {rid} produced an empty SVG path."
-            )
+        # The paintability engine already traced this exact crop; reuse its path
+        # and label point instead of vectorizing the region a second time.
+        cached_geometry = region_geometry.get(rid)
+        if cached_geometry is not None:
+            path, x, y, radius = cached_geometry
+        else:
+            poly = mask_polygon(mask, validation_tolerance, crop_offset)
+            if poly is None:
+                raise ValueError(
+                    f"Validated region {rid} became non-vectorizable during export."
+                )
+            path = polygon_path(poly)
+            if not path:
+                raise ValueError(
+                    f"Validated region {rid} produced an empty SVG path."
+                )
+            x, y, radius = label_point(mask)
 
         rendered_coverage[crop] |= mask
         color_id = region_to_color[rid]
@@ -4464,7 +4505,6 @@ def compile_artwork(
         original_fill = rgb_to_hex(
             np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
         )
-        x, y, radius = label_point(mask)
         x, y = x + crop_offset[0], y + crop_offset[1]
         region_id = f"region_{index}"
         region_labels[region_id] = int(rid)
