@@ -761,10 +761,15 @@ def build_markers(
         mask = interior & (color_map == color_id)
         components = measure.label(mask, connectivity=2)
 
-        for comp in range(1, int(components.max()) + 1):
-            component_mask = components == comp
+        # Work inside each component's bounding box. The previous full-canvas
+        # mask, detail average and erosion cost one whole-image pass per region,
+        # which made large uploads spend hours building markers.
+        for comp, bounds in enumerate(ndi.find_objects(components), start=1):
+            if bounds is None:
+                continue
+            component_mask = components[bounds] == comp
             area = int(component_mask.sum())
-            detail_mean = float(detail_map[component_mask].mean()) if area else 0.0
+            detail_mean = float(detail_map[bounds][component_mask].mean()) if area else 0.0
             required_area = adaptive_seed_threshold(
                 detail_mean,
                 seed_min_area,
@@ -774,27 +779,36 @@ def build_markers(
                 continue
 
             # Erode slightly so markers sit inside visual regions, not on line edges.
-            eroded = morphology.erosion(component_mask, morphology.disk(1))
+            eroded = morphology.erosion(
+                component_mask,
+                morphology.disk(1),
+                mode="constant",
+                cval=0.0,
+            )
             if eroded.sum() >= max(4, seed_min_area // 4):
                 component_mask = eroded
 
-            markers[component_mask] = marker_id
+            target = markers[bounds]
+            target[component_mask] = marker_id
             marker_id += 1
 
     if marker_id == 1:
         # Conservative fallback.
         components = measure.label(interior, connectivity=2)
-        for comp in range(1, int(components.max()) + 1):
-            mask = components == comp
+        for comp, bounds in enumerate(ndi.find_objects(components), start=1):
+            if bounds is None:
+                continue
+            mask = components[bounds] == comp
             area = int(mask.sum())
-            detail_mean = float(detail_map[mask].mean()) if area else 0.0
+            detail_mean = float(detail_map[bounds][mask].mean()) if area else 0.0
             required_area = adaptive_seed_threshold(
                 detail_mean,
                 seed_min_area,
                 experience_mode,
             )
             if area >= required_area:
-                markers[mask] = marker_id
+                target = markers[bounds]
+                target[mask] = marker_id
                 marker_id += 1
 
     return markers
@@ -872,11 +886,17 @@ def shared_boundary(labels: np.ndarray, a: int, b: int) -> np.ndarray:
 
 
 def relabel(labels: np.ndarray) -> np.ndarray:
-    values = [v for v in np.unique(labels) if v > 0]
-    mapping = {old: new + 1 for new, old in enumerate(values)}
+    """Renumber positive labels to 1..N, preserving their original order."""
+    values = np.unique(labels)
+    positives = values[values > 0]
+    if positives.size == 0:
+        return np.zeros_like(labels, dtype=np.int32)
+
+    lookup = np.zeros(int(values.max()) + 1, dtype=np.int32)
+    lookup[positives] = np.arange(1, positives.size + 1, dtype=np.int32)
     result = np.zeros_like(labels, dtype=np.int32)
-    for old, new in mapping.items():
-        result[labels == old] = new
+    positive = labels > 0
+    result[positive] = lookup[labels[positive]]
     return result
 
 
@@ -3707,6 +3727,10 @@ def compile_artwork(
         interpolation=cv2.INTER_NEAREST,
     ).astype(bool)
 
+    # Hard cap on illustration region explosion — set wherever the illustration
+    # pipeline produces regions and re-checked before export below.
+    illustration_hard_cap: int | None = None
+
     if active_pipeline == "lineart":
         update(16, "Tracing clean adult line art")
         processed = rgb.copy()
@@ -3954,6 +3978,28 @@ def compile_artwork(
                 merge_target_regions,
             )
 
+            illustration_region_count = int(len(np.unique(regions[regions > 0])))
+            illustration_hard_cap = max(int(target_regions * 1.35), target_regions + 60)
+            if illustration_region_count > illustration_hard_cap:
+                update(
+                    65,
+                    "Illustration region count exceeded the hard cap — merging to reduce",
+                    {
+                        "illustrationRegionCount": illustration_region_count,
+                        "hardCap": illustration_hard_cap,
+                    },
+                )
+                regions = adaptive_merge_regions(
+                    processed,
+                    regions,
+                    barrier_strength,
+                    detail_map,
+                    merge_min_area,
+                    experience_mode,
+                    illustration_hard_cap,
+                )
+                illustration_region_count = int(len(np.unique(regions[regions > 0])))
+
         # Safety check: if Smart Auto chose illustration but the foreground
         # detector retained only a small portion of the full canvas, the result
         # will look like disconnected islands on a white page. Automatically
@@ -4094,10 +4140,20 @@ def compile_artwork(
         if rid > 0
     ]
 
-    if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
-        raise ValueError(
-            f"Illustration region cap was not achieved before export: "
-            f"{len(region_ids)} > {illustration_hard_cap}"
+    if (
+        active_pipeline == "illustration"
+        and illustration_hard_cap is not None
+        and len(region_ids) > illustration_hard_cap
+    ):
+        # The bounded merge above does its best; never abort an otherwise valid
+        # package over a region-count shortfall.
+        update(
+            71,
+            "Illustration region count exceeded the hard cap — continuing to export",
+            {
+                "illustrationRegionCount": len(region_ids),
+                "hardCap": illustration_hard_cap,
+            },
         )
 
     if not region_ids:

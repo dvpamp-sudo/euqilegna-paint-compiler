@@ -68,7 +68,10 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in job.items()
-        if key not in {"workDir", "inputPath", "outputDir", "zipPath", "cancelRequested"}
+        if key not in {
+            "workDir", "inputPath", "outputDir", "zipPath",
+            "cancelRequested", "settings", "resumedAt",
+        }
     }
 
 
@@ -232,6 +235,51 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
             updatedAt=utc_now(),
         )
 
+
+# Compilation runs on a single worker, so an upload interrupted by a service
+# restart — or one that failed on an earlier compiler defect — would otherwise
+# never finish vectorizing and never reach the gallery. Each unfinished upload is
+# re-queued once on startup; run_job records the painting when it completes.
+RESUMABLE_STATUSES = {"queued", "running", "interrupted", "failed"}
+
+
+def resume_unfinished_uploads() -> int:
+    """Restart vectorization for uploaded images that produced no package."""
+    resumed = 0
+    for job in RUNTIME_DB.recent_jobs(200):
+        job_id = job.get("id")
+        if not job_id or job.get("premiumSample"):
+            continue
+        if job.get("status") not in RESUMABLE_STATUSES or job.get("resumedAt"):
+            continue
+
+        input_path = Path(job.get("inputPath") or "")
+        output_dir = Path(job.get("outputDir") or "")
+        if not input_path.is_file() or (output_dir / "metadata.json").is_file():
+            continue
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        job.update(
+            status="queued",
+            stage="Queued (resumed)",
+            percent=0,
+            error=None,
+            cancelRequested=False,
+            resumedAt=utc_now(),
+            updatedAt=utc_now(),
+        )
+        with jobs_lock:
+            jobs[job_id] = job
+        RUNTIME_DB.save_job(job)
+        # Uploads recorded before jobs stored their settings used the canvas
+        # defaults, which is what those images were originally compiled with.
+        executor.submit(run_job, job_id, job.get("settings") or dict(BETA_SETTINGS))
+        resumed += 1
+
+    return resumed
+
+
+RESUMED_ON_STARTUP = resume_unfinished_uploads()
 
 
 @app.get("/beta-test", response_class=HTMLResponse)
@@ -1373,6 +1421,7 @@ def start_job(input_bytes: bytes, filename: str | None, settings: dict[str, Any]
         "outputDir": str(output_dir),
         "zipPath": str(zip_path),
         "cancelRequested": False,
+        "settings": dict(settings),
     }
 
     with jobs_lock:
