@@ -17,7 +17,7 @@ button{font:inherit;touch-action:manipulation}
 .stage{position:relative;display:flex;align-items:center;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
 .board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:20px;overflow:hidden;border:1px solid #4a3a5c;box-shadow:0 40px 90px -30px #000,0 0 0 8px rgba(255,255,255,.03),0 0 60px -20px rgba(138,63,193,.45)}
 .board{display:block;width:100%;height:auto;touch-action:manipulation}
-.zone{fill:#fff;stroke:#2b2233;stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
+.zone{fill:#fff;stroke:#2b2233;stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{animation:paintPop .48s ease}
