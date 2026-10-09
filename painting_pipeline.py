@@ -17,16 +17,18 @@ from testing_runtime_v10 import RuntimeDatabase
 SVG_FILENAME = "paintMap.svg"
 PLAYER_FILENAME = "interactive_player.html"
 
-# Beta uploads target a phone-sized canvas: fewer, larger zones than a print run.
+# Beta uploads aim at a grown-up coloring-book page: the source's ink lines are
+# kept as ink, the palette is deep and the regions small, and the printed
+# outlines stay thin — the detailed line art a marker painter expects.
 BETA_SETTINGS: dict[str, Any] = {
     "preset": "illustration",
-    "design_style": "smart_auto",
-    "colors": 12,
-    "min_region_area": 64,
+    "design_style": "coloring_book",
+    "colors": 20,
+    "min_region_area": 28,
     "experience_mode": "relaxed",
-    "target_regions": 120,
-    "outline_width": 0.38,
-    "simplify_tolerance": 0.35,
+    "target_regions": 360,
+    "outline_width": 0.28,
+    "simplify_tolerance": 0.24,
     "smoothing_passes": 0,
     "auto_crop": True,
     "exclude_background": True,

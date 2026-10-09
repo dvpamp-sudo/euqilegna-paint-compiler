@@ -16,13 +16,14 @@ button{font:inherit;touch-action:manipulation}
 .app{display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:calc(100vh - 152px)}
 .stage{position:relative;display:flex;align-items:center;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
 .board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:20px;overflow:hidden;border:1px solid #4a3a5c;box-shadow:0 40px 90px -30px #000,0 0 0 8px rgba(255,255,255,.03),0 0 60px -20px rgba(138,63,193,.45)}
-.board{display:block;width:100%;height:auto;touch-action:manipulation}
-.zone{fill:#fff;stroke:#2b2233;stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
+.board{--ink:#1b1b1b;display:block;width:100%;height:auto;touch-action:manipulation}
+.zone{fill:#fff;stroke:var(--ink,#1b1b1b);stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{fill:#fff!important;fill-opacity:1}
 .paint-tip{pointer-events:none}
 .zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#paintGrain)}
+.board.markers .zone.done{stroke:var(--ink,#1b1b1b);stroke-opacity:.5;stroke-width:var(--zone-stroke,1.5)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
@@ -147,7 +148,7 @@ button{font:inherit;touch-action:manipulation}
 </section>
 <section class="toolbox">
 <h2>Drawing Tool</h2>
-<p class="toolbox-note">Choose a crayon or a colored pencil — each medium lays down its own stroke and texture.</p>
+<p class="toolbox-note">Choose a marker, a crayon or a colored pencil — each medium lays down its own stroke and texture.</p>
 <div id="toolbox"></div>
 </section>
 <h2>Choose a Color</h2>
@@ -351,6 +352,25 @@ function hatch(u,hex,count,width,opacity,offset){
 }
 
 const TOOLS=[
+  {id:'broad-marker',family:'Markers',label:'Broad Marker',note:'A wide felt tip that floods the zone with flat, even ink.',
+   grain:{frequency:.34,octaves:2,strength:1.5,depth:1.8},angle:-6,tip:'marker',tipScale:1.05,
+   stroke:{ms:820,width:.1,floor:.022,density:.95,minPasses:2,maxPasses:6,opacity:.93,jitter:.05,wobble:.06,cap:'butt',lean:-6,leanJitter:3,sheen:.16},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect x="${u(-.05)}" y="${u(.14)}" width="${u(1.1)}" height="${u(.13)}" fill="#000000" fill-opacity=".08"/>`+
+     `<rect x="${u(-.05)}" y="${u(.72)}" width="${u(1.1)}" height="${u(.1)}" fill="#000000" fill-opacity=".05"/>`+
+     `<rect x="${u(-.05)}" y="${u(.36)}" width="${u(1.1)}" height="${u(.07)}" fill="#ffffff" fill-opacity=".08"/>`},
+  {id:'brush-marker',family:'Markers',label:'Brush Marker',note:'A flexible nib that lays a juicy, see-through wash.',
+   grain:{frequency:.4,octaves:2,strength:1.7,depth:2},angle:-12,tip:'marker',tipScale:1,
+   stroke:{ms:900,width:.12,floor:.02,density:.8,minPasses:3,maxPasses:8,opacity:.6,jitter:.1,wobble:.16,cap:'round',lean:-12,leanJitter:8,wash:.18,sheen:.1},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect x="${u(-.05)}" y="${u(.16)}" width="${u(1.1)}" height="${u(.22)}" fill="#000000" fill-opacity=".05"/>`+
+     `<rect x="${u(-.05)}" y="${u(.58)}" width="${u(1.1)}" height="${u(.28)}" fill="#ffffff" fill-opacity=".07"/>`},
+  {id:'fineliner',family:'Markers',label:'Fineliner',note:'A fine hard nib for tight zones and thin, even lines.',
+   grain:{frequency:.5,octaves:2,strength:1.3,depth:1.6},angle:-30,tip:'marker',tipScale:.8,
+   stroke:{ms:1000,width:.038,floor:.009,density:1.15,minPasses:8,maxPasses:24,opacity:.6,jitter:.05,wobble:.05,cap:'round',lean:-30,leanJitter:4,rag:.25},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<path d="M${u(-.05)} ${u(.34)}H${u(1.05)}" stroke="#000000" stroke-opacity=".07" stroke-width="${u(.1)}"/>`+
+     `<path d="M${u(-.05)} ${u(.68)}H${u(1.05)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.08)}"/>`},
   {id:'wax-crayon',family:'Crayons',label:'Wax Crayon',note:'Broad waxy passes with a heavy paper tooth.',
    grain:{frequency:.62,octaves:4,strength:5,depth:5.4},angle:-32,tip:'crayon',tipScale:1,
    stroke:{ms:1000,width:.08,floor:.016,density:.78,minPasses:3,maxPasses:14,opacity:.88,jitter:.1,wobble:.2,cap:'round',lean:-35,leanJitter:10},
@@ -402,6 +422,8 @@ function buildPaintDefs(){
   const existing=board.querySelector('#paintDefs');
   if(existing) existing.remove();
   const tool=currentTool();
+  /* Marker ink is translucent: the printed line still reads over a painted zone. */
+  board.classList.toggle('markers',tool.family==='Markers');
   const tile=Math.max(10,Math.round(boardUnit()*.035));
   const u=value=>(tile*value).toFixed(2);
   const defs=document.createElementNS(NS,'defs');
@@ -444,7 +466,7 @@ function renderToolbox(){
   buildSampleDefs();
   const ink=COLORS[1]||COLORS[0];
   toolboxEl.innerHTML='';
-  ['Crayons','Colored Pencils'].forEach(family=>{
+  ['Markers','Crayons','Colored Pencils'].forEach(family=>{
     const group=document.createElement('div');
     group.className='tool-group';
     const heading=document.createElement('h3');
@@ -531,7 +553,20 @@ function pencilTip(size,hex){
   `</g>`;
   return tip;
 }
+function markerTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','paint-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<rect x="${u(-.22)}" y="${u(-1.6)}" width="${u(.44)}" height="${u(1.08)}" rx="${u(.12)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.22)}" y="${u(-1.6)}" width="${u(.44)}" height="${u(.3)}" rx="${u(.12)}" fill="#2b2233" fill-opacity=".2"/>`+
+    `<rect x="${u(-.22)}" y="${u(-.72)}" width="${u(.44)}" height="${u(.18)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.17)} ${u(-.54)}H${u(.17)}L${u(.11)} 0H${u(-.11)}Z" fill="${shade(hex,-.22)}" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+  `</g>`;
+  return tip;
+}
 function paintTip(size,hex,tool){
+  if(tool.tip==='marker') return markerTip(size,hex);
   return tool.tip==='pencil'?pencilTip(size,hex):crayonTip(size,hex);
 }
 function sweepPaint(zone,onDone){
@@ -724,8 +759,9 @@ function renderCompiled(art){
   const height=Number(art.height)||600;
   board.setAttribute('viewBox',`0 0 ${width} ${height}`);
   const unit=Math.min(width,height);
-  board.style.setProperty('--zone-stroke',(unit*.0022).toFixed(3));
-  board.style.setProperty('--zone-target-stroke',(unit*.0037).toFixed(3));
+  /* Fine printed line art, the way a grown-up coloring book is drawn. */
+  board.style.setProperty('--zone-stroke',(unit*.0016).toFixed(3));
+  board.style.setProperty('--zone-target-stroke',(unit*.003).toFixed(3));
   COLORS=art.palette.map(item=>item.hex);
   renderToolbox();
   board.innerHTML='';
