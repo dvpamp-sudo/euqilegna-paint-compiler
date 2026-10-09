@@ -65,6 +65,21 @@ def test_canvas_progress_is_kept_per_artwork(tmp_path):
     assert {record.session_id for record in records} == {"session-abc123"}
 
 
+def test_list_canvas_sessions_returns_every_session_newest_first(tmp_path):
+    database = make_database(tmp_path)
+    database.save_canvas_progress(
+        CanvasProgress(session_id="session-older", artwork_key="dahlia-mandala", completed=(1,))
+    )
+    database.save_canvas_progress(
+        CanvasProgress(session_id="session-newer", artwork_key="6f1c9job", completed=(2, 3))
+    )
+
+    sessions = database.list_canvas_sessions()
+
+    assert [session.session_id for session in sessions][0] == "session-newer"
+    assert {session.session_id for session in sessions} == {"session-older", "session-newer"}
+
+
 def test_canvas_progress_ignores_other_sessions(tmp_path):
     database = make_database(tmp_path)
     database.save_canvas_progress(

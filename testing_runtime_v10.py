@@ -377,6 +377,21 @@ class RuntimeDatabase:
             ).fetchall()
         return [_row_to_canvas_progress(row) for row in rows]
 
+    def list_canvas_sessions(self, limit: int = 200) -> list[CanvasProgress]:
+        """Every saved canvas session, most recently painted first."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT session_id,artwork_key,selected,completed_json,
+                       region_total,saves,created_at,updated_at
+                FROM canvas_sessions
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_row_to_canvas_progress(row) for row in rows]
+
     def save_feedback(self, payload: dict[str, Any]) -> int:
         submitted_at = payload.get("submittedAt") or utc_now()
         with self.lock, self.connect() as connection:

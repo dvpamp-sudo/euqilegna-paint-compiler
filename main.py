@@ -330,6 +330,24 @@ def beta_admin_v10():
         "</tr>"
         for row in rows[:200]
     )
+    sessions = RUNTIME_DB.list_canvas_sessions()
+    session_rows = []
+    for session in sessions[:200]:
+        painted = str(len(session.completed))
+        if session.region_total:
+            painted += f" / {session.region_total}"
+        session_rows.append(
+            "<tr>"
+            f"<td>{session.session_id}</td>"
+            f"<td>{session.artwork_key}</td>"
+            f"<td>{painted}</td>"
+            f"<td>{session.saves}</td>"
+            f"<td>{session.updated_at}</td>"
+            "</tr>"
+        )
+    session_table = "".join(session_rows) or (
+        "<tr><td colspan='5'>No canvas sessions saved yet.</td></tr>"
+    )
     return HTMLResponse(f"""<!doctype html><html><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1'>
     <title>Euqilegna Beta Results</title>
@@ -344,6 +362,8 @@ def beta_admin_v10():
     </div>
     <p><a href='/beta/feedback-v10.csv'>Download CSV</a></p>
     <table><thead><tr><th>Date</th><th>Tester</th><th>Device</th><th>Artwork</th><th>Progress</th><th>Pointer</th><th>Comments</th></tr></thead><tbody>{table}</tbody></table>
+    <h2>Saved canvas sessions ({len(sessions)})</h2>
+    <table><thead><tr><th>Session</th><th>Artwork</th><th>Painted regions</th><th>Saves</th><th>Last saved</th></tr></thead><tbody>{session_table}</tbody></table>
     </body></html>""")
 
 
