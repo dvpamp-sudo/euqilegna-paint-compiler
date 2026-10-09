@@ -18,7 +18,7 @@ import csv
 import io
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from admin_dashboard import build_admin_overview, render_admin_dashboard
@@ -746,6 +746,23 @@ def runtime_job_diagnostic(job_id: str):
         "updatedAt": job.get("updatedAt"),
         "persistent": True,
     }
+
+
+FAVICON_SVG = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect width='32' height='32' rx='7' fill='#8a3fc1'/>"
+    "<circle cx='16' cy='16' r='7.5' fill='#d9ad59'/></svg>"
+)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Browsers request /favicon.ico unprompted; answering it keeps the console clean."""
+    return Response(
+        content=FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/health")
