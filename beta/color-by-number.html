@@ -149,6 +149,9 @@ button{font:inherit;touch-action:manipulation}
 'use strict';
 let COLORS=['#2A2633','#73546F','#A96F7B','#D18B87','#E7B49A','#D6B76D'];
 const STORAGE_KEY='euqilegna-color-by-number-beta-v3';
+const SESSION_KEY=`${STORAGE_KEY}-session`;
+const ARTWORK_KEY=`${STORAGE_KEY}-artwork`;
+const BUILTIN_ARTWORK='dahlia-mandala';
 
 const board=document.getElementById('board');
 const paletteEl=document.getElementById('palette');
@@ -170,6 +173,15 @@ let artworkKey='';
 
 function storeKey(){return artworkKey?`${STORAGE_KEY}-${artworkKey}`:STORAGE_KEY;}
 function reviewKey(){return `${storeKey()}-review`;}
+function canvasSession(){
+  let id=safeGet(SESSION_KEY);
+  if(!id){
+    id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():`s${Date.now().toString(36)}${Math.random().toString(36).slice(2,10)}`;
+    safeSet(SESSION_KEY,id);
+  }
+  return id;
+}
+function canvasArtworkKey(){return artworkKey||BUILTIN_ARTWORK;}
 
 function safeSet(key,value){
   try{localStorage.setItem(key,value);return true}catch(error){return false}
@@ -177,10 +189,43 @@ function safeSet(key,value){
 function safeGet(key){
   try{return localStorage.getItem(key)}catch(error){return null}
 }
+function progressSnapshot(){
+  return {version:3,selected,completed:[...completed],savedAt:new Date().toISOString()};
+}
+function saveLocal(){
+  return safeSet(storeKey(),JSON.stringify(progressSnapshot()));
+}
+/* The browser stays the fast path; every save also mirrors into the SQLite session. */
+let studioSyncTimer=null;
+function saveToStudio(immediate=false){
+  const payload={
+    sessionId:canvasSession(),
+    artworkKey:canvasArtworkKey(),
+    selected,
+    completed:[...completed],
+    regionTotal:zones.length,
+  };
+  const send=async()=>{
+    try{
+      const response=await fetch('/api/canvas/progress',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      if(!response.ok) throw new Error('Studio save rejected');
+      if(immediate) saveNoteEl.textContent='Progress saved to the studio database.';
+    }catch(error){
+      saveNoteEl.textContent='Saved on this device — the studio copy will sync when you are back online.';
+    }
+  };
+  clearTimeout(studioSyncTimer);
+  if(immediate) send(); else studioSyncTimer=setTimeout(send,700);
+}
 function saveProgress(show=false){
-  const data={version:3,selected,completed:[...completed],savedAt:new Date().toISOString()};
+  const data=progressSnapshot();
   const ok=safeSet(storeKey(),JSON.stringify(data));
   if(show) saveNoteEl.textContent=ok?'Progress saved.':'Storage is blocked; use Download Progress.';
+  saveToStudio(show);
   return data;
 }
 function bindZones(){
@@ -477,6 +522,42 @@ function renderCompiled(art){
   render();
 }
 
+async function loadCompiledArtwork(key){
+  try{
+    const response=await fetch(`/jobs/${encodeURIComponent(key)}/artwork`);
+    if(!response.ok) throw new Error('Saved artwork is no longer available');
+    renderCompiled(await response.json());
+    artworkKey=key;
+    safeSet(ARTWORK_KEY,key);
+    return true;
+  }catch(error){
+    if(safeGet(ARTWORK_KEY)===key) safeSet(ARTWORK_KEY,'');
+    return false;
+  }
+}
+
+/* The studio copy only wins over the browser copy when it was saved later. */
+async function resumeFromStudio(local){
+  try{
+    const response=await fetch(`/api/canvas/progress/${encodeURIComponent(canvasSession())}`);
+    if(!response.ok) return;
+    const {records}=await response.json();
+    if(!Array.isArray(records)||!records.length) return;
+    const key=canvasArtworkKey();
+    const record=records.find(item=>item.artworkKey===key)||records[0];
+    if(!record) return;
+    const studioTime=Date.parse(record.updatedAt||'');
+    const localTime=Date.parse((local&&local.savedAt)||'');
+    if(localTime&&studioTime&&studioTime<=localTime) return;
+    if(record.artworkKey!==key&&!await loadCompiledArtwork(record.artworkKey)) return;
+    completed=new Set((record.completed||[]).map(Number));
+    selected=Math.max(1,Math.min(COLORS.length,Number(record.selected||1)));
+    saveLocal();
+    render();
+    saveNoteEl.textContent=`Resumed your saved progress — ${completed.size} region${completed.size===1?'':'s'} restored.`;
+  }catch(error){}
+}
+
 async function pollCompile(jobId){
   for(;;){
     const response=await fetch(`/jobs/${jobId}`);
@@ -504,6 +585,7 @@ async function pollCompile(jobId){
   }
   const data=await artwork.json();
   artworkKey=jobId;
+  safeSet(ARTWORK_KEY,jobId);
   renderCompiled(data);
   compileOverlay.classList.remove('show');
   compileButton.disabled=false;
@@ -553,7 +635,7 @@ document.getElementById('save').onclick=()=>saveProgress(true);
 document.getElementById('reset').onclick=()=>{
   if(!confirm('Reset all Color-by-Number progress?')) return;
   clearSweeps();
-  completed.clear();history=[];safeSet(storeKey(),'');completeOverlay.classList.remove('show');render();
+  completed.clear();history=[];safeSet(storeKey(),'');completeOverlay.classList.remove('show');render();saveToStudio(true);
 };
 document.getElementById('downloadProgress').onclick=()=>downloadJson(saveProgress(false),'euqilegna-color-by-number-progress.json');
 document.getElementById('closeComplete').onclick=()=>completeOverlay.classList.remove('show');
@@ -566,15 +648,24 @@ document.getElementById('saveReview').onclick=()=>{
 
 bindZones();
 addLabels();
-try{
-  const saved=JSON.parse(safeGet(storeKey())||'null');
-  if(saved){
-    selected=Number(saved.selected||1);
-    (saved.completed||[]).forEach(index=>completed.add(Number(index)));
-  }
-}catch(error){}
 reviewNote.value=safeGet(reviewKey())||'';
-render();
+async function bootstrap(){
+  const storedArtwork=safeGet(ARTWORK_KEY);
+  if(storedArtwork) await loadCompiledArtwork(storedArtwork);
+  let local=null;
+  try{
+    local=JSON.parse(safeGet(storeKey())||'null');
+  }catch(error){
+    local=null;
+  }
+  if(local){
+    selected=Math.max(1,Math.min(COLORS.length,Number(local.selected||1)));
+    (local.completed||[]).forEach(index=>completed.add(Number(index)));
+  }
+  render();
+  await resumeFromStudio(local);
+}
+bootstrap();
 </script>
 </body>
 </html>

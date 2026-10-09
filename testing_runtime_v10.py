@@ -12,6 +12,7 @@ import os
 import secrets
 import sqlite3
 
+from canvas_progress import CanvasProgress
 from paintings import Painting, PaintingStatus
 
 
@@ -103,6 +104,18 @@ class RuntimeDatabase:
                     player_path TEXT,
                     region_count INTEGER,
                     color_count INTEGER
+                );
+
+                CREATE TABLE IF NOT EXISTS canvas_sessions (
+                    session_id TEXT NOT NULL,
+                    artwork_key TEXT NOT NULL,
+                    selected INTEGER NOT NULL DEFAULT 1,
+                    completed_json TEXT NOT NULL DEFAULT '[]',
+                    region_total INTEGER,
+                    saves INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (session_id, artwork_key)
                 );
                 """
             )
@@ -308,6 +321,62 @@ class RuntimeDatabase:
             rows = connection.execute(query, params).fetchall()
         return [_row_to_painting(row) for row in rows]
 
+    def save_canvas_progress(self, progress: CanvasProgress) -> CanvasProgress:
+        """Store a session's canvas state, creating the row or updating it in place."""
+        now = utc_now()
+        with self.lock, self.connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT created_at,saves FROM canvas_sessions
+                WHERE session_id=? AND artwork_key=?
+                """,
+                (progress.session_id, progress.artwork_key),
+            ).fetchone()
+            progress.created_at = existing["created_at"] if existing else now
+            progress.saves = int(existing["saves"]) + 1 if existing else 1
+            progress.updated_at = now
+            connection.execute(
+                """
+                INSERT INTO canvas_sessions(
+                    session_id,artwork_key,selected,completed_json,
+                    region_total,saves,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(session_id,artwork_key) DO UPDATE SET
+                    selected=excluded.selected,
+                    completed_json=excluded.completed_json,
+                    region_total=excluded.region_total,
+                    saves=excluded.saves,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    progress.session_id,
+                    progress.artwork_key,
+                    int(progress.selected),
+                    json.dumps(list(progress.completed)),
+                    progress.region_total,
+                    progress.saves,
+                    progress.created_at,
+                    progress.updated_at,
+                ),
+            )
+        return progress
+
+    def load_canvas_session(self, session_id: str, limit: int = 20) -> list[CanvasProgress]:
+        """Every artwork this session painted, most recently saved first."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT session_id,artwork_key,selected,completed_json,
+                       region_total,saves,created_at,updated_at
+                FROM canvas_sessions
+                WHERE session_id=?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return [_row_to_canvas_progress(row) for row in rows]
+
     def save_feedback(self, payload: dict[str, Any]) -> int:
         submitted_at = payload.get("submittedAt") or utc_now()
         with self.lock, self.connect() as connection:
@@ -392,6 +461,23 @@ class RuntimeDatabase:
                 (code,),
             )
             return True
+
+
+def _row_to_canvas_progress(row: sqlite3.Row) -> CanvasProgress:
+    try:
+        completed = tuple(int(value) for value in json.loads(row["completed_json"] or "[]"))
+    except (TypeError, ValueError):
+        completed = ()
+    return CanvasProgress(
+        session_id=row["session_id"],
+        artwork_key=row["artwork_key"],
+        selected=int(row["selected"] or 1),
+        completed=completed,
+        region_total=row["region_total"],
+        saves=int(row["saves"] or 0),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
 
 
 def _row_to_painting(row: sqlite3.Row) -> Painting:

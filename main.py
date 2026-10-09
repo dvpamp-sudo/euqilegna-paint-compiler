@@ -13,6 +13,7 @@ import time
 import zipfile
 import json
 import os
+import re
 import csv
 import io
 
@@ -20,6 +21,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from canvas_progress import CanvasProgress
 from compiler import compile_artwork
 from painting_pipeline import BETA_SETTINGS, record_painting
 from studio_config import (
@@ -607,6 +609,78 @@ def painting_preview(painting_id: str):
         raise HTTPException(status_code=404, detail="No preview image for this painting.")
 
     return FileResponse(path)
+
+
+# Canvas sessions stay anonymous: the browser generates a session id, paints
+# offline-first from localStorage, and mirrors every save into SQLite so the
+# painting can be picked up again even when that browser storage is gone.
+CANVAS_MAX_SESSION = 64
+CANVAS_MAX_ARTWORK = 80
+CANVAS_MAX_REGIONS = 5000
+CANVAS_BUILTIN_ARTWORK = "dahlia-mandala"
+
+
+def canvas_token(value: Any, limit: int) -> str:
+    """Keep session ids and artwork keys to a bounded, safe token."""
+    text = str(value or "").strip()
+    if not text or len(text) > limit:
+        return ""
+    return text if re.fullmatch(r"[A-Za-z0-9_-]+", text) else ""
+
+
+def canvas_completed(value: Any) -> tuple[int, ...]:
+    """The painted region indices of a save: unique, non-negative, bounded."""
+    if not isinstance(value, (list, tuple)):
+        return ()
+    indices = set()
+    for item in value[:CANVAS_MAX_REGIONS]:
+        if isinstance(item, bool):
+            continue
+        try:
+            index = int(item)
+        except (TypeError, ValueError):
+            continue
+        if index >= 0:
+            indices.add(index)
+    return tuple(sorted(indices))
+
+
+def as_int_or(value: Any, default: int | None) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@app.post("/api/canvas/progress")
+async def save_canvas_progress(request: Request):
+    """Persist the canvas state of one session so it can be resumed later."""
+    payload = await request.json()
+    session_id = canvas_token(payload.get("sessionId"), CANVAS_MAX_SESSION)
+    if not session_id:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    region_total = as_int_or(payload.get("regionTotal"), None)
+    progress = CanvasProgress(
+        session_id=session_id,
+        artwork_key=canvas_token(payload.get("artworkKey"), CANVAS_MAX_ARTWORK) or CANVAS_BUILTIN_ARTWORK,
+        selected=max(1, as_int_or(payload.get("selected"), 1) or 1),
+        completed=canvas_completed(payload.get("completed")),
+        region_total=max(0, region_total) if region_total else None,
+    )
+    return {"ok": True, "record": RUNTIME_DB.save_canvas_progress(progress).to_dict()}
+
+
+@app.get("/api/canvas/progress/{session_id}")
+def canvas_session_progress(session_id: str):
+    """Everything a session saved, the most recently painted artwork first."""
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+    return {
+        "ok": True,
+        "records": [record.to_dict() for record in RUNTIME_DB.load_canvas_session(token)],
+    }
 
 
 @app.get("/api/catalog")
