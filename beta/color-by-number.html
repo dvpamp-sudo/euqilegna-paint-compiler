@@ -77,6 +77,18 @@ button{font:inherit;touch-action:manipulation}
 .upload button{width:100%;padding:12px;border-radius:11px;border:0;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;font-weight:900;cursor:pointer}
 .upload button:disabled{opacity:.55;cursor:progress}
 .upload-note{color:var(--muted);font-size:12.5px;margin:8px 0 0;min-height:16px}
+.designs{margin-bottom:18px;border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card)}
+.designs h3{margin:0 0 6px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
+.designs p{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 10px}
+.design-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.design-chip{display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:11px;border:1px solid var(--line);background:#1b1526;color:#f2e9f8;font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-align:left}
+.design-chip:hover{border-color:var(--purple2)}
+.design-chip img{width:100%;height:60px;object-fit:cover;border-radius:7px;display:block;background:#0d0913}
+.design-add{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.design-add input[type=file]{width:100%;color:var(--muted);font-size:12.5px}
+.design-add input[type=file]::file-selector-button{margin-right:8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font:inherit;font-weight:700;cursor:pointer}
+.design-add button{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font-weight:800;cursor:pointer}
+.design-add button:disabled{opacity:.5;cursor:progress}
 .compile-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.86);backdrop-filter:blur(3px);text-align:center;padding:24px}
 .compile-overlay.show{display:grid}
 .compile-card{background:linear-gradient(180deg,#1d1528,#150f1e);border:1px solid #4a3a5c;border-radius:18px;padding:24px;max-width:400px;width:100%;color:#f4ecfa;box-shadow:0 30px 70px -20px #000}
@@ -122,6 +134,16 @@ button{font:inherit;touch-action:manipulation}
 <input id="artworkFile" type="file" accept="image/png,image/jpeg,image/webp">
 <button id="compileButton" type="button">Compile My Image</button>
 <p id="uploadNote" class="upload-note"></p>
+</section>
+<section class="designs">
+<h3>More Designs</h3>
+<p>Pick one of the studio's color-by-number designs, or add your own image to the library.</p>
+<div id="designs" class="design-grid"></div>
+<div class="design-add">
+<input id="designFile" type="file" accept="image/png,image/jpeg,image/webp">
+<button id="addDesignButton" type="button">Add to Design Library</button>
+</div>
+<p id="designNote" class="upload-note"></p>
 </section>
 <section class="toolbox">
 <h2>Drawing Tool</h2>
@@ -692,6 +714,10 @@ const compilePercent=document.getElementById('compilePercent');
 const artworkFile=document.getElementById('artworkFile');
 const compileButton=document.getElementById('compileButton');
 const uploadNote=document.getElementById('uploadNote');
+const designsEl=document.getElementById('designs');
+const designFile=document.getElementById('designFile');
+const addDesignButton=document.getElementById('addDesignButton');
+const designNote=document.getElementById('designNote');
 
 function renderCompiled(art){
   const width=Number(art.width)||800;
@@ -817,6 +843,83 @@ compileButton.onclick=async()=>{
     compileButton.disabled=false;
   }
 };
+/* The studio design library: paint one of its designs, or add a new image to it. */
+function designChip(slug,title,imageUrl){
+  const chip=document.createElement('button');
+  chip.type='button';
+  chip.className='design-chip';
+  chip.dataset.slug=slug;
+  if(imageUrl){
+    const img=document.createElement('img');
+    img.src=imageUrl;
+    img.alt='';
+    img.loading='lazy';
+    chip.appendChild(img);
+  }
+  const label=document.createElement('span');
+  label.textContent=title;
+  chip.appendChild(label);
+  return chip;
+}
+function renderDesigns(list){
+  designsEl.innerHTML='';
+  designsEl.appendChild(designChip('__builtin__','Dahlia Mandala',null));
+  list.forEach(item=>designsEl.appendChild(designChip(item.slug,item.title,item.imageUrl)));
+}
+async function loadDesigns(){
+  try{
+    const response=await fetch('/api/designs',{cache:'no-store'});
+    if(!response.ok) throw new Error('Designs unavailable');
+    const data=await response.json();
+    renderDesigns(Array.isArray(data.designs)?data.designs:[]);
+  }catch(error){
+    renderDesigns([]);
+  }
+}
+async function openDesign(slug){
+  if(slug==='__builtin__'){
+    safeSet(ARTWORK_KEY,'');
+    window.location.reload();
+    return;
+  }
+  compileOverlay.classList.add('show');
+  compileStage.textContent='Opening design…';
+  compileBar.style.width='0%';
+  compilePercent.textContent='0%';
+  try{
+    const response=await fetch(`/api/designs/${encodeURIComponent(slug)}/compile`,{method:'POST'});
+    if(!response.ok) throw new Error('Design unavailable');
+    const {jobId}=await response.json();
+    await pollCompile(jobId);
+    designNote.textContent=`Now painting ${slug.replace(/[-_]+/g,' ')}.`;
+  }catch(error){
+    compileOverlay.classList.remove('show');
+    designNote.textContent='That design could not be opened.';
+  }
+}
+designsEl.addEventListener('click',event=>{
+  const chip=event.target.closest('button.design-chip');
+  if(chip) openDesign(chip.dataset.slug);
+});
+addDesignButton.onclick=async()=>{
+  const file=designFile.files&&designFile.files[0];
+  if(!file){designNote.textContent='Choose an image first.';return}
+  addDesignButton.disabled=true;
+  designNote.textContent='Adding your design…';
+  try{
+    const body=new FormData();
+    body.append('file',file);
+    const response=await fetch('/api/designs',{method:'POST',body});
+    if(!response.ok) throw new Error('Add failed');
+    designFile.value='';
+    designNote.textContent='Added — it is in the list above.';
+    await loadDesigns();
+  }catch(error){
+    designNote.textContent='Could not add that image.';
+  }finally{
+    addDesignButton.disabled=false;
+  }
+};
 function showNext(){
   const item=zones.find((zone,index)=>Number(zone.dataset.c)===selected&&!completed.has(index));
   if(!item){statusEl.textContent=`Color ${selected} is complete.`;return}
@@ -870,6 +973,7 @@ async function bootstrap(){
   render();
   await resumeFromStudio(local);
 }
+loadDesigns();
 bootstrap();
 </script>
 </body>

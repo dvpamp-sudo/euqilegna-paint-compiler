@@ -1667,6 +1667,108 @@ async def upload_painting(file: UploadFile = File(...)):
     return {"jobId": job_id}
 
 
+# ---- Color-by-Number design library --------------------------------------
+# The ``designs/`` folder holds the images the studio offers in the Color-by-
+# Number demo. A design is compiled once with the same settings as an upload
+# and the resulting job id is cached, so later painters open it instantly.
+DESIGN_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+DESIGNS_DIR = PROJECT_ROOT / "designs"
+DESIGN_CACHE_PATH = RUNTIME_DATA_DIR / "design_cache.json"
+
+
+def design_images() -> dict[str, Path]:
+    """Every design image in ``designs/``, keyed by its filename slug."""
+    if not DESIGNS_DIR.is_dir():
+        return {}
+    return {
+        entry.stem: entry
+        for entry in sorted(DESIGNS_DIR.iterdir())
+        if entry.is_file() and entry.suffix.lower() in DESIGN_IMAGE_SUFFIXES
+    }
+
+
+def design_title(slug: str) -> str:
+    """A readable title for a design, drawn from its filename."""
+    words = [word for word in re.split(r"[-_]+", slug) if word]
+    return " ".join(word.capitalize() for word in words) or slug
+
+
+def load_design_cache() -> dict[str, str]:
+    try:
+        data = json.loads(DESIGN_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_design_cache(cache: dict[str, str]) -> None:
+    try:
+        DESIGN_CACHE_PATH.write_text(json.dumps(cache), encoding="utf-8")
+    except OSError:
+        pass
+
+
+@app.get("/api/designs")
+def list_designs():
+    """The studio designs a tester can paint, in filename order."""
+    return {
+        "designs": [
+            {"slug": slug, "title": design_title(slug), "imageUrl": f"/designs/{path.name}"}
+            for slug, path in design_images().items()
+        ]
+    }
+
+
+@app.post("/api/designs")
+async def add_design(file: UploadFile = File(...)):
+    """Save an image into the shared design library so everyone can paint it."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in DESIGN_IMAGE_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Upload a PNG, JPEG, or WebP image.")
+
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(file.filename or "").stem).strip("-_")
+    if not slug:
+        raise HTTPException(status_code=400, detail="Give the image a usable filename.")
+
+    DESIGNS_DIR.mkdir(parents=True, exist_ok=True)
+    (DESIGNS_DIR / f"{slug}{suffix}").write_bytes(await file.read())
+    return {"ok": True, "slug": slug, "title": design_title(slug)}
+
+
+@app.get("/designs/{filename}")
+def design_image(filename: str):
+    safe_name = Path(filename).name
+    if safe_name != filename or Path(safe_name).suffix.lower() not in DESIGN_IMAGE_SUFFIXES:
+        raise HTTPException(status_code=404, detail="Design image not found.")
+
+    designs_dir = DESIGNS_DIR.resolve()
+    path = (designs_dir / safe_name).resolve()
+    if path.parent != designs_dir or not path.is_file():
+        raise HTTPException(status_code=404, detail="Design image not found.")
+
+    return FileResponse(path)
+
+
+@app.post("/api/designs/{slug}/compile")
+def compile_design(slug: str):
+    """Compile a design once and return its job, reusing a cached job after that."""
+    path = design_images().get(slug)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Design not found.")
+
+    cache = load_design_cache()
+    cached = cache.get(slug)
+    if cached:
+        job = get_job_record(cached)
+        if job and job.get("status") == "complete":
+            return {"jobId": cached, "cached": True}
+
+    job_id = start_job(path.read_bytes(), path.name, dict(BETA_SETTINGS))
+    cache[slug] = job_id
+    save_design_cache(cache)
+    return {"jobId": job_id, "cached": False}
+
+
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
     job = get_job_record(job_id)
