@@ -22,8 +22,7 @@ button{font:inherit;touch-action:manipulation}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{fill:#fff!important;fill-opacity:1}
 .paint-tip{pointer-events:none}
-.zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#paintGrain)}
-.board.markers .zone.done{stroke:var(--ink,#1b1b1b);stroke-opacity:.5;stroke-width:var(--zone-stroke,1.5)}
+.zone.done{stroke:var(--ink,#1b1b1b);stroke-opacity:.5;stroke-width:var(--zone-stroke,1.5);fill-opacity:.97;filter:url(#paintGrain)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
@@ -331,12 +330,14 @@ function highlight(){
    Drawing tools
    A medium is two things at once: the dried texture a finished zone keeps (its
    pattern + paper grain) and the stroke the hand lays down while painting it.
-   `grain.strength` is how much bare paper shows through a dried region: 0 is flat
-   ink, and the filter normalises the noise so the region stays opaque on average
-   instead of being half masked away (which read as static). Markers sit lowest,
-   crayons highest — the studio's own "flat ink / heavy paper tooth" split.
-   Crayons press broad waxy pads and work back and forth; colored pencils hatch
-   thin lines one way and let the paper show through.
+   `grain.strength` is the paper tooth the dried region keeps: 0 is flat ink, and the
+   filter spends it mostly on the colour (a fine shading of the pigment) and only a
+   little on its opacity, so a finished zone stays dense and opaque the way a
+   coloured-pencil fill does instead of being half masked away into static. Markers
+   sit lowest, crayons highest. Crayons press broad waxy pads and work back and
+   forth; colored pencils hatch thin lines one way and cross them the other, letting
+   the under-colour show through the over-colour as the pigment layers up. Every
+   medium finishes with the page's own thin dark outline still readable on top.
 --------------------------------------------------------------------------- */
 const TOOL_KEY=`${STORAGE_KEY}-tool`;
 
@@ -354,30 +355,40 @@ function hatch(u,hex,count,width,opacity,offset){
   }
   return markup;
 }
+/* Pencil pigment goes down one way and then across the other, so the lines cross
+   and the under-colour shows through the over-colour. Perpendicular lines cross
+   the tile edge straight, so the hatch stays continuous tile to tile. */
+function crossHatch(u,hex,count,width,opacity,offset){
+  let markup='';
+  for(let index=0;index<count;index++){
+    markup+=`<path d="M${u((index+offset)/count)} ${u(-.08)}V${u(1.08)}" stroke="${hex}" stroke-opacity="${opacity}" stroke-width="${u(width)}"/>`;
+  }
+  return markup;
+}
 
 const TOOLS=[
   {id:'broad-marker',family:'Markers',label:'Broad Marker',note:'A wide felt tip that floods the zone with flat, even ink.',
-   grain:{frequency:.34,octaves:2,strength:.3},angle:-6,tip:'marker',tipScale:1.05,
-   stroke:{ms:820,width:.1,floor:.022,density:.95,minPasses:2,maxPasses:6,opacity:.93,jitter:.05,wobble:.06,cap:'butt',lean:-6,leanJitter:3,sheen:.16},
+   grain:{frequency:.7,octaves:2,strength:.22},angle:-6,tip:'marker',tipScale:1.05,
+   stroke:{ms:820,width:.1,floor:.022,density:1.05,minPasses:2,maxPasses:6,opacity:.93,jitter:.05,wobble:.06,cap:'butt',lean:-6,leanJitter:3,sheen:.16},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
      `<rect x="${u(-.05)}" y="${u(.14)}" width="${u(1.1)}" height="${u(.13)}" fill="#000000" fill-opacity=".08"/>`+
      `<rect x="${u(-.05)}" y="${u(.72)}" width="${u(1.1)}" height="${u(.1)}" fill="#000000" fill-opacity=".05"/>`+
      `<rect x="${u(-.05)}" y="${u(.36)}" width="${u(1.1)}" height="${u(.07)}" fill="#ffffff" fill-opacity=".08"/>`},
   {id:'brush-marker',family:'Markers',label:'Brush Marker',note:'A flexible nib that lays a juicy, see-through wash.',
-   grain:{frequency:.4,octaves:2,strength:.34},angle:-12,tip:'marker',tipScale:1,
-   stroke:{ms:900,width:.12,floor:.02,density:.8,minPasses:3,maxPasses:8,opacity:.6,jitter:.1,wobble:.16,cap:'round',lean:-12,leanJitter:8,wash:.18,sheen:.1},
+   grain:{frequency:.78,octaves:2,strength:.26},angle:-12,tip:'marker',tipScale:1,
+   stroke:{ms:900,width:.12,floor:.02,density:.88,minPasses:3,maxPasses:8,opacity:.6,jitter:.1,wobble:.16,cap:'round',lean:-12,leanJitter:8,wash:.18,sheen:.1},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
      `<rect x="${u(-.05)}" y="${u(.16)}" width="${u(1.1)}" height="${u(.22)}" fill="#000000" fill-opacity=".05"/>`+
      `<rect x="${u(-.05)}" y="${u(.58)}" width="${u(1.1)}" height="${u(.28)}" fill="#ffffff" fill-opacity=".07"/>`},
   {id:'fineliner',family:'Markers',label:'Fineliner',note:'A fine hard nib for tight zones and thin, even lines.',
-   grain:{frequency:.5,octaves:2,strength:.26},angle:-30,tip:'marker',tipScale:.8,
-   stroke:{ms:1000,width:.038,floor:.009,density:1.15,minPasses:8,maxPasses:24,opacity:.6,jitter:.05,wobble:.05,cap:'round',lean:-30,leanJitter:4,rag:.25},
+   grain:{frequency:.9,octaves:2,strength:.2},angle:-30,tip:'marker',tipScale:.8,
+   stroke:{ms:1000,width:.038,floor:.009,density:1.25,minPasses:8,maxPasses:24,opacity:.6,jitter:.05,wobble:.05,cap:'round',lean:-30,leanJitter:4,rag:.25},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
      `<path d="M${u(-.05)} ${u(.34)}H${u(1.05)}" stroke="#000000" stroke-opacity=".07" stroke-width="${u(.1)}"/>`+
      `<path d="M${u(-.05)} ${u(.68)}H${u(1.05)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.08)}"/>`},
   {id:'wax-crayon',family:'Crayons',label:'Wax Crayon',note:'Broad waxy passes with a heavy paper tooth.',
-   grain:{frequency:.62,octaves:4,strength:.62},angle:-32,tip:'crayon',tipScale:1,
-   stroke:{ms:1000,width:.08,floor:.016,density:.78,minPasses:3,maxPasses:14,opacity:.88,jitter:.1,wobble:.2,cap:'round',lean:-35,leanJitter:10},
+   grain:{frequency:.82,octaves:2,strength:.5},angle:-32,tip:'crayon',tipScale:1,
+   stroke:{ms:1000,width:.08,floor:.016,density:.9,minPasses:3,maxPasses:14,opacity:.88,jitter:.1,wobble:.2,cap:'round',lean:-35,leanJitter:10},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
      `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`+
      `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`+
@@ -385,8 +396,8 @@ const TOOLS=[
      `<ellipse cx="${u(.3)}" cy="${u(.38)}" rx="${u(.22)}" ry="${u(.1)}" fill="#ffffff" fill-opacity=".10"/>`+
      `<ellipse cx="${u(.72)}" cy="${u(.72)}" rx="${u(.18)}" ry="${u(.08)}" fill="#000000" fill-opacity=".06"/>`},
   {id:'soft-pastel',family:'Crayons',label:'Soft Pastel',note:'Chalky layers of pigment that stay see-through.',
-   grain:{frequency:.4,octaves:3,strength:.66},angle:-18,tip:'crayon',tipScale:1.12,
-   stroke:{ms:1150,width:.115,floor:.022,density:1.05,minPasses:3,maxPasses:9,opacity:.6,jitter:.18,wobble:.32,cap:'round',lean:-28,leanJitter:14},
+   grain:{frequency:.76,octaves:2,strength:.54},angle:-18,tip:'crayon',tipScale:1.12,
+   stroke:{ms:1150,width:.115,floor:.022,density:1.15,minPasses:3,maxPasses:9,opacity:.6,jitter:.18,wobble:.32,cap:'round',lean:-28,leanJitter:14},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".94"/>`+
      `<rect x="${u(-.05)}" y="${u(.05)}" width="${u(1.1)}" height="${u(.4)}" fill="#ffffff" fill-opacity=".10"/>`+
      `<rect x="${u(-.05)}" y="${u(.6)}" width="${u(1.1)}" height="${u(.24)}" fill="#000000" fill-opacity=".05"/>`+
@@ -394,7 +405,7 @@ const TOOLS=[
      `<ellipse cx="${u(.7)}" cy="${u(.76)}" rx="${u(.26)}" ry="${u(.12)}" fill="#000000" fill-opacity=".06"/>`+
      `<circle cx="${u(.56)}" cy="${u(.12)}" r="${u(.06)}" fill="#ffffff" fill-opacity=".16"/>`},
   {id:'metallic',family:'Crayons',label:'Metallic',note:'Sheened wax that catches the light as you draw.',
-   grain:{frequency:.85,octaves:4,strength:.6},angle:-50,tip:'crayon',tipScale:.95,
+   grain:{frequency:.95,octaves:2,strength:.46},angle:-50,tip:'crayon',tipScale:.95,
    stroke:{ms:950,width:.06,floor:.014,density:.58,minPasses:4,maxPasses:12,opacity:.9,jitter:.06,wobble:.12,cap:'round',lean:-50,leanJitter:6,sheen:.5},
    pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
      `<rect width="${u(1)}" height="${u(1)}" fill="${shade(hex,-.5)}" fill-opacity=".6"/>`+
@@ -402,18 +413,22 @@ const TOOLS=[
      `<path d="M${u(-.06)} ${u(.44)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".18" stroke-width="${u(.32)}" stroke-linecap="round"/>`+
      `<path d="M${u(-.06)} ${u(.79)}H${u(1.06)}" stroke="#000000" stroke-opacity=".16" stroke-width="${u(.16)}" stroke-linecap="round"/>`},
   {id:'colored-pencil',family:'Colored Pencils',label:'Colored Pencil',note:'Fine hatching from a hard, sharp point.',
-   grain:{frequency:.72,octaves:3,strength:.56},angle:-38,tip:'pencil',tipScale:.72,
-   stroke:{ms:1250,width:.048,floor:.011,density:.62,minPasses:9,maxPasses:22,opacity:.4,jitter:.16,wobble:.1,cap:'butt',lean:-38,leanJitter:3,rag:.9},
-   pattern:(hex,u)=>hatch(u,hex,5,.15,.72,.12)+hatch(u,shade(hex,-.25),5,.1,.3,.42)+hatch(u,shade(hex,.35),5,.08,.22,.8)},
+   grain:{frequency:.88,octaves:2,strength:.46},angle:-38,tip:'pencil',tipScale:.72,
+   stroke:{ms:1250,width:.03,floor:.009,density:.9,minPasses:12,maxPasses:30,opacity:.42,jitter:.16,wobble:.1,cap:'butt',lean:-38,leanJitter:3,rag:.9},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".8"/>`+
+     hatch(u,hex,5,.15,.7,.12)+hatch(u,shade(hex,-.28),5,.11,.32,.42)+hatch(u,shade(hex,.4),5,.07,.2,.8)+
+     crossHatch(u,shade(hex,-.18),6,.06,.16,.3)},
   {id:'soft-core',family:'Colored Pencils',label:'Soft Core',note:'Denser shading that fills the paper tooth faster.',
-   grain:{frequency:.55,octaves:4,strength:.6},angle:-34,tip:'pencil',tipScale:.8,
-   stroke:{ms:1100,width:.075,floor:.015,density:.52,minPasses:6,maxPasses:15,opacity:.52,jitter:.14,wobble:.13,cap:'round',lean:-30,leanJitter:8,rag:.5},
-   pattern:(hex,u)=>hatch(u,hex,6,.24,.6,.1)+hatch(u,shade(hex,-.22),6,.18,.28,.34)+hatch(u,shade(hex,.3),6,.1,.16,.7)},
+   grain:{frequency:.84,octaves:2,strength:.44},angle:-34,tip:'pencil',tipScale:.8,
+   stroke:{ms:1100,width:.045,floor:.012,density:.78,minPasses:9,maxPasses:20,opacity:.44,jitter:.14,wobble:.13,cap:'round',lean:-30,leanJitter:8,rag:.5},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".82"/>`+
+     hatch(u,hex,6,.24,.55,.1)+hatch(u,shade(hex,-.26),6,.19,.3,.34)+hatch(u,shade(hex,.34),6,.09,.16,.7)+
+     crossHatch(u,shade(hex,-.14),5,.08,.14,.5)},
   {id:'watercolor-pencil',family:'Colored Pencils',label:'Watercolor',note:'A damp wash that bleeds under the strokes.',
-   grain:{frequency:.45,octaves:3,strength:.52},angle:-24,tip:'pencil',tipScale:.82,
-   stroke:{ms:1200,width:.1,floor:.02,density:.5,minPasses:4,maxPasses:10,opacity:.34,jitter:.2,wobble:.3,cap:'round',lean:-24,leanJitter:16,wash:.22},
-   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".18"/>`+
-     hatch(u,hex,3,.46,.22,.2)+hatch(u,shade(hex,-.2),3,.34,.18,.62)}
+   grain:{frequency:.78,octaves:2,strength:.36},angle:-24,tip:'pencil',tipScale:.82,
+   stroke:{ms:1200,width:.07,floor:.016,density:.65,minPasses:5,maxPasses:12,opacity:.36,jitter:.2,wobble:.3,cap:'round',lean:-24,leanJitter:16,wash:.22},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".5"/>`+
+     hatch(u,hex,4,.4,.3,.2)+hatch(u,shade(hex,-.22),4,.3,.2,.62)+crossHatch(u,shade(hex,-.1),4,.1,.12,.35)}
 ];
 
 let toolId=(()=>{
@@ -426,17 +441,29 @@ function buildPaintDefs(){
   const existing=board.querySelector('#paintDefs');
   if(existing) existing.remove();
   const tool=currentTool();
-  /* Marker ink is translucent: the printed line still reads over a painted zone. */
-  board.classList.toggle('markers',tool.family==='Markers');
   const tile=Math.max(10,Math.round(boardUnit()*.035));
   const u=value=>(tile*value).toFixed(2);
   const defs=document.createElementNS(NS,'defs');
   defs.setAttribute('id','paintDefs');
+  /* The tooth is spent mostly on the colour and only a little on the opacity, so the
+     pigment keeps its body: `shadeAmp/shadeBase` deepen it, `maskGain/maskBase` let the
+     noise's low tail let paper through, and both stay centred on 1. Chrome renders
+     fractalNoise as a bright, low-contrast grain (measured: mean ~.86 and sigma ~.04 per
+     channel, r+g+b ~2.59), so the shade is offset by its own mean rather than by .5 —
+     centring on .5 clamped nearly every pixel to 1 and the tooth disappeared. */
+  const tooth=Math.max(0,Math.min(.7,tool.grain.strength));
+  const shadeAmp=(tooth*.8).toFixed(3);
+  const shadeBase=(1-tooth*.8*.86).toFixed(3);
+  const maskGain=(tooth*.6).toFixed(3);
+  const maskBase=(1-tooth*.6*2.59).toFixed(3);
   defs.innerHTML=
     `<filter id="paintGrain" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">`+
-      `<feTurbulence type="fractalNoise" baseFrequency="${tool.grain.frequency}" numOctaves="${tool.grain.octaves}" seed="7" result="wax"/>`+
-      `<feColorMatrix in="wax" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${tool.grain.strength} ${tool.grain.strength} ${tool.grain.strength} 0 ${(1-1.5*tool.grain.strength).toFixed(3)}" result="grain"/>`+
-      `<feComposite in="SourceGraphic" in2="grain" operator="in"/>`+
+      `<feTurbulence type="fractalNoise" baseFrequency="${tool.grain.frequency}" numOctaves="${tool.grain.octaves}" seed="7" result="tooth"/>`+
+      `<feColorMatrix in="tooth" type="matrix" values="${shadeAmp} 0 0 0 ${shadeBase}  0 ${shadeAmp} 0 0 ${shadeBase}  0 0 ${shadeAmp} 0 ${shadeBase}  0 0 0 0 1" result="shade"/>`+
+      `<feComposite in="shade" in2="SourceGraphic" operator="in" result="toothShade"/>`+
+      `<feBlend in="SourceGraphic" in2="toothShade" mode="multiply" result="pigment"/>`+
+      `<feColorMatrix in="tooth" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${maskGain} ${maskGain} ${maskGain} 0 ${maskBase}" result="toothMask"/>`+
+      `<feComposite in="pigment" in2="toothMask" operator="in"/>`+
     `</filter>`+
     COLORS.map((hex,index)=>
       `<pattern id="paint-${index+1}" patternUnits="userSpaceOnUse" patternTransform="rotate(${tool.angle})" width="${tile}" height="${tile}">${tool.pattern(hex,u)}</pattern>`
