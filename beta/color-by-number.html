@@ -14,7 +14,7 @@ button{font:inherit;touch-action:manipulation}
 .top h1{font-family:Georgia,"Times New Roman",serif;font-size:40px;line-height:1.05;letter-spacing:-.5px;margin:14px 0 10px;color:#fbf6ee}
 .top p{color:var(--muted);margin:0;max-width:660px;line-height:1.55}
 .app{display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:calc(100vh - 152px)}
-.stage{position:relative;display:flex;align-items:center;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
+.stage{position:sticky;top:0;align-self:start;min-height:calc(100vh - 152px);display:flex;align-items:flex-start;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
 .board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:20px;overflow:hidden;border:1px solid #4a3a5c;box-shadow:0 40px 90px -30px #000,0 0 0 8px rgba(255,255,255,.03),0 0 60px -20px rgba(138,63,193,.45)}
 .board{--ink:#1b1b1b;display:block;width:100%;height:auto;touch-action:manipulation}
 .zone{fill:#fff;stroke:var(--ink,#1b1b1b);stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
@@ -100,7 +100,7 @@ button{font:inherit;touch-action:manipulation}
 @media(max-width:780px){
  .top{padding:18px 18px 16px}.top h1{font-size:30px}
  .app{display:block}
- .stage{padding:12px;min-height:auto}
+ .stage{padding:12px;min-height:auto;position:static;align-self:auto}
  .board-wrap{width:100%;border-radius:14px;box-shadow:0 22px 50px -20px #000,0 0 40px -18px rgba(138,63,193,.5)}
  .panel{border-left:0;border-top:1px solid var(--line);padding:18px}
  .palette{grid-template-columns:repeat(3,1fr)}
