@@ -183,7 +183,7 @@ th{color:var(--gold);text-transform:uppercase;letter-spacing:1px;font-size:11px}
 <body><div class="wrap">
 <div class="top">
   <div><h1>Artist Admin — Beta Progress</h1><p class="sub">Progress of every beta tester, their active paintings, and their feedback.</p></div>
-  <a href="/studio">← Back to Studio</a>
+  <a href="/creator">← Back to Studio</a>
 </div>
 <div class="cards" id="cards"></div>
 <h2>Beta feedback testers</h2>
