@@ -21,7 +21,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from admin_dashboard import build_canvas_overview, render_admin_dashboard
+from admin_dashboard import build_admin_overview, render_admin_dashboard
 from canvas_progress import CanvasProgress
 from compiler import compile_artwork
 from painting_pipeline import BETA_SETTINGS, record_painting
@@ -541,9 +541,14 @@ def studio_challenges():
 
 @app.get("/studio/admin", response_class=HTMLResponse)
 def studio_admin():
-    """Artist admin dashboard: progress of every beta tester's saved paintings."""
+    """Artist admin dashboard: beta tester progress and feedback in one view."""
     return HTMLResponse(
-        render_admin_dashboard(build_canvas_overview(RUNTIME_DB.list_canvas_sessions()))
+        render_admin_dashboard(
+            build_admin_overview(
+                RUNTIME_DB.list_canvas_sessions(),
+                RUNTIME_DB.feedback_rows(),
+            )
+        )
     )
 
 
@@ -712,10 +717,13 @@ def canvas_session_progress(session_id: str):
     }
 
 
-@app.get("/api/admin/canvas-overview")
-def admin_canvas_overview():
+@app.get("/api/admin/overview")
+def admin_overview():
     """JSON behind the artist admin dashboard; the page polls this every 30s."""
-    return build_canvas_overview(RUNTIME_DB.list_canvas_sessions())
+    return build_admin_overview(
+        RUNTIME_DB.list_canvas_sessions(),
+        RUNTIME_DB.feedback_rows(),
+    )
 
 
 @app.get("/api/catalog")
