@@ -541,15 +541,8 @@ def studio_challenges():
 
 @app.get("/studio/admin", response_class=HTMLResponse)
 def studio_admin():
-    """Artist admin dashboard: beta tester progress and feedback in one view."""
-    return HTMLResponse(
-        render_admin_dashboard(
-            build_admin_overview(
-                RUNTIME_DB.list_canvas_sessions(),
-                RUNTIME_DB.feedback_rows(),
-            )
-        )
-    )
+    """Artist admin dashboard: submitted paintings, tester sessions and feedback."""
+    return HTMLResponse(render_admin_dashboard(admin_overview_payload()))
 
 
 
@@ -717,13 +710,78 @@ def canvas_session_progress(session_id: str):
     }
 
 
+@app.post("/api/canvas/progress/{session_id}/reset")
+async def reset_canvas_progress(session_id: str, request: Request):
+    """Clear a tester's painted regions so the artwork starts fresh for them."""
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    artwork_key = ""
+    if isinstance(payload, dict):
+        artwork_key = canvas_token(payload.get("artworkKey"), CANVAS_MAX_ARTWORK)
+
+    cleared = RUNTIME_DB.reset_canvas_progress(token, artwork_key or None)
+    return {"ok": True, "cleared": cleared}
+
+
+def canvas_artwork_names(
+    sessions: list[CanvasProgress],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Link each canvas artwork to the studio artwork the artist knows.
+
+    A compiled upload is stored twice: the compile job (whose id is the canvas
+    artwork key) and the painting row written from that job, whose
+    ``package_dir`` is that job's package. Returns the key mapping plus a title
+    per studio artwork, so one submitted image is one row on the dashboard
+    rather than a job row and a painting row.
+    """
+    by_package = {
+        painting.package_dir: painting
+        for painting in RUNTIME_DB.list_paintings()
+        if painting.package_dir
+    }
+    keys: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    for session in sessions:
+        key = session.artwork_key
+        if key in keys:
+            continue
+        job = None if key == CANVAS_BUILTIN_ARTWORK else RUNTIME_DB.load_job(key)
+        painting = by_package.get((job or {}).get("outputDir")) if job else None
+        if painting is not None:
+            keys[key] = painting.id
+            titles[painting.id] = painting.title
+            continue
+        keys[key] = key
+        if key == CANVAS_BUILTIN_ARTWORK:
+            titles[key] = "Dahlia Mandala (built-in)"
+        else:
+            titles[key] = Path((job or {}).get("inputPath") or "").name or key
+    return keys, titles
+
+
+def admin_overview_payload() -> dict[str, Any]:
+    """Everything the artist dashboard shows: submitted paintings, sessions, feedback."""
+    sessions = RUNTIME_DB.list_canvas_sessions()
+    artwork_keys, artwork_titles = canvas_artwork_names(sessions)
+    return build_admin_overview(
+        sessions,
+        RUNTIME_DB.feedback_rows(),
+        RUNTIME_DB.list_paintings(),
+        artwork_keys,
+        artwork_titles,
+    )
+
+
 @app.get("/api/admin/overview")
 def admin_overview():
     """JSON behind the artist admin dashboard; the page polls this every 30s."""
-    return build_admin_overview(
-        RUNTIME_DB.list_canvas_sessions(),
-        RUNTIME_DB.feedback_rows(),
-    )
+    return admin_overview_payload()
 
 
 @app.get("/api/catalog")

@@ -361,6 +361,27 @@ class RuntimeDatabase:
             )
         return progress
 
+    def reset_canvas_progress(self, session_id: str, artwork_key: str | None = None) -> int:
+        """Un-paint a session's regions so the tester starts that painting fresh.
+
+        One artwork when ``artwork_key`` is given, every artwork of the session
+        otherwise. ``saves`` is left alone — it records how much the tester
+        engaged, not what is currently painted. ``updated_at`` moves to now, so a
+        canvas still holding its own copy prefers this cleared one when it next
+        opens, which is what makes the reset stick.
+        """
+        now = utc_now()
+        sql = "UPDATE canvas_sessions SET completed_json='[]', selected=1, updated_at=?"
+        params: list[Any] = [now]
+        if artwork_key:
+            sql += " WHERE session_id=? AND artwork_key=?"
+            params.extend((session_id, artwork_key))
+        else:
+            sql += " WHERE session_id=?"
+            params.append(session_id)
+        with self.lock, self.connect() as connection:
+            return connection.execute(sql, tuple(params)).rowcount
+
     def load_canvas_session(self, session_id: str, limit: int = 20) -> list[CanvasProgress]:
         """Every artwork this session painted, most recently saved first."""
         with self.connect() as connection:
