@@ -21,8 +21,8 @@ button{font:inherit;touch-action:manipulation}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{fill:#fff!important;fill-opacity:1}
-.crayon-tip{pointer-events:none}
-.zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#crayonGrain)}
+.paint-tip{pointer-events:none}
+.zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#paintGrain)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
@@ -49,6 +49,16 @@ button{font:inherit;touch-action:manipulation}
 .swatch.active{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,173,89,.35),inset 0 0 0 1px rgba(255,255,255,.2)}
 .swatch.complete:after{content:"✓";position:absolute;right:8px;top:7px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px}
 .swatch small{display:block;margin-top:5px;font-weight:700;font-size:12px;opacity:.92}
+.toolbox{margin-bottom:18px}
+.toolbox-note{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0 0 10px}
+.tool-group{margin-bottom:12px}
+.tool-group h3{margin:0 0 7px;font-family:Georgia,serif;font-size:14.5px;color:#e9dfff}
+.tool-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tool-btn{display:block;padding:6px 6px 5px;border-radius:12px;border:2px solid var(--line);background:#161020;color:#f2e9f8;font-weight:800;font-size:11.5px;line-height:1.25;cursor:pointer;transition:transform .15s ease,border-color .2s ease,box-shadow .2s ease}
+.tool-btn:hover{transform:translateY(-2px);border-color:#6a4d86}
+.tool-btn.active{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,173,89,.28)}
+.tool-chip{display:block;width:100%;height:auto;border-radius:8px;margin-bottom:5px}
+.tool-name{display:block}
 .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}
 .toolbar button,.toolbar a{padding:12px;border-radius:11px;border:1px solid var(--line);background:#1d1626;color:#f2e9f8;text-decoration:none;text-align:center;font-weight:800;font-size:14px;cursor:pointer;transition:.18s}
 .toolbar button:hover,.toolbar a:hover{border-color:var(--gold);background:#251c31;transform:translateY(-1px)}
@@ -81,9 +91,10 @@ button{font:inherit;touch-action:manipulation}
  .board-wrap{width:100%;border-radius:14px;box-shadow:0 22px 50px -20px #000,0 0 40px -18px rgba(138,63,193,.5)}
  .panel{border-left:0;border-top:1px solid var(--line);padding:18px}
  .palette{grid-template-columns:repeat(3,1fr)}
+ .tool-row{grid-template-columns:repeat(3,1fr)}
  .swatch{min-height:60px}
  .mobile-palette-toggle{display:block}
- .panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
+ .panel.collapsed .toolbox,.panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
 }
 </style>
 </head>
@@ -112,6 +123,11 @@ button{font:inherit;touch-action:manipulation}
 <button id="compileButton" type="button">Compile My Image</button>
 <p id="uploadNote" class="upload-note"></p>
 </section>
+<section class="toolbox">
+<h2>Drawing Tool</h2>
+<p class="toolbox-note">Choose a crayon or a colored pencil — each medium lays down its own stroke and texture.</p>
+<div id="toolbox"></div>
+</section>
 <h2>Choose a Color</h2>
 <section class="current">
 <div class="current-grid">
@@ -139,6 +155,7 @@ button{font:inherit;touch-action:manipulation}
 </section>
 </aside>
 </div>
+<svg id="toolSampleDefs" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 
 <script>
 'use strict';
@@ -150,6 +167,7 @@ const BUILTIN_ARTWORK='dahlia-mandala';
 
 const board=document.getElementById('board');
 const paletteEl=document.getElementById('palette');
+const toolboxEl=document.getElementById('toolbox');
 const statusEl=document.getElementById('status');
 const countEl=document.getElementById('count');
 const barEl=document.getElementById('bar');
@@ -286,41 +304,156 @@ function highlight(){
     ? `Color ${selected} selected. Tap a gray highlighted zone.`
     : `Color ${selected} is complete. Choose another color.`;
 }
-function buildCrayonDefs(unit){
-  const existing=board.querySelector('#crayonDefs');
+/* ---------------------------------------------------------------------------
+   Drawing tools
+   A medium is two things at once: the dried texture a finished zone keeps (its
+   pattern + paper grain) and the stroke the hand lays down while painting it.
+   Crayons press broad waxy pads and work back and forth; colored pencils hatch
+   thin lines one way and let the paper show through.
+--------------------------------------------------------------------------- */
+const TOOL_KEY=`${STORAGE_KEY}-tool`;
+
+function shade(hex,amount){
+  const match=/^#?([0-9a-f]{6})$/i.exec(String(hex));
+  if(!match) return hex;
+  const value=parseInt(match[1],16);
+  const mix=channel=>Math.max(0,Math.min(255,Math.round(amount<0?channel*(1+amount):channel+(255-channel)*amount)));
+  return `rgb(${mix((value>>16)&255)},${mix((value>>8)&255)},${mix(value&255)})`;
+}
+function hatch(u,hex,count,width,opacity,offset){
+  let markup='';
+  for(let index=0;index<count;index++){
+    markup+=`<path d="M${u(-.08)} ${u((index+offset)/count)}H${u(1.08)}" stroke="${hex}" stroke-opacity="${opacity}" stroke-width="${u(width)}"/>`;
+  }
+  return markup;
+}
+
+const TOOLS=[
+  {id:'wax-crayon',family:'Crayons',label:'Wax Crayon',note:'Broad waxy passes with a heavy paper tooth.',
+   grain:{frequency:.62,octaves:4,strength:5,depth:5.4},angle:-32,tip:'crayon',tipScale:1,
+   stroke:{ms:1000,width:.08,floor:.016,density:.78,minPasses:3,maxPasses:14,opacity:.88,jitter:.1,wobble:.2,cap:'round',lean:-35,leanJitter:10},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.82)}H${u(1.06)}" stroke="#000000" stroke-opacity=".05" stroke-width="${u(.16)}" stroke-linecap="round"/>`+
+     `<ellipse cx="${u(.3)}" cy="${u(.38)}" rx="${u(.22)}" ry="${u(.1)}" fill="#ffffff" fill-opacity=".10"/>`+
+     `<ellipse cx="${u(.72)}" cy="${u(.72)}" rx="${u(.18)}" ry="${u(.08)}" fill="#000000" fill-opacity=".06"/>`},
+  {id:'soft-pastel',family:'Crayons',label:'Soft Pastel',note:'Chalky layers of pigment that stay see-through.',
+   grain:{frequency:.4,octaves:3,strength:5.6,depth:6.2},angle:-18,tip:'crayon',tipScale:1.12,
+   stroke:{ms:1150,width:.115,floor:.022,density:1.05,minPasses:3,maxPasses:9,opacity:.6,jitter:.18,wobble:.32,cap:'round',lean:-28,leanJitter:14},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".94"/>`+
+     `<rect x="${u(-.05)}" y="${u(.05)}" width="${u(1.1)}" height="${u(.4)}" fill="#ffffff" fill-opacity=".10"/>`+
+     `<rect x="${u(-.05)}" y="${u(.6)}" width="${u(1.1)}" height="${u(.24)}" fill="#000000" fill-opacity=".05"/>`+
+     `<ellipse cx="${u(.3)}" cy="${u(.34)}" rx="${u(.3)}" ry="${u(.16)}" fill="#ffffff" fill-opacity=".12"/>`+
+     `<ellipse cx="${u(.7)}" cy="${u(.76)}" rx="${u(.26)}" ry="${u(.12)}" fill="#000000" fill-opacity=".06"/>`+
+     `<circle cx="${u(.56)}" cy="${u(.12)}" r="${u(.06)}" fill="#ffffff" fill-opacity=".16"/>`},
+  {id:'metallic',family:'Crayons',label:'Metallic',note:'Sheened wax that catches the light as you draw.',
+   grain:{frequency:.85,octaves:4,strength:4.2,depth:4.6},angle:-50,tip:'crayon',tipScale:.95,
+   stroke:{ms:950,width:.06,floor:.014,density:.58,minPasses:4,maxPasses:12,opacity:.9,jitter:.06,wobble:.12,cap:'round',lean:-50,leanJitter:6,sheen:.5},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect width="${u(1)}" height="${u(1)}" fill="${shade(hex,-.5)}" fill-opacity=".6"/>`+
+     `<path d="M${u(-.06)} ${u(.3)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".4" stroke-width="${u(.13)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.44)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".18" stroke-width="${u(.32)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.79)}H${u(1.06)}" stroke="#000000" stroke-opacity=".16" stroke-width="${u(.16)}" stroke-linecap="round"/>`},
+  {id:'colored-pencil',family:'Colored Pencils',label:'Colored Pencil',note:'Fine hatching from a hard, sharp point.',
+   grain:{frequency:.72,octaves:3,strength:2.3,depth:2.5},angle:-38,tip:'pencil',tipScale:.72,
+   stroke:{ms:1250,width:.048,floor:.011,density:.62,minPasses:9,maxPasses:22,opacity:.4,jitter:.16,wobble:.1,cap:'butt',lean:-38,leanJitter:3,rag:.9},
+   pattern:(hex,u)=>hatch(u,hex,5,.15,.72,.12)+hatch(u,shade(hex,-.25),5,.1,.3,.42)+hatch(u,shade(hex,.35),5,.08,.22,.8)},
+  {id:'soft-core',family:'Colored Pencils',label:'Soft Core',note:'Denser shading that fills the paper tooth faster.',
+   grain:{frequency:.55,octaves:4,strength:2.7,depth:2.9},angle:-34,tip:'pencil',tipScale:.8,
+   stroke:{ms:1100,width:.075,floor:.015,density:.52,minPasses:6,maxPasses:15,opacity:.52,jitter:.14,wobble:.13,cap:'round',lean:-30,leanJitter:8,rag:.5},
+   pattern:(hex,u)=>hatch(u,hex,6,.24,.6,.1)+hatch(u,shade(hex,-.22),6,.18,.28,.34)+hatch(u,shade(hex,.3),6,.1,.16,.7)},
+  {id:'watercolor-pencil',family:'Colored Pencils',label:'Watercolor',note:'A damp wash that bleeds under the strokes.',
+   grain:{frequency:.45,octaves:3,strength:2.2,depth:2.4},angle:-24,tip:'pencil',tipScale:.82,
+   stroke:{ms:1200,width:.1,floor:.02,density:.5,minPasses:4,maxPasses:10,opacity:.34,jitter:.2,wobble:.3,cap:'round',lean:-24,leanJitter:16,wash:.22},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".18"/>`+
+     hatch(u,hex,3,.46,.22,.2)+hatch(u,shade(hex,-.2),3,.34,.18,.62)}
+];
+
+let toolId=(()=>{
+  const stored=safeGet(TOOL_KEY);
+  return TOOLS.some(tool=>tool.id===stored)?stored:TOOLS[0].id;
+})();
+function currentTool(){return TOOLS.find(tool=>tool.id===toolId)||TOOLS[0];}
+
+function buildPaintDefs(){
+  const existing=board.querySelector('#paintDefs');
   if(existing) existing.remove();
-  const tile=Math.max(10,Math.round((unit||600)*.035));
+  const tool=currentTool();
+  const tile=Math.max(10,Math.round(boardUnit()*.035));
   const u=value=>(tile*value).toFixed(2);
   const defs=document.createElementNS(NS,'defs');
-  defs.setAttribute('id','crayonDefs');
+  defs.setAttribute('id','paintDefs');
   defs.innerHTML=
-    `<filter id="crayonGrain" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">`+
-      `<feTurbulence type="fractalNoise" baseFrequency=".62" numOctaves="4" seed="7" result="wax"/>`+
-      `<feColorMatrix in="wax" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  5 5 5 0 -5.4" result="grain"/>`+
+    `<filter id="paintGrain" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">`+
+      `<feTurbulence type="fractalNoise" baseFrequency="${tool.grain.frequency}" numOctaves="${tool.grain.octaves}" seed="7" result="wax"/>`+
+      `<feColorMatrix in="wax" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${tool.grain.strength} ${tool.grain.strength} ${tool.grain.strength} 0 ${-tool.grain.depth}" result="grain"/>`+
       `<feComposite in="SourceGraphic" in2="grain" operator="in"/>`+
     `</filter>`+
-    COLORS.map((hex,index)=>[
-      `<pattern id="crayon-${index+1}" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)" width="${tile}" height="${tile}">`,
-      `<rect width="${tile}" height="${tile}" fill="${hex}"/>`,
-      `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`,
-      `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`,
-      `<path d="M${u(-.06)} ${u(.82)}H${u(1.06)}" stroke="#000000" stroke-opacity=".05" stroke-width="${u(.16)}" stroke-linecap="round"/>`,
-      `<ellipse cx="${u(.3)}" cy="${u(.38)}" rx="${u(.22)}" ry="${u(.1)}" fill="#ffffff" fill-opacity=".10"/>`,
-      `<ellipse cx="${u(.72)}" cy="${u(.72)}" rx="${u(.18)}" ry="${u(.08)}" fill="#000000" fill-opacity=".06"/>`,
-      `<circle cx="${u(.52)}" cy="${u(.1)}" r="${u(.05)}" fill="#ffffff" fill-opacity=".14"/>`,
-      `<circle cx="${u(.16)}" cy="${u(.66)}" r="${u(.04)}" fill="#000000" fill-opacity=".07"/>`,
-      `</pattern>`
-    ].join('')).join('');
+    COLORS.map((hex,index)=>
+      `<pattern id="paint-${index+1}" patternUnits="userSpaceOnUse" patternTransform="rotate(${tool.angle})" width="${tile}" height="${tile}">${tool.pattern(hex,u)}</pattern>`
+    ).join('');
   board.insertBefore(defs,board.firstChild);
 }
-function crayonFill(number){
-  if(!board.querySelector('#crayonDefs')){
-    const view=board.viewBox.baseVal;
-    buildCrayonDefs(view.height?Math.min(view.width,view.height):600);
-  }
-  return board.querySelector(`#crayon-${number}`)?`url(#crayon-${number})`:COLORS[number-1];
+function paintFill(number){
+  if(!board.querySelector('#paintDefs')) buildPaintDefs();
+  return board.querySelector(`#paint-${number}`)?`url(#paint-${number})`:COLORS[number-1];
 }
-const SWEEP_MS=1000;/* the whole scribble of one region; its passes share the time */
+/* The sample chips show the medium's own dried texture under one of its own strokes. */
+function buildSampleDefs(){
+  const host=document.getElementById('toolSampleDefs');
+  if(!host) return;
+  const tile=14;
+  const u=value=>(tile*value).toFixed(2);
+  host.innerHTML=TOOLS.map(tool=>[0,1].map(slot=>
+    `<pattern id="sample-${tool.id}-${slot}" patternUnits="userSpaceOnUse" patternTransform="rotate(${tool.angle})" width="${tile}" height="${tile}">${tool.pattern(COLORS[slot]||COLORS[0],u)}</pattern>`
+  ).join('')).join('');
+}
+function chipMarkup(tool,ink){
+  const spec=tool.stroke;
+  const width=Math.max(1.8,Math.min(9,spec.width*80));
+  let markup=`<rect width="72" height="40" rx="8" fill="url(#sample-${tool.id}-0)"/>`;
+  if(spec.wash) markup+=`<rect width="72" height="40" rx="8" fill="url(#sample-${tool.id}-1)" fill-opacity="${spec.wash}"/>`;
+  markup+=`<path d="M7 31L65 10" fill="none" stroke="${ink}" stroke-width="${width.toFixed(2)}" stroke-linecap="${spec.cap}" stroke-opacity="${Math.min(1,spec.opacity+.15).toFixed(2)}"/>`;
+  if(spec.sheen) markup+=`<path d="M7 31L65 10" fill="none" stroke="${shade(ink,.6)}" stroke-width="${(width*.28).toFixed(2)}" stroke-linecap="round" stroke-opacity="${spec.sheen}"/>`;
+  return markup;
+}
+function renderToolbox(){
+  buildSampleDefs();
+  const ink=COLORS[1]||COLORS[0];
+  toolboxEl.innerHTML='';
+  ['Crayons','Colored Pencils'].forEach(family=>{
+    const group=document.createElement('div');
+    group.className='tool-group';
+    const heading=document.createElement('h3');
+    heading.textContent=family;
+    const row=document.createElement('div');
+    row.className='tool-row';
+    TOOLS.filter(tool=>tool.family===family).forEach(tool=>{
+      const active=tool.id===toolId;
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='tool-btn'+(active?' active':'');
+      button.title=tool.note;
+      button.setAttribute('aria-pressed',String(active));
+      button.innerHTML=`<svg class="tool-chip" viewBox="0 0 72 40" aria-hidden="true">${chipMarkup(tool,ink)}</svg><span class="tool-name">${tool.label}</span>`;
+      button.addEventListener('click',()=>selectTool(tool.id));
+      row.appendChild(button);
+    });
+    group.appendChild(heading);
+    group.appendChild(row);
+    toolboxEl.appendChild(group);
+  });
+}
+function selectTool(id){
+  if(id===toolId||!TOOLS.some(tool=>tool.id===id)) return;
+  toolId=id;
+  safeSet(TOOL_KEY,id);
+  const stale=board.querySelector('#paintDefs');
+  if(stale) stale.remove();
+  renderToolbox();
+  render();
+}
 let paintLayer=null;
 function boardUnit(){
   const view=board.viewBox.baseVal;
@@ -332,8 +465,8 @@ function ensurePaintLayer(){
   return paintLayer;
 }
 function fxDefs(){
-  let defs=board.querySelector('#crayonDefs');
-  if(!defs){buildCrayonDefs(boardUnit());defs=board.querySelector('#crayonDefs');}
+  let defs=board.querySelector('#paintDefs');
+  if(!defs){buildPaintDefs();defs=board.querySelector('#paintDefs');}
   return defs;
 }
 function clearSweeps(){
@@ -351,7 +484,7 @@ function zoneBox(zone){
 }
 function crayonTip(size,hex){
   const tip=document.createElementNS(NS,'g');
-  tip.setAttribute('class','crayon-tip');
+  tip.setAttribute('class','paint-tip');
   const u=value=>(size*value).toFixed(2);
   tip.innerHTML=`<g transform="rotate(-18)">`+
     `<path d="M${u(-.17)} ${u(-.42)}L${u(.17)} ${u(-.42)}L0 0Z" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
@@ -361,7 +494,27 @@ function crayonTip(size,hex){
   `</g>`;
   return tip;
 }
+function pencilTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','paint-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(1)}" rx="${u(.05)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.07)} ${u(-1.5)}V${u(-.5)}" stroke="#000000" stroke-opacity=".22" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(.07)} ${u(-1.5)}V${u(-.5)}" stroke="#ffffff" stroke-opacity=".28" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(.28)}" rx="${u(.11)}" fill="#e9a0a0" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-.68)}" width="${u(.4)}" height="${u(.18)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.2)} ${u(-.5)}L${u(-.14)} ${u(-.12)}H${u(.14)}L${u(.2)} ${u(-.5)}Z" fill="#ecd3ac" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+    `<path d="M${u(-.14)} ${u(-.12)}L0 0L${u(.14)} ${u(-.12)}Z" fill="${hex}" stroke="#2b2233" stroke-width="${u(.04)}" stroke-linejoin="round"/>`+
+  `</g>`;
+  return tip;
+}
+function paintTip(size,hex,tool){
+  return tool.tip==='pencil'?pencilTip(size,hex):crayonTip(size,hex);
+}
 function sweepPaint(zone,onDone){
+  const tool=currentTool();
+  const spec=tool.stroke;
   const number=Number(zone.dataset.c);
   const box=zoneBox(zone);
   if(!box.w||!box.h){onDone&&onDone();return}
@@ -387,7 +540,7 @@ function sweepPaint(zone,onDone){
 
   /* A hand colours in one direction and then works back the other way, so the
      whole region leans together and the grain runs in bands. */
-  const lean=(-35+wobble(seq*3)*10)*Math.PI/180;
+  const lean=(spec.lean+wobble(seq*3)*spec.leanJitter)*Math.PI/180;
   const cx=box.x+box.w/2,cy=box.y+box.h/2;
   const ux=Math.cos(lean),uy=Math.sin(lean),nx=-uy,ny=ux;
   let minU=Infinity,maxU=-Infinity,minN=Infinity,maxN=-Infinity;
@@ -400,19 +553,37 @@ function sweepPaint(zone,onDone){
     if(across>maxN) maxN=across;
   });
 
-  /* Crayon passes are broad and lap over each other, so the paper shows through. */
-  const width=Math.max(unit*.016,Math.min(Math.min(box.w,box.h)*.3,unit*.08));
-  const count=Math.max(3,Math.min(14,Math.round((maxN-minN)/(width*.78))));
+  /* Broad passes lap over each other; pencil lines stay thin and let the paper through. */
+  const ms=spec.ms;
+  const width=Math.max(unit*spec.floor,Math.min(Math.min(box.w,box.h)*.3,unit*spec.width));
+  const count=Math.max(spec.minPasses,Math.min(spec.maxPasses,Math.round((maxN-minN)/(width*spec.density))));
   const step=(maxN-minN)/count;
   const pad=width*.6;
-  const passMs=SWEEP_MS/count;
+  const passMs=ms/count;
+
+  /* A wet medium floods the region first, then the strokes settle into it. */
+  if(spec.wash){
+    const wash=document.createElementNS(NS,'rect');
+    wash.setAttribute('x',(box.x-2).toFixed(2));
+    wash.setAttribute('y',(box.y-2).toFixed(2));
+    wash.setAttribute('width',(box.w+4).toFixed(2));
+    wash.setAttribute('height',(box.h+4).toFixed(2));
+    wash.setAttribute('fill',hex);
+    wash.setAttribute('fill-opacity','0');
+    group.appendChild(wash);
+    wash.animate([{fillOpacity:0},{fillOpacity:spec.wash}],{duration:ms*.7,easing:'linear',fill:'forwards'});
+  }
   const keys=[];
   for(let pass=0;pass<count;pass++){
-    const forward=pass%2===0;
+    /* crayons work back and forth; pencil hatching always runs the same way */
+    const forward=spec.alternate?pass%2===0:true;
     const across=minN+step*(pass+.5)+wobble(seq*31+pass)*step*.16;
-    const w=width*(1+wobble(seq*41+pass)*.14);
-    const fromU=forward?minU-pad:maxU+pad;
-    const toU=forward?maxU+pad:minU-pad;
+    const w=width*(1+wobble(seq*41+pass)*spec.jitter);
+    const rag=spec.rag?width*spec.rag:0;
+    const head=pad+rag*Math.abs(wobble(seq*53+pass*17));
+    const tail=pad+rag*Math.abs(wobble(seq*61+pass*19));
+    const fromU=forward?minU-head:maxU+head;
+    const toU=forward?maxU+tail:minU-tail;
     const points=[];
     let d='';
     for(let stop=0;stop<=4;stop++){
@@ -422,40 +593,45 @@ function sweepPaint(zone,onDone){
       d+=(stop?' L':'M')+x.toFixed(2)+' '+y.toFixed(2);
       points.push({x,y});
     }
-    const stroke=document.createElementNS(NS,'path');
-    stroke.setAttribute('d',d);
-    stroke.setAttribute('fill','none');
-    stroke.setAttribute('stroke',hex);
-    stroke.setAttribute('stroke-width',w.toFixed(2));
-    stroke.setAttribute('stroke-linecap','round');
-    stroke.setAttribute('stroke-linejoin','round');
-    stroke.setAttribute('stroke-opacity',(0.88+wobble(seq*43+pass)*.1).toFixed(3));
-    group.appendChild(stroke);
-    /* The pass is drawn on rather than faded in, so the wax builds up behind the tip. */
-    const length=stroke.getTotalLength()||1;
-    stroke.style.strokeDasharray=length.toFixed(2);
-    stroke.style.strokeDashoffset=length.toFixed(2);
-    stroke.animate(
-      [{strokeDashoffset:length},{strokeDashoffset:0}],
-      {delay:pass*passMs,duration:passMs,easing:'linear',fill:'forwards'}
-    );
+    /* metallic wax lays a bright gloss along the same pass */
+    const layers=[[hex,w,spec.opacity+wobble(seq*43+pass)*.08,spec.cap]];
+    if(spec.sheen) layers.push([shade(hex,.65),w*.26,spec.sheen,'round']);
+    layers.forEach(([color,lineWidth,opacity,cap])=>{
+      const stroke=document.createElementNS(NS,'path');
+      stroke.setAttribute('d',d);
+      stroke.setAttribute('fill','none');
+      stroke.setAttribute('stroke',color);
+      stroke.setAttribute('stroke-width',lineWidth.toFixed(2));
+      stroke.setAttribute('stroke-linecap',cap);
+      stroke.setAttribute('stroke-linejoin',cap==='butt'?'miter':'round');
+      stroke.setAttribute('stroke-opacity',Math.max(.05,Math.min(1,opacity)).toFixed(3));
+      group.appendChild(stroke);
+      /* The pass is drawn on rather than faded in, so the pigment builds up behind the tip. */
+      const length=stroke.getTotalLength()||1;
+      stroke.style.strokeDasharray=length.toFixed(2);
+      stroke.style.strokeDashoffset=length.toFixed(2);
+      stroke.animate(
+        [{strokeDashoffset:length},{strokeDashoffset:0}],
+        {delay:pass*passMs,duration:passMs,easing:'linear',fill:'forwards'}
+      );
+    });
     const tilt=(forward?-1:1)*(-16+wobble(seq*23+pass)*6);
     points.forEach((point,stop)=>{
       /* the nudge keeps each new pass strictly later than the one before it */
-      const offset=Math.min(1,(pass*passMs+passMs*stop/4)/SWEEP_MS+(stop?0:pass*1e-4));
+      const offset=Math.min(1,(pass*passMs+passMs*stop/4)/ms+(stop?0:pass*1e-4));
       keys.push({offset,transform:`translate(${point.x.toFixed(2)}px,${point.y.toFixed(2)}px) rotate(${tilt.toFixed(2)}deg)`});
     });
   }
 
-  const tip=crayonTip(Math.max(unit*.04,Math.min(width*1.6,unit*.14)),hex);
+  const tip=paintTip(Math.max(unit*.04,Math.min(width*1.6,unit*.14))*tool.tipScale,hex,tool);
   layer.appendChild(tip);
-  const travel=tip.animate(keys,{duration:SWEEP_MS,easing:'linear'});
+  const travel=tip.animate(keys,{duration:ms,easing:'linear'});
   tip.animate([
     {offset:0,opacity:0},
     {offset:.06,opacity:1},
     {offset:.9,opacity:1},
     {offset:1,opacity:0}
-  ],{duration:SWEEP_MS,easing:'linear'});
+  ],{duration:ms,easing:'linear'});
   const cleanup=()=>{
     group.remove();
     clip.remove();
@@ -477,7 +653,7 @@ function sweepPaint(zone,onDone){
 function render(){
   zones.forEach((zone,index)=>{
     if(completed.has(index)){
-      zone.style.fill=crayonFill(Number(zone.dataset.c));
+      zone.style.fill=paintFill(Number(zone.dataset.c));
       zone.classList.add('done');
       if(zone._label) zone._label.style.display='none';
     }else{
@@ -525,6 +701,7 @@ function renderCompiled(art){
   board.style.setProperty('--zone-stroke',(unit*.0022).toFixed(3));
   board.style.setProperty('--zone-target-stroke',(unit*.0037).toFixed(3));
   COLORS=art.palette.map(item=>item.hex);
+  renderToolbox();
   board.innerHTML='';
   const backdrop=document.createElementNS(NS,'rect');
   backdrop.setAttribute('width',width);
@@ -675,6 +852,7 @@ document.getElementById('saveReview').onclick=()=>{
 
 bindZones();
 addLabels();
+renderToolbox();
 reviewNote.value=safeGet(reviewKey())||'';
 async function bootstrap(){
   const storedArtwork=safeGet(ARTWORK_KEY);
