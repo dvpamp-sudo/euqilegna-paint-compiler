@@ -23,7 +23,7 @@ button{font:inherit;touch-action:manipulation}
 .zone.painting{fill:#fff!important;fill-opacity:1}
 .sweep{pointer-events:none;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);-webkit-mask-size:200% 100%;mask-size:200% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:sweepReveal .82s linear forwards}
 .crayon-tip{pointer-events:none}
-.zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95}
+.zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#crayonGrain)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 @keyframes sweepReveal{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
@@ -246,19 +246,28 @@ function highlight(){
 function buildCrayonDefs(unit){
   const existing=board.querySelector('#crayonDefs');
   if(existing) existing.remove();
-  const tile=Math.max(8,Math.round((unit||600)*.03));
+  const tile=Math.max(10,Math.round((unit||600)*.035));
   const u=value=>(tile*value).toFixed(2);
   const defs=document.createElementNS(NS,'defs');
   defs.setAttribute('id','crayonDefs');
-  defs.innerHTML=COLORS.map((hex,index)=>[
-    `<pattern id="crayon-${index+1}" patternUnits="userSpaceOnUse" width="${tile}" height="${tile}">`,
-    `<rect width="${tile}" height="${tile}" fill="${hex}"/>`,
-    `<path d="M${u(-.1)} ${u(.78)}L${u(1.1)} ${u(.3)}" stroke="#ffffff" stroke-opacity=".10" stroke-width="${u(.2)}" stroke-linecap="round"/>`,
-    `<path d="M${u(-.1)} ${u(1.12)}L${u(1.1)} ${u(.64)}" stroke="#000000" stroke-opacity=".05" stroke-width="${u(.16)}" stroke-linecap="round"/>`,
-    `<circle cx="${u(.24)}" cy="${u(.2)}" r="${u(.1)}" fill="#ffffff" fill-opacity=".13"/>`,
-    `<circle cx="${u(.72)}" cy="${u(.86)}" r="${u(.09)}" fill="#000000" fill-opacity=".06"/>`,
-    `</pattern>`
-  ].join('')).join('');
+  defs.innerHTML=
+    `<filter id="crayonGrain" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">`+
+      `<feTurbulence type="fractalNoise" baseFrequency=".62" numOctaves="4" seed="7" result="wax"/>`+
+      `<feColorMatrix in="wax" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  5 5 5 0 -5.4" result="grain"/>`+
+      `<feComposite in="SourceGraphic" in2="grain" operator="in"/>`+
+    `</filter>`+
+    COLORS.map((hex,index)=>[
+      `<pattern id="crayon-${index+1}" patternUnits="userSpaceOnUse" width="${tile}" height="${tile}">`,
+      `<rect width="${tile}" height="${tile}" fill="${hex}"/>`,
+      `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`,
+      `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`,
+      `<path d="M${u(-.06)} ${u(.82)}H${u(1.06)}" stroke="#000000" stroke-opacity=".05" stroke-width="${u(.16)}" stroke-linecap="round"/>`,
+      `<ellipse cx="${u(.3)}" cy="${u(.38)}" rx="${u(.22)}" ry="${u(.1)}" fill="#ffffff" fill-opacity=".10"/>`,
+      `<ellipse cx="${u(.72)}" cy="${u(.72)}" rx="${u(.18)}" ry="${u(.08)}" fill="#000000" fill-opacity=".06"/>`,
+      `<circle cx="${u(.52)}" cy="${u(.1)}" r="${u(.05)}" fill="#ffffff" fill-opacity=".14"/>`,
+      `<circle cx="${u(.16)}" cy="${u(.66)}" r="${u(.04)}" fill="#000000" fill-opacity=".07"/>`,
+      `</pattern>`
+    ].join('')).join('');
   board.insertBefore(defs,board.firstChild);
 }
 function crayonFill(number){
@@ -311,7 +320,7 @@ function sweepPaint(zone,onDone){
   group.setAttribute('class','sweep');
   const piece=zone.cloneNode(false);
   piece.removeAttribute('style');
-  piece.setAttribute('class','zone');
+  piece.setAttribute('class','zone done');/* matches the finished stroke, so the swap is seamless */
   piece.style.fill=crayonFill(number);
   group.appendChild(piece);
   const unit=boardUnit();
