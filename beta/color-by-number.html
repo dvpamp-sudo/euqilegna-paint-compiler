@@ -21,12 +21,15 @@ button{font:inherit;touch-action:manipulation}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{fill:#fff!important;fill-opacity:1}
-.sweep{pointer-events:none;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);-webkit-mask-size:200% 100%;mask-size:200% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:sweepReveal .82s linear forwards}
+.sweep{pointer-events:none;-webkit-mask-size:200% 100%;mask-size:200% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.sweep-l{-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);animation:sweepRight .4s linear both}
+.sweep-r{-webkit-mask-image:linear-gradient(270deg,#000 0%,#000 50%,transparent 60%,transparent 100%);mask-image:linear-gradient(270deg,#000 0%,#000 50%,transparent 60%,transparent 100%);animation:sweepLeft .4s linear both}
 .crayon-tip{pointer-events:none}
 .zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#crayonGrain)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-@keyframes sweepReveal{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
+@keyframes sweepRight{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
+@keyframes sweepLeft{from{-webkit-mask-position:0% 0;mask-position:0% 0}to{-webkit-mask-position:100% 0;mask-position:100% 0}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
 .complete-overlay.show{display:grid}
 .complete-card{background:linear-gradient(180deg,#fff,#f3ecf8);color:#281a2d;border-radius:20px;padding:28px;max-width:430px;box-shadow:0 30px 70px -20px #000}
@@ -277,7 +280,7 @@ function crayonFill(number){
   }
   return board.querySelector(`#crayon-${number}`)?`url(#crayon-${number})`:COLORS[number-1];
 }
-const SWEEP_MS=820;/* keep in sync with the .sweep animation duration */
+const SWEEP_MS=1000;/* whole scribble; each band gets SWEEP_MS/bands as its own pass */
 let paintLayer=null;
 function boardUnit(){
   const view=board.viewBox.baseVal;
@@ -288,9 +291,15 @@ function ensurePaintLayer(){
   if(!board.contains(paintLayer)) board.insertBefore(paintLayer,board.querySelector('.zone-label'));
   return paintLayer;
 }
+function fxDefs(){
+  let defs=board.querySelector('#crayonDefs');
+  if(!defs){buildCrayonDefs(boardUnit());defs=board.querySelector('#crayonDefs');}
+  return defs;
+}
 function clearSweeps(){
   if(!paintLayer) return;
   while(paintLayer.firstChild) paintLayer.removeChild(paintLayer.firstChild);
+  board.querySelectorAll('clipPath[id^="band-"]').forEach(node=>node.remove());
 }
 function zoneBox(zone){
   const rect=zone.getBoundingClientRect();
@@ -316,27 +325,57 @@ function sweepPaint(zone,onDone){
   const number=Number(zone.dataset.c);
   const box=zoneBox(zone);
   if(!box.w||!box.h){onDone&&onDone();return}
-  const group=document.createElementNS(NS,'g');
-  group.setAttribute('class','sweep');
-  const piece=zone.cloneNode(false);
-  piece.removeAttribute('style');
-  piece.setAttribute('class','zone done');/* matches the finished stroke, so the swap is seamless */
-  piece.style.fill=crayonFill(number);
-  group.appendChild(piece);
   const unit=boardUnit();
-  const tip=crayonTip(Math.max(unit*.045,Math.min(box.h*.6,unit*.12)),COLORS[number-1]);
-  const cy=box.y+box.h/2;
+  const bands=Math.max(2,Math.min(4,Math.round(box.h/(unit*.14))||2));
+  const leg=SWEEP_MS/bands;
+  const seq=(sweepPaint.seq=(sweepPaint.seq||0)+1);
+  const defs=fxDefs();
   const layer=ensurePaintLayer();
-  layer.appendChild(group);
+  const groups=[];
+  for(let band=0;band<bands;band++){
+    const clip=document.createElementNS(NS,'clipPath');
+    clip.setAttribute('id',`band-${seq}-${band}`);
+    clip.setAttribute('clipPathUnits','userSpaceOnUse');
+    const rect=document.createElementNS(NS,'rect');
+    rect.setAttribute('x',box.x.toFixed(2));
+    rect.setAttribute('y',(box.y+box.h*band/bands).toFixed(2));
+    rect.setAttribute('width',box.w.toFixed(2));
+    rect.setAttribute('height',(box.h/bands).toFixed(2));
+    clip.appendChild(rect);
+    defs.appendChild(clip);
+    const group=document.createElementNS(NS,'g');
+    group.setAttribute('class',band%2?'sweep sweep-r':'sweep sweep-l');
+    group.setAttribute('clip-path',`url(#${clip.id})`);
+    group.style.animationDelay=`${Math.round(band*leg)}ms`;
+    group.style.animationDuration=`${Math.round(leg)}ms`;
+    const piece=zone.cloneNode(false);
+    piece.removeAttribute('style');
+    piece.setAttribute('class','zone done');/* matches the finished stroke, so the swap is seamless */
+    piece.style.fill=crayonFill(number);
+    group.appendChild(piece);
+    group._clip=clip;
+    layer.appendChild(group);
+    groups.push(group);
+  }
+  const tip=crayonTip(Math.max(unit*.045,Math.min(box.h*.6,unit*.12)),COLORS[number-1]);
   layer.appendChild(tip);
-  const travel=tip.animate([
-    {offset:0,transform:`translate(${box.x.toFixed(2)}px,${cy.toFixed(2)}px)`,opacity:0},
-    {offset:.12,opacity:1},
-    {offset:.86,opacity:1},
-    {offset:1,transform:`translate(${(box.x+box.w).toFixed(2)}px,${cy.toFixed(2)}px)`,opacity:0}
+  const keys=[];
+  for(let band=0;band<bands;band++){
+    const row=(box.y+box.h*(band+.5)/bands).toFixed(2);
+    const from=(band%2?box.x+box.w:box.x).toFixed(2);
+    const to=(band%2?box.x:box.x+box.w).toFixed(2);
+    keys.push({offset:band/bands,transform:`translate(${from}px,${row}px)`});
+    keys.push({offset:(band+1)/bands,transform:`translate(${to}px,${row}px)`});
+  }
+  const travel=tip.animate(keys,{duration:SWEEP_MS,easing:'linear'});
+  tip.animate([
+    {offset:0,opacity:0},
+    {offset:.08,opacity:1},
+    {offset:.92,opacity:1},
+    {offset:1,opacity:0}
   ],{duration:SWEEP_MS,easing:'linear'});
   const finish=()=>{
-    group.remove();
+    groups.forEach(item=>{item.remove();item._clip.remove();});
     tip.remove();
     zone.style.transition='none';
     onDone&&onDone();
