@@ -76,6 +76,8 @@ button{font:inherit;touch-action:manipulation}
 .upload input[type=file]::file-selector-button{margin-right:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font:inherit;font-weight:700;cursor:pointer}
 .upload button{width:100%;padding:12px;border-radius:11px;border:0;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;font-weight:900;cursor:pointer}
 .upload button:disabled{opacity:.55;cursor:progress}
+.upload button.ghost{margin-top:8px;background:#241a30;border:1px solid var(--line);color:#f2e9f8}
+.upload button.ghost:hover{border-color:var(--gold)}
 .upload-note{color:var(--muted);font-size:12.5px;margin:8px 0 0;min-height:16px}
 .designs{margin-bottom:18px;border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card)}
 .designs h3{margin:0 0 6px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
@@ -136,6 +138,7 @@ button{font:inherit;touch-action:manipulation}
 <p>Upload a photo and the paint compiler turns it into numbered regions you can paint right here.</p>
 <input id="artworkFile" type="file" accept="image/png,image/jpeg,image/webp">
 <button id="compileButton" type="button">Compile My Image</button>
+<button id="removeArtworkButton" class="ghost" type="button" hidden>Remove Image</button>
 <p id="uploadNote" class="upload-note"></p>
 </section>
 <section class="designs">
@@ -829,6 +832,7 @@ async function loadCompiledArtwork(key){
     renderCompiled(await response.json());
     artworkKey=key;
     safeSet(ARTWORK_KEY,key);
+    updateRemoveButton();
     return true;
   }catch(error){
     if(safeGet(ARTWORK_KEY)===key) safeSet(ARTWORK_KEY,'');
@@ -886,6 +890,7 @@ async function pollCompile(jobId){
   const data=await artwork.json();
   artworkKey=jobId;
   safeSet(ARTWORK_KEY,jobId);
+  updateRemoveButton();
   renderCompiled(data);
   compileOverlay.classList.remove('show');
   compileButton.disabled=false;
@@ -912,6 +917,17 @@ compileButton.onclick=async()=>{
     uploadNote.textContent=String(error.message||error);
     compileButton.disabled=false;
   }
+};
+/* Your uploaded image can be taken off the board again, leaving the studio's own
+   design; the button only shows while a compiled image is open. */
+const removeArtworkButton=document.getElementById('removeArtworkButton');
+function updateRemoveButton(){
+  removeArtworkButton.hidden=!artworkKey;
+}
+removeArtworkButton.onclick=()=>{
+  if(!confirm('Remove this image and go back to the studio design?')) return;
+  safeSet(ARTWORK_KEY,'');
+  window.location.reload();
 };
 /* The studio design library: paint one of its designs, or add a new image to it. */
 function designChip(slug,title,imageUrl){
