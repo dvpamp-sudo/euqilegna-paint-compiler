@@ -1735,6 +1735,24 @@ async def add_design(file: UploadFile = File(...)):
     return {"ok": True, "slug": slug, "title": design_title(slug)}
 
 
+@app.delete("/api/designs/{slug}")
+def remove_design(slug: str):
+    """Remove a design image from the library and forget its cached compile."""
+    path = design_images().get(slug)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Design not found.")
+
+    try:
+        path.unlink()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Could not remove the design image.")
+
+    cache = load_design_cache()
+    if cache.pop(slug, None) is not None:
+        save_design_cache(cache)
+    return {"ok": True, "slug": slug}
+
+
 @app.get("/designs/{filename}")
 def design_image(filename: str):
     safe_name = Path(filename).name

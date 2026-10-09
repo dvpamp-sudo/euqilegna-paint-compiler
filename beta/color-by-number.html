@@ -89,6 +89,9 @@ button{font:inherit;touch-action:manipulation}
 .design-add input[type=file]::file-selector-button{margin-right:8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font:inherit;font-weight:700;cursor:pointer}
 .design-add button{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font-weight:800;cursor:pointer}
 .design-add button:disabled{opacity:.5;cursor:progress}
+.design-item{position:relative}
+.design-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;padding:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:rgba(24,16,32,.86);color:#f2e9f8;font-size:14px;line-height:1;font-weight:900;cursor:pointer;box-shadow:0 2px 6px #0007;z-index:2}
+.design-remove:hover{border-color:#e06a8a;color:#ffd9e4}
 .compile-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.86);backdrop-filter:blur(3px);text-align:center;padding:24px}
 .compile-overlay.show{display:grid}
 .compile-card{background:linear-gradient(180deg,#1d1528,#150f1e);border:1px solid #4a3a5c;border-radius:18px;padding:24px;max-width:400px;width:100%;color:#f4ecfa;box-shadow:0 30px 70px -20px #000}
@@ -928,10 +931,29 @@ function designChip(slug,title,imageUrl){
   chip.appendChild(label);
   return chip;
 }
+/* A library design sits in a wrapper so it can carry its own remove control;
+   the built-in Dahlia Mandala has none because it ships with the page. */
+function designItem(slug,title,imageUrl,removable){
+  const item=document.createElement('div');
+  item.className='design-item';
+  item.appendChild(designChip(slug,title,imageUrl));
+  if(removable){
+    const remove=document.createElement('button');
+    remove.type='button';
+    remove.className='design-remove';
+    remove.dataset.slug=slug;
+    remove.dataset.title=title;
+    remove.title=`Remove ${title} from the design library`;
+    remove.setAttribute('aria-label',`Remove ${title} from the design library`);
+    remove.textContent='\u00d7';
+    item.appendChild(remove);
+  }
+  return item;
+}
 function renderDesigns(list){
   designsEl.innerHTML='';
-  designsEl.appendChild(designChip('__builtin__','Dahlia Mandala',null));
-  list.forEach(item=>designsEl.appendChild(designChip(item.slug,item.title,item.imageUrl)));
+  designsEl.appendChild(designItem('__builtin__','Dahlia Mandala',null,false));
+  list.forEach(item=>designsEl.appendChild(designItem(item.slug,item.title,item.imageUrl,true)));
 }
 async function loadDesigns(){
   try{
@@ -964,7 +986,21 @@ async function openDesign(slug){
     designNote.textContent='That design could not be opened.';
   }
 }
+async function removeDesign(slug,title){
+  if(!confirm(`Remove "${title}" from the design library?`)) return;
+  designNote.textContent='Removing…';
+  try{
+    const response=await fetch(`/api/designs/${encodeURIComponent(slug)}`,{method:'DELETE'});
+    if(!response.ok) throw new Error('Remove failed');
+    designNote.textContent=`Removed ${title}.`;
+    await loadDesigns();
+  }catch(error){
+    designNote.textContent='Could not remove that design.';
+  }
+}
 designsEl.addEventListener('click',event=>{
+  const remove=event.target.closest('button.design-remove');
+  if(remove){removeDesign(remove.dataset.slug,remove.dataset.title);return}
   const chip=event.target.closest('button.design-chip');
   if(chip) openDesign(chip.dataset.slug);
 });
