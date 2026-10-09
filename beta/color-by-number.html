@@ -20,11 +20,13 @@ button{font:inherit;touch-action:manipulation}
 .zone{fill:#fff;stroke:#2b2233;stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
-.zone.painting{animation:crayonStroke .95s cubic-bezier(.4,0,.15,1);transform-box:fill-box;transform-origin:center;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 35%,transparent 65%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 35%,transparent 65%,transparent 100%);-webkit-mask-size:300% 100%;mask-size:300% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:100% 0;mask-position:100% 0}
+.zone.painting{fill:#fff!important;fill-opacity:1}
+.sweep{pointer-events:none;-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 50%,transparent 60%,transparent 100%);-webkit-mask-size:200% 100%;mask-size:200% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;animation:sweepReveal .82s linear forwards}
+.crayon-tip{pointer-events:none}
 .zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-@keyframes crayonStroke{0%{-webkit-mask-position:100% 0;mask-position:100% 0;fill-opacity:.12;transform:rotate(-.8deg) scale(1.018)}100%{-webkit-mask-position:0% 0;mask-position:0% 0;fill-opacity:.95;transform:rotate(0deg) scale(1)}}
+@keyframes sweepReveal{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
 .complete-overlay.show{display:grid}
 .complete-card{background:linear-gradient(180deg,#fff,#f3ecf8);color:#281a2d;border-radius:20px;padding:28px;max-width:430px;box-shadow:0 30px 70px -20px #000}
@@ -266,6 +268,74 @@ function crayonFill(number){
   }
   return board.querySelector(`#crayon-${number}`)?`url(#crayon-${number})`:COLORS[number-1];
 }
+const SWEEP_MS=820;/* keep in sync with the .sweep animation duration */
+let paintLayer=null;
+function boardUnit(){
+  const view=board.viewBox.baseVal;
+  return Math.min(view.width||800,view.height||600);
+}
+function ensurePaintLayer(){
+  if(!paintLayer) paintLayer=document.createElementNS(NS,'g');
+  if(!board.contains(paintLayer)) board.insertBefore(paintLayer,board.querySelector('.zone-label'));
+  return paintLayer;
+}
+function clearSweeps(){
+  if(!paintLayer) return;
+  while(paintLayer.firstChild) paintLayer.removeChild(paintLayer.firstChild);
+}
+function zoneBox(zone){
+  const rect=zone.getBoundingClientRect();
+  const frame=board.getBoundingClientRect();
+  const view=board.viewBox.baseVal;
+  const scaleX=(view.width||800)/frame.width;
+  const scaleY=(view.height||600)/frame.height;
+  return {x:(rect.left-frame.left)*scaleX+view.x,y:(rect.top-frame.top)*scaleY+view.y,w:rect.width*scaleX,h:rect.height*scaleY};
+}
+function crayonTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','crayon-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<path d="M${u(-.17)} ${u(-.42)}L${u(.17)} ${u(-.42)}L0 0Z" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(1.1)}" rx="${u(.12)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-.68)}" width="${u(.4)}" height="${u(.22)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(.34)}" rx="${u(.12)}" fill="#2b2233" fill-opacity=".22"/>`+
+  `</g>`;
+  return tip;
+}
+function sweepPaint(zone,onDone){
+  const number=Number(zone.dataset.c);
+  const box=zoneBox(zone);
+  if(!box.w||!box.h){onDone&&onDone();return}
+  const group=document.createElementNS(NS,'g');
+  group.setAttribute('class','sweep');
+  const piece=zone.cloneNode(false);
+  piece.removeAttribute('style');
+  piece.setAttribute('class','zone');
+  piece.style.fill=crayonFill(number);
+  group.appendChild(piece);
+  const unit=boardUnit();
+  const tip=crayonTip(Math.max(unit*.045,Math.min(box.h*.6,unit*.12)),COLORS[number-1]);
+  const cy=box.y+box.h/2;
+  const layer=ensurePaintLayer();
+  layer.appendChild(group);
+  layer.appendChild(tip);
+  const travel=tip.animate([
+    {offset:0,transform:`translate(${box.x.toFixed(2)}px,${cy.toFixed(2)}px)`,opacity:0},
+    {offset:.12,opacity:1},
+    {offset:.86,opacity:1},
+    {offset:1,transform:`translate(${(box.x+box.w).toFixed(2)}px,${cy.toFixed(2)}px)`,opacity:0}
+  ],{duration:SWEEP_MS,easing:'linear'});
+  const finish=()=>{
+    group.remove();
+    tip.remove();
+    zone.style.transition='none';
+    onDone&&onDone();
+    requestAnimationFrame(()=>{zone.style.transition='';});
+  };
+  travel.onfinish=finish;
+  travel.oncancel=finish;
+}
 function render(){
   zones.forEach((zone,index)=>{
     if(completed.has(index)){
@@ -295,10 +365,10 @@ function paintZone(zone,index){
   }
   completed.add(index);
   history.push(index);
-  zone.classList.add('painting');
-  setTimeout(()=>zone.classList.remove('painting'),990);
   saveProgress(false);
+  zone.classList.add('painting');
   render();
+  sweepPaint(zone,()=>zone.classList.remove('painting'));
 }
 const NS='http://www.w3.org/2000/svg';
 const compileOverlay=document.getElementById('compileOverlay');
@@ -410,11 +480,13 @@ document.getElementById('showNext').onclick=showNext;
 document.getElementById('undo').onclick=()=>{
   const last=history.pop();
   if(last===undefined){statusEl.textContent='Nothing to undo.';return}
+  clearSweeps();
   completed.delete(last);saveProgress(false);render();
 };
 document.getElementById('save').onclick=()=>saveProgress(true);
 document.getElementById('reset').onclick=()=>{
   if(!confirm('Reset all Color-by-Number progress?')) return;
+  clearSweeps();
   completed.clear();history=[];safeSet(storeKey(),'');completeOverlay.classList.remove('show');render();
 };
 document.getElementById('downloadProgress').onclick=()=>downloadJson(saveProgress(false),'euqilegna-color-by-number-progress.json');
