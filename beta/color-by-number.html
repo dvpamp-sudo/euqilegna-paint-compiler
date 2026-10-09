@@ -21,15 +21,10 @@ button{font:inherit;touch-action:manipulation}
 .zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
 .zone.painting{fill:#fff!important;fill-opacity:1}
-.sweep{pointer-events:none;-webkit-mask-size:220% 100%;mask-size:220% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
-.sweep-l{-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 46%,transparent 58%,transparent 100%);mask-image:linear-gradient(90deg,#000 0%,#000 46%,transparent 58%,transparent 100%);animation:sweepRight .4s linear both}
-.sweep-r{-webkit-mask-image:linear-gradient(270deg,#000 0%,#000 46%,transparent 58%,transparent 100%);mask-image:linear-gradient(270deg,#000 0%,#000 46%,transparent 58%,transparent 100%);animation:sweepLeft .4s linear both}
 .crayon-tip{pointer-events:none}
 .zone.done{stroke:#ffffff66;stroke-width:.9;fill-opacity:.95;filter:url(#crayonGrain)}
 .zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-@keyframes sweepRight{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0% 0;mask-position:0% 0}}
-@keyframes sweepLeft{from{-webkit-mask-position:0% 0;mask-position:0% 0}to{-webkit-mask-position:100% 0;mask-position:100% 0}}
 .complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
 .complete-overlay.show{display:grid}
 .complete-card{background:linear-gradient(180deg,#fff,#f3ecf8);color:#281a2d;border-radius:20px;padding:28px;max-width:430px;box-shadow:0 30px 70px -20px #000}
@@ -305,7 +300,7 @@ function buildCrayonDefs(unit){
       `<feComposite in="SourceGraphic" in2="grain" operator="in"/>`+
     `</filter>`+
     COLORS.map((hex,index)=>[
-      `<pattern id="crayon-${index+1}" patternUnits="userSpaceOnUse" width="${tile}" height="${tile}">`,
+      `<pattern id="crayon-${index+1}" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)" width="${tile}" height="${tile}">`,
       `<rect width="${tile}" height="${tile}" fill="${hex}"/>`,
       `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`,
       `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`,
@@ -325,7 +320,7 @@ function crayonFill(number){
   }
   return board.querySelector(`#crayon-${number}`)?`url(#crayon-${number})`:COLORS[number-1];
 }
-const SWEEP_MS=1000;/* whole scribble; each band gets SWEEP_MS/bands as its own pass */
+const SWEEP_MS=1000;/* the whole scribble of one region; its passes share the time */
 let paintLayer=null;
 function boardUnit(){
   const view=board.viewBox.baseVal;
@@ -344,7 +339,7 @@ function fxDefs(){
 function clearSweeps(){
   if(!paintLayer) return;
   while(paintLayer.firstChild) paintLayer.removeChild(paintLayer.firstChild);
-  board.querySelectorAll('clipPath[id^="band-"]').forEach(node=>node.remove());
+  board.querySelectorAll('clipPath[id^="stroke-"]').forEach(node=>node.remove());
 }
 function zoneBox(zone){
   const rect=zone.getBoundingClientRect();
@@ -371,81 +366,113 @@ function sweepPaint(zone,onDone){
   const box=zoneBox(zone);
   if(!box.w||!box.h){onDone&&onDone();return}
   const unit=boardUnit();
-  const bands=Math.max(3,Math.min(6,Math.round(box.h/(unit*.1))||3));
   const seq=(sweepPaint.seq=(sweepPaint.seq||0)+1);
-  /* no two strokes by hand are alike: nudge every row, pass and lean a little */
+  /* no two strokes by hand are alike: nudge every pass and lean a little */
   const wobble=index=>{const x=Math.sin(index*12.9898)*43758.5453;return (x-Math.floor(x))*2-1};
-  const edges=[0];
-  for(let band=1;band<bands;band++) edges.push(band/bands+wobble(seq*7+band)*.5/bands);
-  edges.push(1);
-  const defs=fxDefs();
+  const hex=COLORS[number-1];
   const layer=ensurePaintLayer();
-  const groups=[];
-  const starts=[];
-  const passes=[];
-  let clock=0;
-  for(let band=0;band<bands;band++){
-    const top=box.y+box.h*edges[band];
-    const bottom=box.y+box.h*edges[band+1];
-    const slack=(bottom-top)*.22;/* passes lap over each other instead of tiling the shape neatly */
-    const clip=document.createElementNS(NS,'clipPath');
-    clip.setAttribute('id',`band-${seq}-${band}`);
-    clip.setAttribute('clipPathUnits','userSpaceOnUse');
-    const rect=document.createElementNS(NS,'rect');
-    rect.setAttribute('x',box.x.toFixed(2));
-    rect.setAttribute('y',(top-slack).toFixed(2));
-    rect.setAttribute('width',box.w.toFixed(2));
-    rect.setAttribute('height',(bottom-top+slack*2).toFixed(2));
-    clip.appendChild(rect);
-    defs.appendChild(clip);
-    const group=document.createElementNS(NS,'g');
-    group.setAttribute('class',band%2?'sweep sweep-r':'sweep sweep-l');
-    group.setAttribute('clip-path',`url(#${clip.id})`);
-    const pass=SWEEP_MS/bands*(1+wobble(seq*13+band)*.16);/* uneven stroke speed */
-    starts.push(clock);
-    passes.push(pass);
-    group.style.animationDelay=`${Math.round(clock*.8)}ms`;
-    group.style.animationDuration=`${Math.round(pass)}ms`;
-    clock+=pass;
-    const piece=zone.cloneNode(false);
-    piece.removeAttribute('style');
-    piece.setAttribute('class','zone done');/* matches the finished stroke, so the swap is seamless */
-    piece.style.fill=crayonFill(number);
-    group.appendChild(piece);
-    group._clip=clip;
-    layer.appendChild(group);
-    groups.push(group);
+
+  /* Wax never crosses an edge, so the passes are clipped to the region's own outline. */
+  const clip=document.createElementNS(NS,'clipPath');
+  clip.setAttribute('id',`stroke-${seq}`);
+  clip.setAttribute('clipPathUnits','userSpaceOnUse');
+  const outline=zone.cloneNode(false);
+  outline.removeAttribute('style');
+  outline.setAttribute('class','');
+  clip.appendChild(outline);
+  fxDefs().appendChild(clip);
+  const group=document.createElementNS(NS,'g');
+  group.setAttribute('clip-path',`url(#${clip.id})`);
+  layer.appendChild(group);
+
+  /* A hand colours in one direction and then works back the other way, so the
+     whole region leans together and the grain runs in bands. */
+  const lean=(-35+wobble(seq*3)*10)*Math.PI/180;
+  const cx=box.x+box.w/2,cy=box.y+box.h/2;
+  const ux=Math.cos(lean),uy=Math.sin(lean),nx=-uy,ny=ux;
+  let minU=Infinity,maxU=-Infinity,minN=Infinity,maxN=-Infinity;
+  [[box.x,box.y],[box.x+box.w,box.y],[box.x+box.w,box.y+box.h],[box.x,box.y+box.h]].forEach(corner=>{
+    const dx=corner[0]-cx,dy=corner[1]-cy;
+    const along=dx*ux+dy*uy,across=dx*nx+dy*ny;
+    if(along<minU) minU=along;
+    if(along>maxU) maxU=along;
+    if(across<minN) minN=across;
+    if(across>maxN) maxN=across;
+  });
+
+  /* Crayon passes are broad and lap over each other, so the paper shows through. */
+  const width=Math.max(unit*.016,Math.min(Math.min(box.w,box.h)*.3,unit*.08));
+  const count=Math.max(3,Math.min(14,Math.round((maxN-minN)/(width*.78))));
+  const step=(maxN-minN)/count;
+  const pad=width*.6;
+  const passMs=SWEEP_MS/count;
+  const keys=[];
+  for(let pass=0;pass<count;pass++){
+    const forward=pass%2===0;
+    const across=minN+step*(pass+.5)+wobble(seq*31+pass)*step*.16;
+    const w=width*(1+wobble(seq*41+pass)*.14);
+    const fromU=forward?minU-pad:maxU+pad;
+    const toU=forward?maxU+pad:minU-pad;
+    const points=[];
+    let d='';
+    for(let stop=0;stop<=4;stop++){
+      const along=fromU+(toU-fromU)*stop/4;
+      const off=across+(stop&&stop<4?wobble(seq*37+pass*13+stop)*w*.2:0);
+      const x=cx+ux*along+nx*off,y=cy+uy*along+ny*off;
+      d+=(stop?' L':'M')+x.toFixed(2)+' '+y.toFixed(2);
+      points.push({x,y});
+    }
+    const stroke=document.createElementNS(NS,'path');
+    stroke.setAttribute('d',d);
+    stroke.setAttribute('fill','none');
+    stroke.setAttribute('stroke',hex);
+    stroke.setAttribute('stroke-width',w.toFixed(2));
+    stroke.setAttribute('stroke-linecap','round');
+    stroke.setAttribute('stroke-linejoin','round');
+    stroke.setAttribute('stroke-opacity',(0.88+wobble(seq*43+pass)*.1).toFixed(3));
+    group.appendChild(stroke);
+    /* The pass is drawn on rather than faded in, so the wax builds up behind the tip. */
+    const length=stroke.getTotalLength()||1;
+    stroke.style.strokeDasharray=length.toFixed(2);
+    stroke.style.strokeDashoffset=length.toFixed(2);
+    stroke.animate(
+      [{strokeDashoffset:length},{strokeDashoffset:0}],
+      {delay:pass*passMs,duration:passMs,easing:'linear',fill:'forwards'}
+    );
+    const tilt=(forward?-1:1)*(-16+wobble(seq*23+pass)*6);
+    points.forEach((point,stop)=>{
+      /* the nudge keeps each new pass strictly later than the one before it */
+      const offset=Math.min(1,(pass*passMs+passMs*stop/4)/SWEEP_MS+(stop?0:pass*1e-4));
+      keys.push({offset,transform:`translate(${point.x.toFixed(2)}px,${point.y.toFixed(2)}px) rotate(${tilt.toFixed(2)}deg)`});
+    });
   }
-  const total=clock;
-  const tip=crayonTip(Math.max(unit*.045,Math.min(box.h*.6,unit*.12)),COLORS[number-1]);
+
+  const tip=crayonTip(Math.max(unit*.04,Math.min(width*1.6,unit*.14)),hex);
   layer.appendChild(tip);
-  /* the crayon zig-zags down the shape, drifting off the line of the stroke */
-  const keys=[{offset:0,transform:`translate(${box.x.toFixed(2)}px,${(box.y+box.h*edges[0]).toFixed(2)}px) rotate(${(-18+wobble(seq*3)*3).toFixed(2)}deg)`}];
-  for(let band=0;band<bands;band++){
-    const forward=band%2===0;
-    const from=forward?box.x:box.x+box.w;
-    const to=forward?box.x+box.w:box.x;
-    const rowFrom=box.y+box.h*edges[band];
-    const rowTo=box.y+box.h*edges[band+1];
-    keys.push({offset:(starts[band]+passes[band]*.55)/total,transform:`translate(${(from+(to-from)*.55).toFixed(2)}px,${(rowFrom+(rowTo-rowFrom)*.55+wobble(seq*19+band)*box.h*.05).toFixed(2)}px) rotate(${(-18+wobble(seq*23+band)*5).toFixed(2)}deg)`});
-    keys.push({offset:(starts[band]+passes[band])/total,transform:`translate(${to.toFixed(2)}px,${rowTo.toFixed(2)}px) rotate(${(-18+wobble(seq*29+band)*5).toFixed(2)}deg)`});
-  }
-  const travel=tip.animate(keys,{duration:total,easing:'linear'});
+  const travel=tip.animate(keys,{duration:SWEEP_MS,easing:'linear'});
   tip.animate([
     {offset:0,opacity:0},
-    {offset:.08,opacity:1},
+    {offset:.06,opacity:1},
     {offset:.9,opacity:1},
     {offset:1,opacity:0}
-  ],{duration:total,easing:'linear'});
-  const finish=()=>{
-    groups.forEach(item=>{item.remove();item._clip.remove();});
+  ],{duration:SWEEP_MS,easing:'linear'});
+  const cleanup=()=>{
+    group.remove();
+    clip.remove();
     tip.remove();
     zone.style.transition='none';
     onDone&&onDone();
     requestAnimationFrame(()=>{zone.style.transition='';});
   };
-  travel.onfinish=finish;
-  travel.oncancel=finish;
+  /* The wax is dry the moment the last pass lands; let it show through. */
+  const settle=()=>{
+    zone.classList.remove('painting');
+    const fade=group.animate([{opacity:1},{opacity:0}],{duration:150,easing:'linear'});
+    fade.onfinish=cleanup;
+    fade.oncancel=cleanup;
+  };
+  travel.onfinish=settle;
+  travel.oncancel=cleanup;
 }
 function render(){
   zones.forEach((zone,index)=>{
