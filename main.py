@@ -1322,7 +1322,7 @@ function analyzeArtwork(file){
     document.getElementById('reviewScore').textContent=score;
     document.getElementById('reviewLabel').textContent=score>=90?'Excellent':score>=75?'Very Good':'Needs Review';
     const setReviewBar=(id,v)=>document.getElementById(id).style.width=Math.max(10,Math.min(100,v))+'%';
-    setReviewBar('barQuality',score);setReviewBar('barDetail',86);setReviewBar('barPrint',minSide>=2400?95:minSide>=1600?82:55);setReviewBar('barColor',88);setReviewBar('barRelax',96);
+    setReviewBar('barQuality',score);setReviewBar('barDetail',86);setReviewBar('barPrint',Math.min(width,height)>=2400?95:Math.min(width,height)>=1600?82:55);setReviewBar('barColor',88);setReviewBar('barRelax',96);
     document.getElementById('paintabilityMetric').textContent=`${score}/100`;
     document.getElementById('paintabilityBar').style.width=score+'%';
     document.getElementById('printMetric').textContent=print;
