@@ -204,6 +204,12 @@ class RuntimeDatabase:
         payload.setdefault("cancelRequested", False)
         return payload
 
+    def delete_job(self, job_id: str) -> int:
+        """Drop a job's persisted record once its files have been removed."""
+        with self.lock, self.connect() as connection:
+            cursor = connection.execute("DELETE FROM jobs WHERE id=?", (job_id,))
+        return cursor.rowcount
+
     def set_cancel_requested(self, job_id: str, requested: bool = True) -> dict[str, Any] | None:
         job = self.load_job(job_id)
         if job is None:
@@ -320,6 +326,14 @@ class RuntimeDatabase:
         with self.connect() as connection:
             rows = connection.execute(query, params).fetchall()
         return [_row_to_painting(row) for row in rows]
+
+    def delete_paintings_by_package(self, package_dir: str) -> int:
+        """Remove the painting rows that point at one compiled package."""
+        with self.lock, self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM paintings WHERE package_dir=?", (package_dir,)
+            )
+        return cursor.rowcount
 
     def save_canvas_progress(self, progress: CanvasProgress) -> CanvasProgress:
         """Store a session's canvas state, creating the row or updating it in place."""

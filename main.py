@@ -119,6 +119,53 @@ def is_cancelled(job_id: str) -> bool:
     return bool((job or {}).get("cancelRequested"))
 
 
+def job_work_dir(job: dict[str, Any]) -> Path | None:
+    """The job's private working directory, if it really is one of ours.
+
+    ``workDir`` is the only path a job may delete, so it must sit directly under
+    ``RUNTIME_DATA_DIR/jobs``; anything else returns ``None`` rather than letting a
+    caller remove an unexpected directory.
+    """
+    work_dir = Path(job.get("workDir") or "")
+    if work_dir.name and work_dir.parent == RUNTIME_DATA_DIR / "jobs":
+        return work_dir
+    return None
+
+
+def purge_job(job_id: str) -> bool:
+    """Delete a job's files and its runtime records — used when a job is dropped.
+
+    Dropping a design (or cancelling a finished compile) must leave nothing behind:
+    the compiled package on disk, the ``jobs`` row and the ``paintings`` row all
+    describe the same artifact, so leaving any of them makes the design library,
+    the job list and the artist dashboard disagree about what still exists.
+    """
+    job = get_job_record(job_id)
+    if job is None:
+        return False
+
+    # A worker still writing into the directory we are about to delete should be
+    # told to stop first; run_job then clears its own partial files.
+    if job.get("status") in {"queued", "running"}:
+        with jobs_lock:
+            if job_id in jobs:
+                jobs[job_id]["cancelRequested"] = True
+        RUNTIME_DB.set_cancel_requested(job_id, True)
+
+    package_dir = str(job.get("outputDir") or "")
+    with jobs_lock:
+        jobs.pop(job_id, None)
+
+    RUNTIME_DB.delete_job(job_id)
+    if package_dir:
+        RUNTIME_DB.delete_paintings_by_package(package_dir)
+
+    work_dir = job_work_dir(job)
+    if work_dir is not None:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    return True
+
+
 def progress_update(job_id: str, percent: int, stage: str, stats: dict) -> None:
     elapsed = float(stats.get("elapsedSeconds", 0))
     eta = None
@@ -228,6 +275,11 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
 
     except Exception as exc:
         cancelled = "cancelled" in str(exc).lower() or is_cancelled(job_id)
+        if cancelled:
+            # An abandoned job keeps nothing: no half-built package on disk.
+            work_dir = job_work_dir(job)
+            if work_dir is not None:
+                shutil.rmtree(work_dir, ignore_errors=True)
         set_job(
             job_id,
             status="cancelled" if cancelled else "failed",
@@ -1748,9 +1800,13 @@ def remove_design(slug: str):
         raise HTTPException(status_code=500, detail="Could not remove the design image.")
 
     cache = load_design_cache()
-    if cache.pop(slug, None) is not None:
+    job_id = cache.pop(slug, None)
+    if job_id is not None:
         save_design_cache(cache)
-    return {"ok": True, "slug": slug}
+        # The compiled package outlives the image unless it goes too, leaving a
+        # job, a package folder and a painting row for a design nobody can open.
+        purge_job(job_id)
+    return {"ok": True, "slug": slug, "jobRemoved": job_id}
 
 
 @app.get("/designs/{filename}")
@@ -1828,12 +1884,16 @@ def get_job_artwork(job_id: str):
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
+    """Stop a running compilation, or clear a finished one's files away."""
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
 
     if job["status"] in {"complete", "failed", "cancelled", "interrupted"}:
-        return {"ok": True, "status": job["status"]}
+        # Nothing is running, so cancelling means "drop it": the package, the job
+        # record and its painting row all go.
+        purge_job(job_id)
+        return {"ok": True, "status": "removed", "jobId": job_id}
 
     with jobs_lock:
         jobs[job_id]["cancelRequested"] = True
