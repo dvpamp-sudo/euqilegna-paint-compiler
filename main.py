@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -25,6 +25,7 @@ from admin_dashboard import build_admin_overview, render_admin_dashboard
 from canvas_progress import CanvasProgress
 from compiler import compile_artwork
 from painting_pipeline import BETA_SETTINGS, record_painting
+from paintings import Painting, PaintingStatus
 from studio_config import (
     APP_NAME, APP_VERSION, PROJECT_ROOT, PREMIUM_GENERATED_ROOT,
     GALLERY_FILE, ANALYTICS_FILE, initialize_storage,
@@ -640,8 +641,14 @@ def dashboard_data():
     }
 
 
-# Generated artwork shown first, then the progressive reveal, then the source upload.
-PAINTING_PREVIEW_FILES = ("finished_masterpiece.png", "completion_reveal.png", "original.png")
+# The painter's own finished canvas first, then the generated artwork, the
+# progressive reveal, and finally the source upload.
+PAINTING_PREVIEW_FILES = (
+    "canvas_finished.png",
+    "finished_masterpiece.png",
+    "completion_reveal.png",
+    "original.png",
+)
 
 
 def painting_preview_path(painting) -> Path | None:
@@ -781,6 +788,118 @@ async def reset_canvas_progress(session_id: str, request: Request):
     return {"ok": True, "cleared": cleared}
 
 
+# A finished canvas painting is kept in the studio's painting library, not only in
+# the session that painted it. The painter's own artwork travels as ``canvas`` plus
+# the finished image; an artwork that came from a compile keeps the image beside its
+# package, and the built-in design — which has no package at all — gets a folder of
+# its own under the data directory.
+CANVAS_FINISHED_FILENAME = "canvas_finished.png"
+CANVAS_ARTWORK_MEDIUM = "Color-by-number"
+CANVAS_BUILTIN_TITLE = "Dahlia Mandala"
+
+
+def canvas_artwork_dir(artwork_key: str) -> Path:
+    """The folder that holds what a canvas artwork with no compiled package keeps."""
+    return RUNTIME_DATA_DIR / "canvas" / artwork_key
+
+
+def canvas_artwork_package(artwork_key: str) -> tuple[Path, dict[str, Any] | None]:
+    """The folder a finished canvas image belongs in, plus the artwork's compile job."""
+    if artwork_key != CANVAS_BUILTIN_ARTWORK:
+        job = RUNTIME_DB.load_job(artwork_key)
+        if job and job.get("outputDir"):
+            return Path(job["outputDir"]), job
+        return canvas_artwork_dir(artwork_key), job
+    return canvas_artwork_dir(artwork_key), None
+
+
+def canvas_artwork_title(artwork_key: str, job: dict[str, Any] | None) -> str:
+    """Name a finished painting the way the studio knows the artwork."""
+    if job and job.get("inputPath"):
+        return Path(job["inputPath"]).stem or artwork_key
+    return CANVAS_BUILTIN_TITLE if artwork_key == CANVAS_BUILTIN_ARTWORK else artwork_key
+
+
+@app.post("/api/canvas/progress/{session_id}/complete")
+async def complete_canvas_painting(session_id: str, request: Request):
+    """Keep a finished canvas painting in the studio's painting library.
+
+    The canvas mirrors its progress while painting; this is the moment the finished
+    artwork itself is stored, so "My Paintings" lists what the painter completed
+    instead of the piece disappearing with the browser that painted it. The completed
+    painting is recorded once per artwork: a compiled upload or design already has its
+    painting row, and the built-in design gets one on its first finish.
+    """
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    form = await request.form()
+    artwork_key = canvas_token(form.get("artworkKey"), CANVAS_MAX_ARTWORK) or CANVAS_BUILTIN_ARTWORK
+
+    record = next(
+        (item for item in RUNTIME_DB.load_canvas_session(token) if item.artwork_key == artwork_key),
+        None,
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="No saved progress for that artwork.")
+
+    # The canvas reports its own count as well: the last zone's debounced progress save
+    # may still be in flight, and the painter knows whether the board is finished.
+    region_total = as_int_or(form.get("regionTotal"), None) or record.region_total
+    painted = max(len(record.completed), as_int_or(form.get("painted"), 0) or 0)
+    if region_total and painted < region_total:
+        raise HTTPException(
+            status_code=409, detail="Finish every region before saving the painting."
+        )
+
+    package_dir, job = canvas_artwork_package(artwork_key)
+
+    image = form.get("image")
+    if image is not None and hasattr(image, "read"):
+        try:
+            package_dir.mkdir(parents=True, exist_ok=True)
+            (package_dir / CANVAS_FINISHED_FILENAME).write_bytes(await image.read())
+        except OSError:
+            pass
+
+    painting = next(
+        (item for item in RUNTIME_DB.list_paintings() if item.package_dir == str(package_dir)),
+        None,
+    )
+    color_count = as_int_or(form.get("colorCount"), None)
+    if color_count is None and job:
+        color_count = as_int_or((job.get("metadata") or {}).get("colors"), None)
+
+    if painting is None:
+        painting = Painting(
+            title=canvas_artwork_title(artwork_key, job),
+            date_created=date.today().isoformat(),
+            medium=CANVAS_ARTWORK_MEDIUM,
+            status=PaintingStatus.COMPLETED,
+            package_dir=str(package_dir),
+            region_count=region_total or painted,
+            color_count=color_count,
+        )
+    else:
+        painting.status = PaintingStatus.COMPLETED
+        painting.region_count = region_total or painted or painting.region_count
+        painting.color_count = color_count or painting.color_count
+    RUNTIME_DB.save_painting(painting)
+
+    return {
+        "ok": True,
+        "painting": {
+            "id": painting.id,
+            "title": painting.title,
+            "status": str(painting.status),
+            "regionCount": painting.region_count,
+            "colorCount": painting.color_count,
+            "previewUrl": f"/api/paintings/{painting.id}/preview",
+        },
+    }
+
+
 def canvas_artwork_names(
     sessions: list[CanvasProgress],
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -803,8 +922,10 @@ def canvas_artwork_names(
         key = session.artwork_key
         if key in keys:
             continue
-        job = None if key == CANVAS_BUILTIN_ARTWORK else RUNTIME_DB.load_job(key)
-        painting = by_package.get((job or {}).get("outputDir")) if job else None
+        # A finished canvas is matched to its painting by the folder the artwork's
+        # files live in: the compile package, or the canvas folder when it has none.
+        package, job = canvas_artwork_package(key)
+        painting = by_package.get(str(package))
         if painting is not None:
             keys[key] = painting.id
             titles[painting.id] = painting.title

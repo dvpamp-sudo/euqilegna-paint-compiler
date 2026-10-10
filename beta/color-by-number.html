@@ -119,7 +119,7 @@ button{font:inherit;touch-action:manipulation}
 <header class="top">
 <a href="/beta">← Beta Dashboard</a>
 <h1>Color-by-Number Beta</h1>
-<p>Tap a color, then tap only the softly highlighted matching zones. Progress saves automatically.</p>
+<p>Tap a color, then tap only the softly highlighted matching zones. Progress saves automatically, and finishing a picture keeps it in My Paintings.</p>
 </header>
 
 <div class="app">
@@ -171,6 +171,7 @@ button{font:inherit;touch-action:manipulation}
 <button id="showNext" type="button">Show Next</button>
 <button id="undo" type="button">Undo</button>
 <button id="save" type="button">Save Now</button>
+<button id="saveLibrary" type="button">Save to My Paintings</button>
 <button id="reset" type="button">Reset</button>
 <a href="/beta/feedback">Give Feedback</a>
 <button id="downloadProgress" type="button">Download Progress</button>
@@ -268,6 +269,88 @@ function saveProgress(show=false){
   if(show) saveNoteEl.textContent=ok?'Progress saved.':'Storage is blocked; use Download Progress.';
   saveToStudio(show);
   return data;
+}
+/* The finished painting is kept as a picture, not only as progress. The board is
+   copied with its styling made explicit — the page's stylesheet does not travel
+   with a copied SVG — so the browser can draw it, and the image goes to the studio
+   with the finish, where "My Paintings" shows the artwork that was painted. */
+function boardImage(){
+  return new Promise(resolve=>{
+    let markup;
+    try{
+      const view=board.viewBox.baseVal;
+      const width=view.width||800,height=view.height||600;
+      const unit=Math.min(width,height);
+      const clone=board.cloneNode(true);
+      clone.querySelectorAll('.zone-label').forEach(node=>node.remove());
+      clone.querySelectorAll('.zone').forEach(zone=>{
+        const painted=(zone.style.fill||'').indexOf('url(#paint-')===0;
+        zone.removeAttribute('class');
+        zone.setAttribute('stroke','#1b1b1b');
+        zone.setAttribute('stroke-width',(unit*.0016).toFixed(3));
+        zone.setAttribute('stroke-linejoin','round');
+        if(painted){
+          zone.setAttribute('stroke-opacity','.5');
+          zone.setAttribute('filter','url(#paintGrain)');
+        }else{
+          zone.setAttribute('fill','#fff');
+        }
+      });
+      clone.setAttribute('xmlns',NS);
+      clone.setAttribute('width',String(width));
+      clone.setAttribute('height',String(height));
+      markup=new XMLSerializer().serializeToString(clone);
+    }catch(error){
+      resolve(null);
+      return;
+    }
+    const image=new Image();
+    image.onload=()=>{
+      try{
+        const view=board.viewBox.baseVal;
+        const width=view.width||800,height=view.height||600;
+        const scale=Math.min(2,1600/Math.max(width,height));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(width*scale));
+        canvas.height=Math.max(1,Math.round(height*scale));
+        const context=canvas.getContext('2d');
+        context.fillStyle='#fff';
+        context.fillRect(0,0,canvas.width,canvas.height);
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        canvas.toBlob(blob=>resolve(blob),'image/png');
+      }catch(error){resolve(null)}
+    };
+    image.onerror=()=>resolve(null);
+    image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(markup);
+  });
+}
+/* A finished painting is stored once per artwork: the studio keeps the painting row
+   for the artwork and this either creates it (the built-in design) or marks the one
+   the artwork was compiled into as completed. */
+const finishedPaintings=new Set();
+let savingFinished=false;
+async function saveFinishedPainting(announce=false){
+  if(savingFinished) return false;
+  savingFinished=true;
+  try{
+    const image=await boardImage();
+    const body=new FormData();
+    body.append('artworkKey',canvasArtworkKey());
+    body.append('regionTotal',String(zones.length));
+    body.append('painted',String(completed.size));
+    body.append('colorCount',String(COLORS.length));
+    if(image) body.append('image',image,'finished-painting.png');
+    const response=await fetch(`/api/canvas/progress/${encodeURIComponent(canvasSession())}/complete`,{method:'POST',body});
+    if(!response.ok) throw new Error('Library save rejected');
+    finishedPaintings.add(canvasArtworkKey());
+    if(announce) saveNoteEl.textContent='Finished painting saved to My Paintings.';
+    return true;
+  }catch(error){
+    if(announce) saveNoteEl.textContent='Could not save to My Paintings — try again.';
+    return false;
+  }finally{
+    savingFinished=false;
+  }
 }
 function bindZones(){
   zones=[...board.querySelectorAll('.zone')];
@@ -760,7 +843,16 @@ function render(){
   barEl.style.width=`${zones.length?completed.size/zones.length*100:0}%`;
   renderPalette();
   highlight();
-  if(completed.size===zones.length) completeOverlay.classList.add('show');
+  if(zones.length&&completed.size===zones.length){
+    completeOverlay.classList.add('show');
+    /* Finishing the picture keeps it: the save happens by itself once, and the
+       button below can ask for it again. */
+    if(!finishedPaintings.has(canvasArtworkKey())){
+      saveFinishedPainting().then(ok=>{
+        if(ok) saveNoteEl.textContent='Finished painting saved to My Paintings.';
+      });
+    }
+  }
 }
 function paintZone(zone,index){
   if(completed.has(index)) return;
@@ -1058,6 +1150,13 @@ document.getElementById('undo').onclick=()=>{
   completed.delete(last);saveProgress(false);render();
 };
 document.getElementById('save').onclick=()=>saveProgress(true);
+document.getElementById('saveLibrary').onclick=()=>{
+  if(!zones.length||completed.size!==zones.length){
+    saveNoteEl.textContent='Finish every region before saving to My Paintings.';
+    return;
+  }
+  saveFinishedPainting(true);
+};
 document.getElementById('reset').onclick=()=>{
   if(!confirm('Reset all Color-by-Number progress?')) return;
   clearSweeps();
