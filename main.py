@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -13,14 +14,20 @@ import time
 import zipfile
 import json
 import os
+import re
 import csv
 import io
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
 
+from admin_dashboard import build_admin_overview, render_admin_dashboard
+from canvas_progress import CanvasProgress
 from compiler import compile_artwork
+from painting_pipeline import BETA_SETTINGS, record_painting
+from paintings import Painting, PaintingStatus
 from studio_config import (
     APP_NAME, APP_VERSION, PROJECT_ROOT, PREMIUM_GENERATED_ROOT,
     GALLERY_FILE, ANALYTICS_FILE, initialize_storage,
@@ -67,7 +74,10 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in job.items()
-        if key not in {"workDir", "inputPath", "outputDir", "zipPath", "cancelRequested"}
+        if key not in {
+            "workDir", "inputPath", "outputDir", "zipPath",
+            "cancelRequested", "settings", "resumedAt",
+        }
     }
 
 
@@ -110,6 +120,53 @@ def set_job(job_id: str, **updates: Any) -> None:
 def is_cancelled(job_id: str) -> bool:
     job = get_job_record(job_id)
     return bool((job or {}).get("cancelRequested"))
+
+
+def job_work_dir(job: dict[str, Any]) -> Path | None:
+    """The job's private working directory, if it really is one of ours.
+
+    ``workDir`` is the only path a job may delete, so it must sit directly under
+    ``RUNTIME_DATA_DIR/jobs``; anything else returns ``None`` rather than letting a
+    caller remove an unexpected directory.
+    """
+    work_dir = Path(job.get("workDir") or "")
+    if work_dir.name and work_dir.parent == RUNTIME_DATA_DIR / "jobs":
+        return work_dir
+    return None
+
+
+def purge_job(job_id: str) -> bool:
+    """Delete a job's files and its runtime records — used when a job is dropped.
+
+    Dropping a design (or cancelling a finished compile) must leave nothing behind:
+    the compiled package on disk, the ``jobs`` row and the ``paintings`` row all
+    describe the same artifact, so leaving any of them makes the design library,
+    the job list and the artist dashboard disagree about what still exists.
+    """
+    job = get_job_record(job_id)
+    if job is None:
+        return False
+
+    # A worker still writing into the directory we are about to delete should be
+    # told to stop first; run_job then clears its own partial files.
+    if job.get("status") in {"queued", "running"}:
+        with jobs_lock:
+            if job_id in jobs:
+                jobs[job_id]["cancelRequested"] = True
+        RUNTIME_DB.set_cancel_requested(job_id, True)
+
+    package_dir = str(job.get("outputDir") or "")
+    with jobs_lock:
+        jobs.pop(job_id, None)
+
+    RUNTIME_DB.delete_job(job_id)
+    if package_dir:
+        RUNTIME_DB.delete_paintings_by_package(package_dir)
+
+    work_dir = job_work_dir(job)
+    if work_dir is not None:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    return True
 
 
 def progress_update(job_id: str, percent: int, stage: str, stats: dict) -> None:
@@ -199,6 +256,13 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
                 "status": "complete",
             },
         )
+        record_painting(
+            metadata,
+            source_path=input_path,
+            package_dir=output_dir,
+            runtime=RUNTIME_DB,
+        )
+
         set_job(
             job_id,
             status="complete",
@@ -214,6 +278,11 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
 
     except Exception as exc:
         cancelled = "cancelled" in str(exc).lower() or is_cancelled(job_id)
+        if cancelled:
+            # An abandoned job keeps nothing: no half-built package on disk.
+            work_dir = job_work_dir(job)
+            if work_dir is not None:
+                shutil.rmtree(work_dir, ignore_errors=True)
         set_job(
             job_id,
             status="cancelled" if cancelled else "failed",
@@ -224,6 +293,51 @@ def run_job(job_id: str, settings: dict[str, Any]) -> None:
             updatedAt=utc_now(),
         )
 
+
+# Compilation runs on a single worker, so an upload interrupted by a service
+# restart — or one that failed on an earlier compiler defect — would otherwise
+# never finish vectorizing and never reach the gallery. Each unfinished upload is
+# re-queued once on startup; run_job records the painting when it completes.
+RESUMABLE_STATUSES = {"queued", "running", "interrupted", "failed"}
+
+
+def resume_unfinished_uploads() -> int:
+    """Restart vectorization for uploaded images that produced no package."""
+    resumed = 0
+    for job in RUNTIME_DB.recent_jobs(200):
+        job_id = job.get("id")
+        if not job_id or job.get("premiumSample"):
+            continue
+        if job.get("status") not in RESUMABLE_STATUSES or job.get("resumedAt"):
+            continue
+
+        input_path = Path(job.get("inputPath") or "")
+        output_dir = Path(job.get("outputDir") or "")
+        if not input_path.is_file() or (output_dir / "metadata.json").is_file():
+            continue
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        job.update(
+            status="queued",
+            stage="Queued (resumed)",
+            percent=0,
+            error=None,
+            cancelRequested=False,
+            resumedAt=utc_now(),
+            updatedAt=utc_now(),
+        )
+        with jobs_lock:
+            jobs[job_id] = job
+        RUNTIME_DB.save_job(job)
+        # Uploads recorded before jobs stored their settings used the canvas
+        # defaults, which is what those images were originally compiled with.
+        executor.submit(run_job, job_id, job.get("settings") or dict(BETA_SETTINGS))
+        resumed += 1
+
+    return resumed
+
+
+RESUMED_ON_STARTUP = resume_unfinished_uploads()
 
 
 @app.get("/beta-test", response_class=HTMLResponse)
@@ -272,6 +386,24 @@ def beta_admin_v10():
         "</tr>"
         for row in rows[:200]
     )
+    sessions = RUNTIME_DB.list_canvas_sessions()
+    session_rows = []
+    for session in sessions[:200]:
+        painted = str(len(session.completed))
+        if session.region_total:
+            painted += f" / {session.region_total}"
+        session_rows.append(
+            "<tr>"
+            f"<td>{session.session_id}</td>"
+            f"<td>{session.artwork_key}</td>"
+            f"<td>{painted}</td>"
+            f"<td>{session.saves}</td>"
+            f"<td>{session.updated_at}</td>"
+            "</tr>"
+        )
+    session_table = "".join(session_rows) or (
+        "<tr><td colspan='5'>No canvas sessions saved yet.</td></tr>"
+    )
     return HTMLResponse(f"""<!doctype html><html><head><meta charset='utf-8'>
     <meta name='viewport' content='width=device-width,initial-scale=1'>
     <title>Euqilegna Beta Results</title>
@@ -286,6 +418,8 @@ def beta_admin_v10():
     </div>
     <p><a href='/beta/feedback-v10.csv'>Download CSV</a></p>
     <table><thead><tr><th>Date</th><th>Tester</th><th>Device</th><th>Artwork</th><th>Progress</th><th>Pointer</th><th>Comments</th></tr></thead><tbody>{table}</tbody></table>
+    <h2>Saved canvas sessions ({len(sessions)})</h2>
+    <table><thead><tr><th>Session</th><th>Artwork</th><th>Painted regions</th><th>Saves</th><th>Last saved</th></tr></thead><tbody>{session_table}</tbody></table>
     </body></html>""")
 
 
@@ -460,6 +594,12 @@ def studio_challenges():
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/studio/admin", response_class=HTMLResponse)
+def studio_admin():
+    """Artist admin dashboard: submitted paintings, tester sessions and feedback."""
+    return HTMLResponse(render_admin_dashboard(admin_overview_payload()))
+
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_page():
@@ -503,6 +643,363 @@ def dashboard_data():
     }
 
 
+# The painter's own finished canvas first, then the generated artwork, the
+# progressive reveal, and finally the source upload.
+PAINTING_PREVIEW_FILES = (
+    "canvas_finished.png",
+    "finished_masterpiece.png",
+    "completion_reveal.png",
+    "original.png",
+)
+
+
+def painting_preview_path(painting) -> Path | None:
+    """Image to show for a painting: the generated artwork, else its source upload."""
+    if painting.package_dir:
+        package_dir = Path(painting.package_dir)
+        for name in PAINTING_PREVIEW_FILES:
+            candidate = package_dir / name
+            if candidate.is_file():
+                return candidate
+    if painting.source_image and Path(painting.source_image).is_file():
+        return Path(painting.source_image)
+    return None
+
+
+@app.get("/api/paintings")
+def paintings_data():
+    """All recorded paintings, newest first, each with a preview image URL."""
+    return {
+        "items": [
+            {
+                "id": painting.id,
+                "title": painting.title,
+                "date_created": painting.date_created,
+                "medium": painting.medium,
+                "status": str(painting.status),
+                "region_count": painting.region_count,
+                "color_count": painting.color_count,
+                "previewUrl": f"/api/paintings/{painting.id}/preview",
+            }
+            for painting in RUNTIME_DB.list_paintings()
+        ]
+    }
+
+
+PREVIEW_THUMB_MIN_WIDTH = 64
+PREVIEW_THUMB_MAX_WIDTH = 1200
+
+
+@lru_cache(maxsize=128)
+def preview_thumbnail(source: str, width: int, modified: float) -> bytes | None:
+    """A gallery-sized JPEG copy of a preview image, cached in memory.
+
+    "My Paintings" shows every artwork as a small card, but the preview is the
+    full-resolution package image: thirteen of them made the dashboard decode over
+    100 MB of pixels, which is enough to stall the page. ``modified`` is part of the
+    cache key so a repainted artwork is re-rendered instead of served stale.
+    """
+    try:
+        with Image.open(source) as image:
+            image = image.convert("RGB")
+            if image.width > width:
+                height = max(1, round(image.height * width / image.width))
+                image = image.resize((width, height), Image.LANCZOS)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=82, optimize=True)
+        return buffer.getvalue()
+    except Exception:
+        return None
+
+
+@app.get("/api/paintings/{painting_id}/preview")
+def painting_preview(painting_id: str, w: int = 0):
+    """The painting's preview image; ``?w=`` serves a downscaled gallery thumbnail."""
+    painting = RUNTIME_DB.load_painting(painting_id)
+    if painting is None:
+        raise HTTPException(status_code=404, detail="Painting not found.")
+
+    path = painting_preview_path(painting)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No preview image for this painting.")
+
+    if w:
+        width = max(PREVIEW_THUMB_MIN_WIDTH, min(w, PREVIEW_THUMB_MAX_WIDTH))
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = 0.0
+        thumbnail = preview_thumbnail(str(path), width, modified)
+        if thumbnail:
+            return Response(
+                content=thumbnail,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+
+    return FileResponse(path)
+
+
+# Canvas sessions stay anonymous: the browser generates a session id, paints
+# offline-first from localStorage, and mirrors every save into SQLite so the
+# painting can be picked up again even when that browser storage is gone.
+CANVAS_MAX_SESSION = 64
+CANVAS_MAX_ARTWORK = 80
+CANVAS_MAX_REGIONS = 5000
+CANVAS_BUILTIN_ARTWORK = "dahlia-mandala"
+
+
+def canvas_token(value: Any, limit: int) -> str:
+    """Keep session ids and artwork keys to a bounded, safe token."""
+    text = str(value or "").strip()
+    if not text or len(text) > limit:
+        return ""
+    return text if re.fullmatch(r"[A-Za-z0-9_-]+", text) else ""
+
+
+def canvas_completed(value: Any) -> tuple[int, ...]:
+    """The painted region indices of a save: unique, non-negative, bounded."""
+    if not isinstance(value, (list, tuple)):
+        return ()
+    indices = set()
+    for item in value[:CANVAS_MAX_REGIONS]:
+        if isinstance(item, bool):
+            continue
+        try:
+            index = int(item)
+        except (TypeError, ValueError):
+            continue
+        if index >= 0:
+            indices.add(index)
+    return tuple(sorted(indices))
+
+
+def as_int_or(value: Any, default: int | None) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+@app.post("/api/canvas/progress")
+async def save_canvas_progress(request: Request):
+    """Persist the canvas state of one session so it can be resumed later."""
+    payload = await request.json()
+    session_id = canvas_token(payload.get("sessionId"), CANVAS_MAX_SESSION)
+    if not session_id:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    region_total = as_int_or(payload.get("regionTotal"), None)
+    progress = CanvasProgress(
+        session_id=session_id,
+        artwork_key=canvas_token(payload.get("artworkKey"), CANVAS_MAX_ARTWORK) or CANVAS_BUILTIN_ARTWORK,
+        selected=max(1, as_int_or(payload.get("selected"), 1) or 1),
+        completed=canvas_completed(payload.get("completed")),
+        region_total=max(0, region_total) if region_total else None,
+    )
+    return {"ok": True, "record": RUNTIME_DB.save_canvas_progress(progress).to_dict()}
+
+
+@app.get("/api/canvas/progress/{session_id}")
+def canvas_session_progress(session_id: str):
+    """Everything a session saved, the most recently painted artwork first."""
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+    return {
+        "ok": True,
+        "records": [record.to_dict() for record in RUNTIME_DB.load_canvas_session(token)],
+    }
+
+
+@app.post("/api/canvas/progress/{session_id}/reset")
+async def reset_canvas_progress(session_id: str, request: Request):
+    """Clear a tester's painted regions so the artwork starts fresh for them."""
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    artwork_key = ""
+    if isinstance(payload, dict):
+        artwork_key = canvas_token(payload.get("artworkKey"), CANVAS_MAX_ARTWORK)
+
+    cleared = RUNTIME_DB.reset_canvas_progress(token, artwork_key or None)
+    return {"ok": True, "cleared": cleared}
+
+
+# A finished canvas painting is kept in the studio's painting library, not only in
+# the session that painted it. The painter's own artwork travels as ``canvas`` plus
+# the finished image; an artwork that came from a compile keeps the image beside its
+# package, and the built-in design — which has no package at all — gets a folder of
+# its own under the data directory.
+CANVAS_FINISHED_FILENAME = "canvas_finished.png"
+CANVAS_ARTWORK_MEDIUM = "Color-by-number"
+CANVAS_BUILTIN_TITLE = "Dahlia Mandala"
+
+
+def canvas_artwork_dir(artwork_key: str) -> Path:
+    """The folder that holds what a canvas artwork with no compiled package keeps."""
+    return RUNTIME_DATA_DIR / "canvas" / artwork_key
+
+
+def canvas_artwork_package(artwork_key: str) -> tuple[Path, dict[str, Any] | None]:
+    """The folder a finished canvas image belongs in, plus the artwork's compile job."""
+    if artwork_key != CANVAS_BUILTIN_ARTWORK:
+        job = RUNTIME_DB.load_job(artwork_key)
+        if job and job.get("outputDir"):
+            return Path(job["outputDir"]), job
+        return canvas_artwork_dir(artwork_key), job
+    return canvas_artwork_dir(artwork_key), None
+
+
+def canvas_artwork_title(artwork_key: str, job: dict[str, Any] | None) -> str:
+    """Name a finished painting the way the studio knows the artwork."""
+    if job and job.get("inputPath"):
+        return Path(job["inputPath"]).stem or artwork_key
+    return CANVAS_BUILTIN_TITLE if artwork_key == CANVAS_BUILTIN_ARTWORK else artwork_key
+
+
+@app.post("/api/canvas/progress/{session_id}/complete")
+async def complete_canvas_painting(session_id: str, request: Request):
+    """Keep a finished canvas painting in the studio's painting library.
+
+    The canvas mirrors its progress while painting; this is the moment the finished
+    artwork itself is stored, so "My Paintings" lists what the painter completed
+    instead of the piece disappearing with the browser that painted it. The completed
+    painting is recorded once per artwork: a compiled upload or design already has its
+    painting row, and the built-in design gets one on its first finish.
+    """
+    token = canvas_token(session_id, CANVAS_MAX_SESSION)
+    if not token:
+        raise HTTPException(status_code=400, detail="A valid canvas session id is required.")
+
+    form = await request.form()
+    artwork_key = canvas_token(form.get("artworkKey"), CANVAS_MAX_ARTWORK) or CANVAS_BUILTIN_ARTWORK
+
+    record = next(
+        (item for item in RUNTIME_DB.load_canvas_session(token) if item.artwork_key == artwork_key),
+        None,
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="No saved progress for that artwork.")
+
+    # The canvas reports its own count as well: the last zone's debounced progress save
+    # may still be in flight, and the painter knows whether the board is finished.
+    region_total = as_int_or(form.get("regionTotal"), None) or record.region_total
+    painted = max(len(record.completed), as_int_or(form.get("painted"), 0) or 0)
+    if region_total and painted < region_total:
+        raise HTTPException(
+            status_code=409, detail="Finish every region before saving the painting."
+        )
+
+    package_dir, job = canvas_artwork_package(artwork_key)
+
+    image = form.get("image")
+    if image is not None and hasattr(image, "read"):
+        try:
+            package_dir.mkdir(parents=True, exist_ok=True)
+            (package_dir / CANVAS_FINISHED_FILENAME).write_bytes(await image.read())
+        except OSError:
+            pass
+
+    painting = next(
+        (item for item in RUNTIME_DB.list_paintings() if item.package_dir == str(package_dir)),
+        None,
+    )
+    color_count = as_int_or(form.get("colorCount"), None)
+    if color_count is None and job:
+        color_count = as_int_or((job.get("metadata") or {}).get("colors"), None)
+
+    if painting is None:
+        painting = Painting(
+            title=canvas_artwork_title(artwork_key, job),
+            date_created=date.today().isoformat(),
+            medium=CANVAS_ARTWORK_MEDIUM,
+            status=PaintingStatus.COMPLETED,
+            package_dir=str(package_dir),
+            region_count=region_total or painted,
+            color_count=color_count,
+        )
+    else:
+        painting.status = PaintingStatus.COMPLETED
+        painting.region_count = region_total or painted or painting.region_count
+        painting.color_count = color_count or painting.color_count
+    RUNTIME_DB.save_painting(painting)
+
+    return {
+        "ok": True,
+        "painting": {
+            "id": painting.id,
+            "title": painting.title,
+            "status": str(painting.status),
+            "regionCount": painting.region_count,
+            "colorCount": painting.color_count,
+            "previewUrl": f"/api/paintings/{painting.id}/preview",
+        },
+    }
+
+
+def canvas_artwork_names(
+    sessions: list[CanvasProgress],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Link each canvas artwork to the studio artwork the artist knows.
+
+    A compiled upload is stored twice: the compile job (whose id is the canvas
+    artwork key) and the painting row written from that job, whose
+    ``package_dir`` is that job's package. Returns the key mapping plus a title
+    per studio artwork, so one submitted image is one row on the dashboard
+    rather than a job row and a painting row.
+    """
+    by_package = {
+        painting.package_dir: painting
+        for painting in RUNTIME_DB.list_paintings()
+        if painting.package_dir
+    }
+    keys: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    for session in sessions:
+        key = session.artwork_key
+        if key in keys:
+            continue
+        # A finished canvas is matched to its painting by the folder the artwork's
+        # files live in: the compile package, or the canvas folder when it has none.
+        package, job = canvas_artwork_package(key)
+        painting = by_package.get(str(package))
+        if painting is not None:
+            keys[key] = painting.id
+            titles[painting.id] = painting.title
+            continue
+        keys[key] = key
+        if key == CANVAS_BUILTIN_ARTWORK:
+            titles[key] = "Dahlia Mandala (built-in)"
+        else:
+            titles[key] = Path((job or {}).get("inputPath") or "").name or key
+    return keys, titles
+
+
+def admin_overview_payload() -> dict[str, Any]:
+    """Everything the artist dashboard shows: submitted paintings, sessions, feedback."""
+    sessions = RUNTIME_DB.list_canvas_sessions()
+    artwork_keys, artwork_titles = canvas_artwork_names(sessions)
+    return build_admin_overview(
+        sessions,
+        RUNTIME_DB.feedback_rows(),
+        RUNTIME_DB.list_paintings(),
+        artwork_keys,
+        artwork_titles,
+    )
+
+
+@app.get("/api/admin/overview")
+def admin_overview():
+    """JSON behind the artist admin dashboard; the page polls this every 30s."""
+    return admin_overview_payload()
+
+
 @app.get("/api/catalog")
 def catalog_data():
     return {"items": PREMIUM_CATALOG, "count": len(PREMIUM_CATALOG)}
@@ -523,6 +1020,23 @@ def runtime_job_diagnostic(job_id: str):
         "updatedAt": job.get("updatedAt"),
         "persistent": True,
     }
+
+
+FAVICON_SVG = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect width='32' height='32' rx='7' fill='#8a3fc1'/>"
+    "<circle cx='16' cy='16' r='7.5' fill='#d9ad59'/></svg>"
+)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Browsers request /favicon.ico unprompted; answering it keeps the console clean."""
+    return Response(
+        content=FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/health")
@@ -851,7 +1365,7 @@ function analyzeArtwork(file){
     document.getElementById('reviewScore').textContent=score;
     document.getElementById('reviewLabel').textContent=score>=90?'Excellent':score>=75?'Very Good':'Needs Review';
     const setReviewBar=(id,v)=>document.getElementById(id).style.width=Math.max(10,Math.min(100,v))+'%';
-    setReviewBar('barQuality',score);setReviewBar('barDetail',86);setReviewBar('barPrint',minSide>=2400?95:minSide>=1600?82:55);setReviewBar('barColor',88);setReviewBar('barRelax',96);
+    setReviewBar('barQuality',score);setReviewBar('barDetail',86);setReviewBar('barPrint',Math.min(width,height)>=2400?95:Math.min(width,height)>=1600?82:55);setReviewBar('barColor',88);setReviewBar('barRelax',96);
     document.getElementById('paintabilityMetric').textContent=`${score}/100`;
     document.getElementById('paintabilityBar').style.width=score+'%';
     document.getElementById('printMetric').textContent=print;
@@ -1286,30 +1800,17 @@ def download_premium_sample(sample_name: str):
     )
 
 
-@app.post("/jobs")
-async def create_job(
-    file: UploadFile = File(...),
-    preset: str = Form("illustration"),
-    design_style: str = Form("smart_auto"),
-    colors: int = Form(40),
-    min_region_area: int = Form(38),
-    experience_mode: str = Form("relaxed"),
-    target_regions: int = Form(650),
-    outline_width: float = Form(0.38),
-    simplify_tolerance: float = Form(0.35),
-    auto_crop: bool = Form(True),
-    generate_pdf: bool = Form(True),
-    finish_mode: str = Form("original"),
-):
+def start_job(input_bytes: bytes, filename: str | None, settings: dict[str, Any]) -> str:
+    """Persist an uploaded artwork and queue it for compilation."""
     job_id = uuid4().hex
     work_dir = RUNTIME_DATA_DIR / "jobs" / job_id
     work_dir.mkdir(parents=True, exist_ok=True)
-    input_path = work_dir / (file.filename or "artwork.png")
+    input_path = work_dir / (filename or "artwork.png")
     output_dir = work_dir / "package"
     zip_path = work_dir / "euqilegna_paint_package_v7.zip"
 
     output_dir.mkdir()
-    input_path.write_bytes(await file.read())
+    input_path.write_bytes(input_bytes)
 
     job = {
         "id": job_id,
@@ -1328,12 +1829,32 @@ async def create_job(
         "outputDir": str(output_dir),
         "zipPath": str(zip_path),
         "cancelRequested": False,
+        "settings": dict(settings),
     }
 
     with jobs_lock:
         jobs[job_id] = job
     RUNTIME_DB.save_job(job)
 
+    executor.submit(run_job, job_id, settings)
+    return job_id
+
+
+@app.post("/jobs")
+async def create_job(
+    file: UploadFile = File(...),
+    preset: str = Form("illustration"),
+    design_style: str = Form("smart_auto"),
+    colors: int = Form(40),
+    min_region_area: int = Form(38),
+    experience_mode: str = Form("relaxed"),
+    target_regions: int = Form(650),
+    outline_width: float = Form(0.38),
+    simplify_tolerance: float = Form(0.35),
+    auto_crop: bool = Form(True),
+    generate_pdf: bool = Form(True),
+    finish_mode: str = Form("original"),
+):
     settings = {
         "preset": preset,
         "design_style": design_style,
@@ -1351,8 +1872,139 @@ async def create_job(
         "finish_mode": finish_mode,
     }
 
-    executor.submit(run_job, job_id, settings)
+    job_id = start_job(await file.read(), file.filename, settings)
     return {"jobId": job_id}
+
+
+@app.post("/api/paintings/upload")
+async def upload_painting(file: UploadFile = File(...)):
+    """Compile an uploaded image into a painting for the Color-by-Number canvas."""
+    job_id = start_job(await file.read(), file.filename, dict(BETA_SETTINGS))
+    return {"jobId": job_id}
+
+
+# ---- Color-by-Number design library --------------------------------------
+# The ``designs/`` folder holds the images the studio offers in the Color-by-
+# Number demo. A design is compiled once with the same settings as an upload
+# and the resulting job id is cached, so later painters open it instantly.
+DESIGN_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+DESIGNS_DIR = PROJECT_ROOT / "designs"
+DESIGN_CACHE_PATH = RUNTIME_DATA_DIR / "design_cache.json"
+
+
+def design_images() -> dict[str, Path]:
+    """Every design image in ``designs/``, keyed by its filename slug."""
+    if not DESIGNS_DIR.is_dir():
+        return {}
+    return {
+        entry.stem: entry
+        for entry in sorted(DESIGNS_DIR.iterdir())
+        if entry.is_file() and entry.suffix.lower() in DESIGN_IMAGE_SUFFIXES
+    }
+
+
+def design_title(slug: str) -> str:
+    """A readable title for a design, drawn from its filename."""
+    words = [word for word in re.split(r"[-_]+", slug) if word]
+    return " ".join(word.capitalize() for word in words) or slug
+
+
+def load_design_cache() -> dict[str, str]:
+    try:
+        data = json.loads(DESIGN_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_design_cache(cache: dict[str, str]) -> None:
+    try:
+        DESIGN_CACHE_PATH.write_text(json.dumps(cache), encoding="utf-8")
+    except OSError:
+        pass
+
+
+@app.get("/api/designs")
+def list_designs():
+    """The studio designs a tester can paint, in filename order."""
+    return {
+        "designs": [
+            {"slug": slug, "title": design_title(slug), "imageUrl": f"/designs/{path.name}"}
+            for slug, path in design_images().items()
+        ]
+    }
+
+
+@app.post("/api/designs")
+async def add_design(file: UploadFile = File(...)):
+    """Save an image into the shared design library so everyone can paint it."""
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in DESIGN_IMAGE_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Upload a PNG, JPEG, or WebP image.")
+
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(file.filename or "").stem).strip("-_")
+    if not slug:
+        raise HTTPException(status_code=400, detail="Give the image a usable filename.")
+
+    DESIGNS_DIR.mkdir(parents=True, exist_ok=True)
+    (DESIGNS_DIR / f"{slug}{suffix}").write_bytes(await file.read())
+    return {"ok": True, "slug": slug, "title": design_title(slug)}
+
+
+@app.delete("/api/designs/{slug}")
+def remove_design(slug: str):
+    """Remove a design image from the library and forget its cached compile."""
+    path = design_images().get(slug)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Design not found.")
+
+    try:
+        path.unlink()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Could not remove the design image.")
+
+    cache = load_design_cache()
+    job_id = cache.pop(slug, None)
+    if job_id is not None:
+        save_design_cache(cache)
+        # The compiled package outlives the image unless it goes too, leaving a
+        # job, a package folder and a painting row for a design nobody can open.
+        purge_job(job_id)
+    return {"ok": True, "slug": slug, "jobRemoved": job_id}
+
+
+@app.get("/designs/{filename}")
+def design_image(filename: str):
+    safe_name = Path(filename).name
+    if safe_name != filename or Path(safe_name).suffix.lower() not in DESIGN_IMAGE_SUFFIXES:
+        raise HTTPException(status_code=404, detail="Design image not found.")
+
+    designs_dir = DESIGNS_DIR.resolve()
+    path = (designs_dir / safe_name).resolve()
+    if path.parent != designs_dir or not path.is_file():
+        raise HTTPException(status_code=404, detail="Design image not found.")
+
+    return FileResponse(path)
+
+
+@app.post("/api/designs/{slug}/compile")
+def compile_design(slug: str):
+    """Compile a design once and return its job, reusing a cached job after that."""
+    path = design_images().get(slug)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Design not found.")
+
+    cache = load_design_cache()
+    cached = cache.get(slug)
+    if cached:
+        job = get_job_record(cached)
+        if job and job.get("status") == "complete":
+            return {"jobId": cached, "cached": True}
+
+    job_id = start_job(path.read_bytes(), path.name, dict(BETA_SETTINGS))
+    cache[slug] = job_id
+    save_design_cache(cache)
+    return {"jobId": job_id, "cached": False}
 
 
 @app.get("/jobs/{job_id}")
@@ -1363,14 +2015,49 @@ def get_job(job_id: str):
     return public_job(job)
 
 
+@app.get("/jobs/{job_id}/artwork")
+def get_job_artwork(job_id: str):
+    """Compiled regions and palette for rendering a compiled job as a canvas."""
+    job = get_job_record(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    output_dir = Path(job["outputDir"])
+    regions_path = output_dir / "regions.json"
+    palette_path = output_dir / "palette.json"
+    if not regions_path.exists() or not palette_path.exists():
+        raise HTTPException(status_code=409, detail="No compiled artwork for this job yet.")
+
+    metadata_path = output_dir / "metadata.json"
+    metadata = (
+        json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata_path.exists()
+        else {}
+    )
+
+    return {
+        "jobId": job_id,
+        "width": metadata.get("width"),
+        "height": metadata.get("height"),
+        "regionCount": metadata.get("regions"),
+        "colorCount": metadata.get("colors"),
+        "palette": json.loads(palette_path.read_text(encoding="utf-8")),
+        "regions": json.loads(regions_path.read_text(encoding="utf-8")),
+    }
+
+
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str):
+    """Stop a running compilation, or clear a finished one's files away."""
     job = get_job_record(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Compilation job not found.")
 
     if job["status"] in {"complete", "failed", "cancelled", "interrupted"}:
-        return {"ok": True, "status": job["status"]}
+        # Nothing is running, so cancelling means "drop it": the package, the job
+        # record and its painting row all go.
+        purge_job(job_id)
+        return {"ok": True, "status": "removed", "jobId": job_id}
 
     with jobs_lock:
         jobs[job_id]["cancelRequested"] = True

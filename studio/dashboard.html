@@ -10,13 +10,15 @@ h1,h2{font-family:Georgia,serif}.hero{padding:35px 0}.hero h1{font-size:48px;mar
 .grid{display:grid;grid-template-columns:1.4fr .6fr;gap:20px;margin-top:22px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px}
 .actions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.action{display:block;padding:18px;border-radius:14px;background:#1d161c;border:1px solid #503a28;text-decoration:none;color:#fff}.action:hover{border-color:var(--gold)}.action b{display:block;font-size:20px;margin-bottom:5px}.action span{color:var(--muted)}
 .list{display:grid;gap:9px}.row{display:flex;justify-content:space-between;gap:14px;padding:12px;border-radius:11px;background:#0d0a0c;border:1px solid #39291d}.empty{padding:35px;text-align:center;color:var(--muted)}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}.art{background:#151116;border:1px solid #493625;border-radius:17px;overflow:hidden}.art:hover{border-color:var(--gold)}.art img{display:block;width:100%;height:170px;object-fit:cover;background:#0d0a0c}.art .copy{padding:12px 14px}.art h3{font-family:Georgia,serif;font-size:18px;margin:0 0 4px}.art small{color:var(--muted)}.art .meta{color:var(--muted);font-size:13px;margin-top:6px}.gallery-empty{grid-column:1/-1;text-align:center;padding:45px;border:1px dashed #60472e;border-radius:18px;color:var(--muted)}
 @media(max-width:900px){.stats{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}}@media(max-width:550px){.stats,.actions{grid-template-columns:1fr}}
 </style></head>
 <body><div class="wrap"><nav class="nav"><a href="/">← Studio Home</a><a href="/creator">Creator Studio</a></nav>
 <header class="hero"><small style="color:var(--gold)">EUQILEGNA VERSION 8.0</small><h1>My Studio Dashboard</h1><p>Continue creative work, review completed artwork, and manage your personal gallery.</p></header>
 <section class="stats"><div class="stat"><strong id="completed">0</strong><span>Gallery artworks</span></div><div class="stat"><strong id="premium">8</strong><span>Premium designs</span></div><div class="stat"><strong id="active">0</strong><span>Active compilations</span></div><div class="stat"><strong>7</strong><span>Finished-art styles</span></div></section>
 <div class="grid"><section class="panel"><h2>Create or Continue</h2><div class="actions"><a class="action" href="/create"><b>🎨 Upload Artwork</b><span>Build a custom paint-by-number package.</span></a><a class="action" href="/samples"><b>🖼 Premium Library</b><span>Choose detailed curated adult artwork.</span></a><a class="action" href="/beta/color-by-number"><b>🌈 Color by Number</b><span>Use the relaxed mobile color experience.</span></a><a class="action" href="/studio/gallery"><b>🏛 My Gallery</b><span>View and document completed artwork.</span></a></div></section>
-<aside class="panel"><h2>Recent Studio Activity</h2><div id="activity" class="list"><div class="empty">No recent activity yet.</div></div></aside></div></div>
+<aside class="panel"><h2>Recent Studio Activity</h2><div id="activity" class="list"><div class="empty">No recent activity yet.</div></div></aside></div>
+<section class="panel" style="margin-top:22px"><h2>My Paintings</h2><p style="color:var(--muted);margin-top:0">Every painting you compile or upload, shown as a gallery.</p><div id="paintings" class="gallery"><div class="gallery-empty">Loading your paintings…</div></div></section></div>
 <script>
 fetch('/api/dashboard').then(r=>r.json()).then(data=>{
  document.getElementById('completed').textContent=data.galleryCount||0;
@@ -24,4 +26,20 @@ fetch('/api/dashboard').then(r=>r.json()).then(data=>{
  const box=document.getElementById('activity');
  if(data.activity?.length){box.innerHTML='';data.activity.slice(0,8).forEach(item=>{const row=document.createElement('div');row.className='row';row.innerHTML=`<span>${item.label}</span><small>${item.status}</small>`;box.appendChild(row)})}
 });
+fetch('/api/paintings').then(r=>r.json()).then(data=>{
+ const box=document.getElementById('paintings');
+ const items=data.items||[];
+ if(!items.length){box.innerHTML='<div class="gallery-empty"><h2>No paintings yet.</h2><p>Compile or upload an artwork and it will appear here automatically.</p></div>';return}
+ box.innerHTML='';
+ items.forEach(p=>{
+  const card=document.createElement('article');card.className='art';
+  const img=document.createElement('img');img.src=p.previewUrl+'?w=480';img.alt=p.title||'Painting';img.loading='lazy';img.decoding='async';img.onerror=()=>{img.style.display='none'};
+  const copy=document.createElement('div');copy.className='copy';
+  const title=document.createElement('h3');title.textContent=p.title||'Untitled';
+  const date=document.createElement('small');date.textContent=p.date_created||'';
+  const meta=document.createElement('div');meta.className='meta';
+  meta.textContent=[p.region_count?`${p.region_count} regions`:null,p.color_count?`${p.color_count} colors`:null].filter(Boolean).join(' · ');
+  copy.append(title,date,meta);card.append(img,copy);box.appendChild(card);
+ });
+}).catch(()=>{document.getElementById('paintings').innerHTML='<div class="gallery-empty">Could not load your paintings.</div>'});
 </script></body></html>

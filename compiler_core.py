@@ -4,7 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Tuple
+from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 import time
 import xml.etree.ElementTree as ET
 
@@ -247,6 +249,27 @@ def detect_ink_barriers(
     strength[~fg] = 1.0
     return barrier, strength
 
+KMEANS_SAMPLE_SIZE = 200_000
+
+
+def nearest_center_labels(
+    pixels: np.ndarray,
+    centers: np.ndarray,
+    chunk: int = 262_144,
+) -> np.ndarray:
+    """Index of the nearest center for every pixel, computed in chunks."""
+    centers = centers.astype(np.float32)
+    center_norms = (centers ** 2).sum(axis=1)
+    labels = np.empty(len(pixels), dtype=np.int32)
+    for start in range(0, len(pixels), chunk):
+        block = pixels[start:start + chunk]
+        # |p - c|^2 = |p|^2 - 2 p.c + |c|^2; |p|^2 is constant per pixel.
+        labels[start:start + chunk] = (
+            center_norms[None, :] - 2.0 * (block @ centers.T)
+        ).argmin(axis=1)
+    return labels
+
+
 def quantize_pixels(
     rgb: np.ndarray,
     fg: np.ndarray,
@@ -260,19 +283,32 @@ def quantize_pixels(
         pixels = rgb.reshape(-1, 3).astype(np.float32)
 
     k = min(color_count, max(2, len(pixels) // 100))
+    if len(pixels) > KMEANS_SAMPLE_SIZE:
+        # Clustering every pixel of a multi-megapixel image costs ~1 minute and
+        # barely moves the centers. Fit on a fixed random sample, then assign
+        # every pixel to its nearest center.
+        rng = np.random.default_rng(4173)
+        sample = pixels[rng.integers(0, len(pixels), KMEANS_SAMPLE_SIZE)]
+        attempts, iterations, epsilon = 3, 50, 0.5
+    else:
+        sample = pixels
+        attempts, iterations, epsilon = 8, 100, 0.25
+
     criteria = (
         cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER,
-        100,
-        0.25,
+        iterations,
+        epsilon,
     )
     _, labels, centers = cv2.kmeans(
-        pixels,
+        sample,
         k,
         None,
         criteria,
-        8,
+        attempts,
         cv2.KMEANS_PP_CENTERS,
     )
+    if sample is not pixels:
+        labels = nearest_center_labels(pixels, centers)
     centers = np.clip(centers, 0, 255).astype(np.uint8)
 
     color_map = np.full(fg.shape, -1, dtype=np.int32)
@@ -280,6 +316,54 @@ def quantize_pixels(
     return color_map, centers
 
 
+
+
+def available_cpus() -> int:
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
+def mean_shift_filter(
+    image: np.ndarray,
+    sp: float,
+    sr: float,
+    max_level: int,
+    margin: int = 64,
+) -> np.ndarray:
+    """
+    ``cv2.pyrMeanShiftFiltering`` run on overlapping horizontal bands in
+    parallel threads (OpenCV releases the GIL). Mean shift only looks at a
+    local window, so with a 64px overlap the stitched result matches the
+    single-call output to within a few gray levels on isolated pixels.
+    """
+    height = image.shape[0]
+    workers = min(available_cpus(), 8)
+    if workers < 2 or height < 400:
+        return cv2.pyrMeanShiftFiltering(image, sp=sp, sr=sr, maxLevel=max_level)
+
+    # Band edges stay multiples of 4 so every band shares the image pyramid grid.
+    band = -(-height // workers)
+    band = -(-band // 4) * 4
+    spans = [(start, min(height, start + band)) for start in range(0, height, band)]
+
+    def filter_band(span: Tuple[int, int]) -> np.ndarray:
+        start, stop = span
+        low, high = max(0, start - margin), min(height, stop + margin)
+        part = cv2.pyrMeanShiftFiltering(
+            np.ascontiguousarray(image[low:high]),
+            sp=sp,
+            sr=sr,
+            maxLevel=max_level,
+        )
+        return part[start - low:start - low + (stop - start)]
+
+    result = np.empty_like(image)
+    with ThreadPoolExecutor(max_workers=min(workers, len(spans))) as pool:
+        for (start, stop), part in zip(spans, pool.map(filter_band, spans)):
+            result[start:stop] = part
+    return result
 
 
 def preprocess_basic_scenic(rgb: np.ndarray) -> np.ndarray:
@@ -309,7 +393,7 @@ def preprocess_basic_scenic(rgb: np.ndarray) -> np.ndarray:
     cleaned[small_specks > 0] = median[small_specks > 0]
 
     smoothed = cv2.bilateralFilter(cleaned, 11, 55, 55)
-    smoothed = cv2.pyrMeanShiftFiltering(smoothed, sp=12, sr=24, maxLevel=1)
+    smoothed = mean_shift_filter(smoothed, sp=12, sr=24, max_level=1)
 
     gray = cv2.cvtColor(cleaned, cv2.COLOR_RGB2GRAY)
     major_edges = cv2.Canny(gray, 70, 145)
@@ -402,10 +486,7 @@ def merge_slic_regions(
         if len(ids) <= target_regions:
             break
 
-        means = {
-            int(rid): lab[result == rid].mean(axis=0)
-            for rid in ids
-        }
+        means = region_mean_table(lab, result)
         areas = {int(rid): int(count) for rid, count in zip(ids, counts)}
         graph = adjacency(result)
         candidates = []
@@ -430,6 +511,7 @@ def merge_slic_regions(
         ) * 7.0
 
         consumed = set()
+        merged_into: Dict[int, int] = {}
         for _, distance, rid, neighbor in candidates:
             if rid in consumed or neighbor in consumed:
                 continue
@@ -442,13 +524,17 @@ def merge_slic_regions(
                 if areas[rid] <= areas[neighbor]
                 else (neighbor, rid)
             )
-            result[result == source] = destination
+            merged_into[source] = destination
             consumed.add(source)
             changed = True
 
             if len(ids) - len(consumed) <= target_regions:
                 break
 
+        # Apply every merge of the pass with one lookup instead of one
+        # full-canvas relabel per merged region.
+        if merged_into:
+            result = resolve_merges(int(result.max()) + 1, merged_into)[result]
         result = relabel(result)
         if not changed:
             break
@@ -476,7 +562,7 @@ def photo_slic_regions(
     )
 
     source = cv2.bilateralFilter(rgb, 9, 42, 42)
-    source = cv2.pyrMeanShiftFiltering(source, sp=8, sr=20, maxLevel=1)
+    source = mean_shift_filter(source, sp=8, sr=20, max_level=1)
 
     labels = segmentation.slic(
         source,
@@ -621,10 +707,8 @@ def assign_premium_lineart_palette(
     saturation = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)[:, :, 1]
     colored_source = float((saturation > 35).mean()) > 0.10
 
-    original_means = {
-        rid: rgb[labels == rid].mean(axis=0)
-        for rid in ids
-    }
+    mean_table = region_mean_table(rgb, labels)
+    original_means = {rid: mean_table[rid] for rid in ids}
 
     if colored_source:
         samples = np.array([original_means[rid] for rid in ids], dtype=np.float32)
@@ -654,7 +738,8 @@ def assign_premium_lineart_palette(
     region_to_color: dict[int, int] = {}
 
     # Largest shapes first. Pick the first palette color not used by neighbors.
-    areas = {rid: int((labels == rid).sum()) for rid in ids}
+    area_table = np.bincount(labels.ravel())
+    areas = {rid: int(area_table[rid]) for rid in ids}
     for index, rid in enumerate(sorted(ids, key=areas.get, reverse=True)):
         used = {
             region_to_color[n]
@@ -761,10 +846,15 @@ def build_markers(
         mask = interior & (color_map == color_id)
         components = measure.label(mask, connectivity=2)
 
-        for comp in range(1, int(components.max()) + 1):
-            component_mask = components == comp
+        # Work inside each component's bounding box. The previous full-canvas
+        # mask, detail average and erosion cost one whole-image pass per region,
+        # which made large uploads spend hours building markers.
+        for comp, bounds in enumerate(ndi.find_objects(components), start=1):
+            if bounds is None:
+                continue
+            component_mask = components[bounds] == comp
             area = int(component_mask.sum())
-            detail_mean = float(detail_map[component_mask].mean()) if area else 0.0
+            detail_mean = float(detail_map[bounds][component_mask].mean()) if area else 0.0
             required_area = adaptive_seed_threshold(
                 detail_mean,
                 seed_min_area,
@@ -774,27 +864,36 @@ def build_markers(
                 continue
 
             # Erode slightly so markers sit inside visual regions, not on line edges.
-            eroded = morphology.erosion(component_mask, morphology.disk(1))
+            eroded = morphology.erosion(
+                component_mask,
+                morphology.disk(1),
+                mode="constant",
+                cval=0.0,
+            )
             if eroded.sum() >= max(4, seed_min_area // 4):
                 component_mask = eroded
 
-            markers[component_mask] = marker_id
+            target = markers[bounds]
+            target[component_mask] = marker_id
             marker_id += 1
 
     if marker_id == 1:
         # Conservative fallback.
         components = measure.label(interior, connectivity=2)
-        for comp in range(1, int(components.max()) + 1):
-            mask = components == comp
+        for comp, bounds in enumerate(ndi.find_objects(components), start=1):
+            if bounds is None:
+                continue
+            mask = components[bounds] == comp
             area = int(mask.sum())
-            detail_mean = float(detail_map[mask].mean()) if area else 0.0
+            detail_mean = float(detail_map[bounds][mask].mean()) if area else 0.0
             required_area = adaptive_seed_threshold(
                 detail_mean,
                 seed_min_area,
                 experience_mode,
             )
             if area >= required_area:
-                markers[mask] = marker_id
+                target = markers[bounds]
+                target[mask] = marker_id
                 marker_id += 1
 
     return markers
@@ -847,15 +946,126 @@ def illustration_watershed(
     return labels
 
 
-def adjacency(labels: np.ndarray) -> Dict[int, set]:
-    graph = {int(v): set() for v in np.unique(labels) if v > 0}
+def region_boundaries(
+    labels: np.ndarray,
+    strength: np.ndarray | None = None,
+    high_threshold: float = 0.55,
+) -> Tuple[Dict[int, set], Dict[Tuple[int, int], Tuple[int, float, int]]]:
+    """
+    Adjacency graph plus shared-boundary statistics for every region pair, in
+    one vectorized pass over the label image.
+
+    Returns ``(graph, stats)``. ``stats[(low_id, high_id)]`` is
+    ``(pixel count, strength sum, count of pixels >= high_threshold)`` over the
+    pair's shared boundary pixels (the same pixels ``shared_boundary`` marks),
+    and is empty when ``strength`` is not given. Raw sums are returned so the
+    stats of regions that get merged can simply be added together.
+    """
+    height, width = labels.shape
+    flat = labels.ravel()
+    counts = np.bincount(flat) if flat.min() >= 0 else None
+    present = (
+        np.flatnonzero(counts) if counts is not None else np.unique(flat)
+    )
+    graph: Dict[int, set] = {int(v): set() for v in present if v > 0}
+
+    lows, highs, pixels = [], [], []
     for a, b in ((labels[:, :-1], labels[:, 1:]), (labels[:-1], labels[1:, :])):
-        changed = (a != b) & (a > 0) & (b > 0)
-        for left, right in zip(a[changed], b[changed]):
-            li, ri = int(left), int(right)
-            graph.setdefault(li, set()).add(ri)
-            graph.setdefault(ri, set()).add(li)
-    return graph
+        ys, xs = np.nonzero((a != b) & (a > 0) & (b > 0))
+        left, right = a[ys, xs].astype(np.int64), b[ys, xs].astype(np.int64)
+        lows.append(np.minimum(left, right))
+        highs.append(np.maximum(left, right))
+        # The left (or top) pixel of the pair, as shared_boundary marks it.
+        pixels.append(ys.astype(np.int64) * width + xs)
+
+    low = np.concatenate(lows)
+    high = np.concatenate(highs)
+    pixel = np.concatenate(pixels)
+    if low.size == 0:
+        return graph, {}
+
+    span = int(labels.max()) + 1
+    area = height * width
+    # One entry per (pair, pixel): a pixel on both a horizontal and a vertical
+    # boundary of the same pair counts once, exactly like the boolean mask did.
+    combined = np.unique((low * span + high) * area + pixel)
+    pair_keys = combined // area
+    pair_pixels = combined % area
+    starts = np.flatnonzero(np.r_[True, pair_keys[1:] != pair_keys[:-1]])
+    unique_keys = pair_keys[starts]
+    pair_low = (unique_keys // span).tolist()
+    pair_high = (unique_keys % span).tolist()
+
+    for lo, hi in zip(pair_low, pair_high):
+        graph.setdefault(lo, set()).add(hi)
+        graph.setdefault(hi, set()).add(lo)
+
+    if strength is None:
+        return graph, {}
+
+    values = strength.ravel()[pair_pixels].astype(np.float64)
+    sizes = np.diff(np.r_[starts, len(values)])
+    sums = np.add.reduceat(values, starts)
+    highs_count = np.add.reduceat((values >= high_threshold).astype(np.int64), starts)
+    stats = {
+        (lo, hi): (int(size), float(total), int(high_n))
+        for lo, hi, size, total, high_n in zip(
+            pair_low, pair_high, sizes.tolist(), sums.tolist(), highs_count.tolist()
+        )
+    }
+    return graph, stats
+
+
+def adjacency(labels: np.ndarray) -> Dict[int, set]:
+    return region_boundaries(labels)[0]
+
+
+def region_mean_table(values: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Mean of ``values`` (HxW or HxWxC) for every label, indexed by label id."""
+    flat = labels.ravel()
+    size = int(flat.max()) + 1
+    counts = np.maximum(np.bincount(flat, minlength=size), 1)
+    if values.ndim == 2:
+        return np.bincount(flat, weights=values.ravel(), minlength=size) / counts
+    channels = [
+        np.bincount(flat, weights=values[..., c].ravel(), minlength=size) / counts
+        for c in range(values.shape[2])
+    ]
+    return np.stack(channels, axis=1)
+
+
+def resolve_merges(size: int, merged_into: Dict[int, int]) -> np.ndarray:
+    """Lookup table sending every label to its final merge destination."""
+    lookup = np.arange(size, dtype=np.int32)
+    for source in merged_into:
+        destination = merged_into[source]
+        while destination in merged_into:
+            destination = merged_into[destination]
+        lookup[source] = destination
+    return lookup
+
+
+def region_boxes(labels: np.ndarray) -> list:
+    """Bounding-box slices per label, where ``boxes[label - 1]`` is its box."""
+    return ndi.find_objects(labels.astype(np.int32, copy=False))
+
+
+def padded_box(box: tuple, shape: tuple, pad: int = 1) -> Tuple[slice, slice]:
+    """Grow a bounding box by ``pad`` pixels, clamped to the canvas."""
+    return (
+        slice(max(0, box[0].start - pad), min(shape[0], box[0].stop + pad)),
+        slice(max(0, box[1].start - pad), min(shape[1], box[1].stop + pad)),
+    )
+
+
+def _union_box(first: tuple | None, second: tuple | None) -> tuple | None:
+    """Smallest bounding box containing both boxes (either may be None)."""
+    if first is None or second is None:
+        return first or second
+    return (
+        slice(min(first[0].start, second[0].start), max(first[0].stop, second[0].stop)),
+        slice(min(first[1].start, second[1].start), max(first[1].stop, second[1].stop)),
+    )
 
 
 def shared_boundary(labels: np.ndarray, a: int, b: int) -> np.ndarray:
@@ -872,11 +1082,17 @@ def shared_boundary(labels: np.ndarray, a: int, b: int) -> np.ndarray:
 
 
 def relabel(labels: np.ndarray) -> np.ndarray:
-    values = [v for v in np.unique(labels) if v > 0]
-    mapping = {old: new + 1 for new, old in enumerate(values)}
+    """Renumber positive labels to 1..N, preserving their original order."""
+    values = np.unique(labels)
+    positives = values[values > 0]
+    if positives.size == 0:
+        return np.zeros_like(labels, dtype=np.int32)
+
+    lookup = np.zeros(int(values.max()) + 1, dtype=np.int32)
+    lookup[positives] = np.arange(1, positives.size + 1, dtype=np.int32)
     result = np.zeros_like(labels, dtype=np.int32)
-    for old, new in mapping.items():
-        result[labels == old] = new
+    positive = labels > 0
+    result[positive] = lookup[labels[positive]]
     return result
 
 
@@ -981,19 +1197,24 @@ def adaptive_merge_regions(
         if not areas:
             return result
 
-        means = {rid: rgb[result == rid].mean(axis=0) for rid in areas}
-        details = {
-            rid: float(detail_map[result == rid].mean())
-            for rid in areas
-        }
-        graph = adjacency(result)
+        # Per-region statistics and boundary strengths come from single
+        # vectorized passes over the label image. The previous version rebuilt
+        # full-canvas masks per region and per neighbor, which grows with
+        # regions x pixels and took hours on busy illustrations.
+        means = region_mean_table(rgb, result)
+        details = region_mean_table(detail_map, result)
+        graph, boundary_stats = region_boundaries(result, barrier_strength, 0.55)
+        merged_into: Dict[int, int] = {}
+        # Regions that absorbed others earlier in this pass: their shared
+        # boundaries now include the absorbed regions' boundaries.
+        members: Dict[int, tuple] = {}
         changed = False
 
         region_pressure = max(0.0, (len(areas) - target_regions) / max(1, target_regions))
 
         for rid in sorted(areas, key=areas.get):
             area = areas[rid]
-            detail = details[rid]
+            detail = float(details[rid])
             adaptive_limit = int(
                 min_region_area
                 * mode_area_factor
@@ -1009,14 +1230,26 @@ def adaptive_merge_regions(
 
             candidates = []
             for neighbor in neighbors:
-                boundary = shared_boundary(result, rid, neighbor)
-                if not boundary.any():
+                # A neighbor already merged away this pass no longer borders rid.
+                if neighbor in merged_into:
+                    continue
+                pixel_count = strength_total = high_count = 0
+                for first in members.get(rid, (rid,)):
+                    for second in members.get(neighbor, (neighbor,)):
+                        stats = boundary_stats.get(
+                            (min(first, second), max(first, second))
+                        )
+                        if stats is not None:
+                            pixel_count += stats[0]
+                            strength_total += stats[1]
+                            high_count += stats[2]
+                if not pixel_count:
                     continue
 
-                barrier_mean = float(barrier_strength[boundary].mean())
-                barrier_high = float((barrier_strength[boundary] >= 0.55).mean())
+                barrier_mean = strength_total / pixel_count
+                barrier_high = high_count / pixel_count
                 color_distance = float(np.linalg.norm(means[rid] - means[neighbor]))
-                neighbor_detail = details.get(neighbor, 0.0)
+                neighbor_detail = float(details[neighbor]) if neighbor in areas else 0.0
 
                 # Prefer a similarly colored, larger, lower-detail neighbor.
                 score = (
@@ -1039,9 +1272,12 @@ def adaptive_merge_regions(
             color_limit = 11.0 if high_detail else (20.0 if experience_mode == "relaxed" else 16.0)
 
             if safe_boundary and color_distance <= color_limit:
-                result[result == rid] = best
+                merged_into[rid] = best
+                members[best] = members.get(best, (best,)) + members.pop(rid, (rid,))
                 changed = True
 
+        if merged_into:
+            result = resolve_merges(int(result.max()) + 1, merged_into)[result]
         result = relabel(result)
         if not changed:
             break
@@ -1054,10 +1290,8 @@ def region_means(
     labels: np.ndarray,
     region_ids: List[int],
 ) -> Dict[int, np.ndarray]:
-    return {
-        rid: rgb[labels == rid].mean(axis=0)
-        for rid in region_ids
-    }
+    table = region_mean_table(rgb, labels)
+    return {rid: table[rid] for rid in region_ids}
 
 
 def assign_region_palette(
@@ -1072,7 +1306,8 @@ def assign_region_palette(
     protected from collapsing into a single black swatch.
     """
     means = region_means(rgb, labels, region_ids)
-    areas = {rid: int((labels == rid).sum()) for rid in region_ids}
+    area_table = np.bincount(labels.ravel())
+    areas = {rid: int(area_table[rid]) for rid in region_ids}
 
     region_rgb = np.array([means[rid] for rid in region_ids], dtype=np.float32)
     region_lab = color.rgb2lab(
@@ -1173,50 +1408,49 @@ def repair_region_coverage(
 
     # Split disconnected islands so every visible shape becomes independently
     # selectable and progress totals match the rendered SVG.
-    split = np.zeros_like(repaired, dtype=np.int32)
-    next_id = 1
-    for rid in [int(v) for v in np.unique(repaired) if v > 0]:
-        components = measure.label(repaired == rid, connectivity=2)
-        for cid in [int(v) for v in np.unique(components) if v > 0]:
-            split[components == cid] = next_id
-            next_id += 1
+    split = _compact_connected_labels(repaired)
 
     # Merge only microscopic fragments. Never discard them.
     kernel = np.ones((3, 3), np.uint8)
     for _ in range(4):
-        ids, counts = np.unique(split[split > 0], return_counts=True)
+        counts = np.bincount(split.ravel())
+        counts[0] = 0
         tiny_ids = [
             int(rid)
-            for rid, count in zip(ids, counts)
-            if int(count) < max(2, min_component_area)
+            for rid in np.flatnonzero(
+                (counts > 0) & (counts < max(2, min_component_area))
+            )
         ]
         if not tiny_ids:
             break
 
+        # Work inside each fragment's bounding box instead of scanning the whole
+        # canvas per fragment. A fragment that absorbs another grows its box.
+        boxes = region_boxes(split)
+        grown: Dict[int, tuple] = {}
         changed = False
         for rid in tiny_ids:
-            mask = split == rid
+            box = grown.get(rid) or boxes[rid - 1]
+            if box is None:
+                continue
+            local = split[padded_box(box, split.shape)]
+            mask = local == rid
             if not mask.any():
                 continue
             dilated = cv2.dilate(mask.astype(np.uint8), kernel, iterations=1).astype(bool)
-            neighbors = split[dilated & ~mask]
+            neighbors = local[dilated & ~mask]
             neighbors = neighbors[neighbors > 0]
             if neighbors.size:
                 neighbor_ids, neighbor_counts = np.unique(neighbors, return_counts=True)
                 target = int(neighbor_ids[np.argmax(neighbor_counts)])
-                split[mask] = target
+                local[mask] = target
+                grown[target] = _union_box(grown.get(target) or boxes[target - 1], box)
                 changed = True
         if not changed:
             break
 
     # Relabel connected components one last time to keep IDs compact and valid.
-    final = np.zeros_like(split, dtype=np.int32)
-    next_id = 1
-    for rid in [int(v) for v in np.unique(split) if v > 0]:
-        components = measure.label(split == rid, connectivity=2)
-        for cid in [int(v) for v in np.unique(components) if v > 0]:
-            final[components == cid] = next_id
-            next_id += 1
+    final = _compact_connected_labels(split)
 
     # Final safety fill: no zero pixels are permitted.
     missing = final == 0
@@ -1237,14 +1471,10 @@ def repair_region_coverage(
 
 def _compact_connected_labels(labels: np.ndarray) -> np.ndarray:
     """Return compact labels where every ID represents exactly one connected island."""
-    compact = np.zeros_like(labels, dtype=np.int32)
-    next_id = 1
-    for rid in [int(v) for v in np.unique(labels) if v > 0]:
-        components = measure.label(labels == rid, connectivity=2)
-        for cid in [int(v) for v in np.unique(components) if v > 0]:
-            compact[components == cid] = next_id
-            next_id += 1
-    return compact
+    # One labeling pass over the whole image: two touching pixels share a label
+    # only when they already have the same ID, so each connected island of each
+    # region receives its own number (8-connectivity, 0 is background).
+    return measure.label(labels, connectivity=2, background=0).astype(np.int32)
 
 
 def _best_neighbor_for_merge(labels: np.ndarray, rid: int) -> int | None:
@@ -1286,8 +1516,16 @@ def region_mask_validation(
     tolerance: float,
     min_area: int,
     min_label_radius: float,
+    offset: Tuple[int, int] = (0, 0),
+    geometry_out: dict | None = None,
+    region_id: int | None = None,
 ) -> dict:
-    """Validate one candidate region before any SVG or palette count is exported."""
+    """Validate one candidate region before any SVG or palette count is exported.
+
+    ``geometry_out`` (keyed by ``region_id``) receives the SVG path and label
+    point of every valid region so the export loop can reuse them instead of
+    tracing each region a second time.
+    """
     area = int(mask.sum())
     result = {
         "area": area,
@@ -1329,7 +1567,7 @@ def region_mask_validation(
     if radius < min_label_radius:
         result["reasons"].append("label_does_not_fit")
 
-    poly = mask_polygon(mask, tolerance)
+    poly = mask_polygon(mask, tolerance, offset)
     path = polygon_path(poly) if poly is not None else ""
     result["vectorizable"] = bool(path)
     result["pathLength"] = len(path)
@@ -1343,28 +1581,45 @@ def region_mask_validation(
         and radius >= min_label_radius
         and result["vectorizable"]
     )
+    if geometry_out is not None and region_id is not None and result["valid"]:
+        # The already-offset SVG path plus the crop-local label point; the export
+        # loop offsets the point back to the canvas. Only the path string is
+        # kept so the polygon objects do not accumulate in memory.
+        geometry_out[int(region_id)] = (path, float(x), float(y), float(radius))
     return result
 
 
-def _cropped_region_mask(labels: np.ndarray, rid: int) -> tuple[np.ndarray, tuple[slice, slice]] | tuple[None, None]:
-    """Return a tight crop for one region so validation never scans the full canvas."""
-    ys, xs = np.where(labels == rid)
-    if ys.size == 0:
-        return None, None
-    y0, y1 = int(ys.min()), int(ys.max()) + 1
-    x0, x1 = int(xs.min()), int(xs.max()) + 1
+def _cropped_region_mask(
+    labels: np.ndarray,
+    rid: int,
+    box: tuple | None = None,
+) -> tuple[np.ndarray, tuple[slice, slice]] | tuple[None, None]:
+    """
+    Return a tight crop for one region so validation never scans the full canvas.
+
+    Pass the region's bounding ``box`` (from ``region_boxes``) to skip the
+    full-canvas search for it.
+    """
+    if box is None:
+        ys, xs = np.where(labels == rid)
+        if ys.size == 0:
+            return None, None
+        box = (
+            slice(int(ys.min()), int(ys.max()) + 1),
+            slice(int(xs.min()), int(xs.max()) + 1),
+        )
     # One-pixel padding keeps contour/vectorization logic stable at crop edges.
-    y0 = max(0, y0 - 1)
-    x0 = max(0, x0 - 1)
-    y1 = min(labels.shape[0], y1 + 1)
-    x1 = min(labels.shape[1], x1 + 1)
-    slc = (slice(y0, y1), slice(x0, x1))
+    slc = padded_box(box, labels.shape)
     return labels[slc] == rid, slc
 
 
-def _best_neighbor_for_merge_fast(labels: np.ndarray, rid: int) -> int | None:
+def _best_neighbor_for_merge_fast(
+    labels: np.ndarray,
+    rid: int,
+    box: tuple | None = None,
+) -> int | None:
     """Find the best adjacent region using only a tight local crop."""
-    mask, slc = _cropped_region_mask(labels, rid)
+    mask, slc = _cropped_region_mask(labels, rid, box)
     if mask is None or slc is None or not mask.any():
         return None
 
@@ -1415,6 +1670,7 @@ def guarantee_paintable_regions(
     min_area: int,
     min_label_radius: float = 2.25,
     max_passes: int = 8,
+    geometry: dict | None = None,
 ) -> tuple[np.ndarray, dict]:
     """
     Fast validation/repair pass.
@@ -1422,17 +1678,24 @@ def guarantee_paintable_regions(
     Version 12.2 avoids full-canvas distance transforms, contour conversion, and
     neighbor-size scans for every region on every pass. Repair decisions use
     tight crops; full vectorizability validation runs only once after repair.
+
+    When ``geometry`` is supplied it is filled with the vectorized polygon, SVG
+    path and label point of every valid region, so the caller can export those
+    regions without tracing them again.
     """
+    if geometry is not None:
+        geometry.clear()
     repaired = _compact_connected_labels(labels.astype(np.int32))
     history: list[dict] = []
     merged_total = 0
 
     for pass_index in range(1, max_passes + 1):
-        region_ids = [int(v) for v in np.unique(repaired) if v > 0]
+        boxes = region_boxes(repaired)
+        region_ids = [rid for rid, box in enumerate(boxes, start=1) if box is not None]
         invalid: list[tuple[int, dict]] = []
 
         for rid in region_ids:
-            mask, _slc = _cropped_region_mask(repaired, rid)
+            mask, _slc = _cropped_region_mask(repaired, rid, boxes[rid - 1])
             if mask is None:
                 continue
             validation = _fast_region_screen(
@@ -1456,13 +1719,20 @@ def guarantee_paintable_regions(
         invalid.sort(key=lambda item: (item[1]["area"], item[1]["labelRadius"]))
         changed = False
 
+        # A region that absorbs another grows, so keep its box up to date.
+        grown: Dict[int, tuple] = {}
+        merged_away: set[int] = set()
         for rid, _validation in invalid:
-            if not np.any(repaired == rid):
+            if rid in merged_away:
                 continue
-            target = _best_neighbor_for_merge_fast(repaired, rid)
+            box = grown.get(rid) or boxes[rid - 1]
+            target = _best_neighbor_for_merge_fast(repaired, rid, box)
             if target is None:
                 continue
-            repaired[repaired == rid] = target
+            local = repaired[padded_box(box, repaired.shape)]
+            local[local == rid] = target
+            grown[target] = _union_box(grown.get(target) or boxes[target - 1], box)
+            merged_away.add(rid)
             merged_total += 1
             changed = True
 
@@ -1476,10 +1746,13 @@ def guarantee_paintable_regions(
 
     final_validations: dict[int, dict] = {}
     remaining_invalid: list[dict] = []
-    final_region_ids = [int(v) for v in np.unique(repaired) if v > 0]
+    final_boxes = region_boxes(repaired)
+    final_region_ids = [
+        rid for rid, box in enumerate(final_boxes, start=1) if box is not None
+    ]
 
     for rid in final_region_ids:
-        mask, _slc = _cropped_region_mask(repaired, rid)
+        mask, slc = _cropped_region_mask(repaired, rid, final_boxes[rid - 1])
         if mask is None:
             continue
         validation = region_mask_validation(
@@ -1487,6 +1760,9 @@ def guarantee_paintable_regions(
             tolerance=tolerance,
             min_area=min_area,
             min_label_radius=min_label_radius,
+            offset=(slc[1].start, slc[0].start),
+            geometry_out=geometry,
+            region_id=rid,
         )
         final_validations[rid] = validation
         if not validation["valid"]:
@@ -1650,14 +1926,25 @@ def region_coverage_stats(labels: np.ndarray) -> dict:
     }
 
 
-def mask_polygon(mask: np.ndarray, tolerance: float) -> Polygon | None:
+def mask_polygon(
+    mask: np.ndarray,
+    tolerance: float,
+    offset: Tuple[int, int] = (0, 0),
+) -> Polygon | None:
+    """Vectorize a mask. ``offset`` is the (x, y) position of a cropped mask."""
     polygons: List[Polygon] = []
+    offset_x, offset_y = offset
 
     for contour in measure.find_contours(mask.astype(np.uint8), 0.5):
         if len(contour) < 8:
             continue
 
-        coords = [(float(c), float(r)) for r, c in contour]
+        # Assemble the ring as one float array: shapely ingests an (N, 2)
+        # array far faster than a Python list of (x, y) tuples, and this loop
+        # runs once per region on every large upload.
+        coords = np.empty((len(contour), 2), dtype=np.float64)
+        coords[:, 0] = contour[:, 1] + offset_x
+        coords[:, 1] = contour[:, 0] + offset_y
         poly = Polygon(coords)
         if not poly.is_valid:
             poly = poly.buffer(0)
@@ -3511,7 +3798,9 @@ def save_completion_source(
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output_path, format="PNG", optimize=True)
+    # optimize=True runs zlib at level 9 plus a palette search: ~6s per large
+    # image for a ~3% smaller file. Level 3 is ~20x faster and nearly as small.
+    image.save(output_path, format="PNG", compress_level=3)
 
 
 
@@ -3707,6 +3996,10 @@ def compile_artwork(
         interpolation=cv2.INTER_NEAREST,
     ).astype(bool)
 
+    # Hard cap on illustration region explosion — set wherever the illustration
+    # pipeline produces regions and re-checked before export below.
+    illustration_hard_cap: int | None = None
+
     if active_pipeline == "lineart":
         update(16, "Tracing clean adult line art")
         processed = rgb.copy()
@@ -3869,90 +4162,120 @@ def compile_artwork(
         else:
             processed = preprocess(rgb)
 
-        update(20, "Detecting and freezing original ink lines")
-        barrier, barrier_strength = detect_ink_barriers(processed, fg, cfg)
-
-        update(26, "Analyzing adaptive detail zones")
-        detail_map = adaptive_detail_map(processed, fg, barrier_strength)
-        seed_min_area = cfg.seed_min_area
-        if artwork_profile.name == "graphic_monochrome":
-            gray_detail = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
-            local_edges = cv2.Canny(gray_detail, 24, 82).astype(np.float32) / 255.0
-            detail_map = np.clip(
-                np.maximum(detail_map, cv2.GaussianBlur(local_edges, (0, 0), 0.7)),
-                0.0,
-                1.0,
-            )
-            seed_min_area = max(4, cfg.seed_min_area // 3)
-
-        update(31, "Quantizing colors without destroying line boundaries")
-        pixel_colors, initial_centers = quantize_pixels(
-            processed,
-            fg,
-            max(color_count, cfg.colors),
+        # A foreground this small always ends in the Photo recovery below, so
+        # skip the illustration segmentation whose result would be discarded.
+        skip_illustration = (
+            design_style == "smart_auto" and float(fg.mean()) < 0.72
         )
+        regions = np.zeros(fg.shape, dtype=np.int32)
+        if not skip_illustration:
+            update(20, "Detecting and freezing original ink lines")
+            barrier, barrier_strength = detect_ink_barriers(processed, fg, cfg)
 
-        update(43, "Building closed-region markers")
-        markers = build_markers(
-            pixel_colors,
-            fg,
-            barrier,
-            detail_map,
-            seed_min_area,
-            experience_mode,
-        )
-        marker_count = int(markers.max())
-        if marker_count < 2:
-            update(
-                44,
-                "Illustration markers were insufficient — switching to full-canvas Photo recovery",
-                {"markerSeeds": marker_count},
-            )
-            active_pipeline = "photo"
-            processed = preprocess_basic_scenic(rgb)
-            regions = photo_slic_regions(
-                processed,
-                target_regions=target_regions,
-                min_region_area=max(min_area, 42),
-            )
-            fg = np.ones(regions.shape, dtype=bool)
-            barrier = np.zeros(regions.shape, dtype=bool)
-            barrier_strength = np.zeros(regions.shape, dtype=np.float32)
-            detail_map = adaptive_detail_map(
+            update(26, "Analyzing adaptive detail zones")
+            detail_map = adaptive_detail_map(processed, fg, barrier_strength)
+            seed_min_area = cfg.seed_min_area
+            if artwork_profile.name == "graphic_monochrome":
+                gray_detail = cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY)
+                local_edges = cv2.Canny(gray_detail, 24, 82).astype(np.float32) / 255.0
+                detail_map = np.clip(
+                    np.maximum(detail_map, cv2.GaussianBlur(local_edges, (0, 0), 0.7)),
+                    0.0,
+                    1.0,
+                )
+                seed_min_area = max(4, cfg.seed_min_area // 3)
+
+            update(31, "Quantizing colors without destroying line boundaries")
+            pixel_colors, initial_centers = quantize_pixels(
                 processed,
                 fg,
-                cv2.Canny(
-                    cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY),
-                    55,
-                    125,
-                ).astype(np.float32) / 255.0,
+                max(color_count, cfg.colors),
             )
-            marker_count = int(len(np.unique(regions[regions > 0])))
-        else:
-            update(55, "Running ink-first watershed", {"markerSeeds": marker_count})
-            regions = illustration_watershed(
-                processed,
+
+            update(43, "Building closed-region markers")
+            markers = build_markers(
+                pixel_colors,
                 fg,
                 barrier,
-                barrier_strength,
-                markers,
-            )
-
-            update(64, "Removing microscopic islands")
-            merge_min_area = min_area
-            merge_target_regions = target_regions
-            if artwork_profile.name == "graphic_monochrome":
-                merge_min_area = max(6, min(min_area, 12))
-                merge_target_regions = max(target_regions, 750)
-            regions = adaptive_merge_regions(
-                processed,
-                regions,
-                barrier_strength,
                 detail_map,
-                merge_min_area,
+                seed_min_area,
                 experience_mode,
-                merge_target_regions,
             )
+            marker_count = int(markers.max())
+            if marker_count < 2:
+                update(
+                    44,
+                    "Illustration markers were insufficient — switching to full-canvas Photo recovery",
+                    {"markerSeeds": marker_count},
+                )
+                active_pipeline = "photo"
+                processed = preprocess_basic_scenic(rgb)
+                regions = photo_slic_regions(
+                    processed,
+                    target_regions=target_regions,
+                    min_region_area=max(min_area, 42),
+                )
+                fg = np.ones(regions.shape, dtype=bool)
+                barrier = np.zeros(regions.shape, dtype=bool)
+                barrier_strength = np.zeros(regions.shape, dtype=np.float32)
+                detail_map = adaptive_detail_map(
+                    processed,
+                    fg,
+                    cv2.Canny(
+                        cv2.cvtColor(processed, cv2.COLOR_RGB2GRAY),
+                        55,
+                        125,
+                    ).astype(np.float32) / 255.0,
+                )
+                marker_count = int(len(np.unique(regions[regions > 0])))
+            else:
+                update(55, "Running ink-first watershed", {"markerSeeds": marker_count})
+                regions = illustration_watershed(
+                    processed,
+                    fg,
+                    barrier,
+                    barrier_strength,
+                    markers,
+                )
+
+                update(64, "Removing microscopic islands")
+                merge_min_area = min_area
+                merge_target_regions = target_regions
+                if artwork_profile.name == "graphic_monochrome":
+                    merge_min_area = max(6, min(min_area, 12))
+                    merge_target_regions = max(target_regions, 750)
+                regions = adaptive_merge_regions(
+                    processed,
+                    regions,
+                    barrier_strength,
+                    detail_map,
+                    merge_min_area,
+                    experience_mode,
+                    merge_target_regions,
+                )
+
+                illustration_region_count = int(len(np.unique(regions[regions > 0])))
+                illustration_hard_cap = max(int(target_regions * 1.35), target_regions + 60)
+                if illustration_region_count > illustration_hard_cap:
+                    update(
+                        65,
+                        "Illustration region count exceeded the hard cap — merging to reduce",
+                        {
+                            "illustrationRegionCount": illustration_region_count,
+                            "hardCap": illustration_hard_cap,
+                        },
+                    )
+                    regions = adaptive_merge_regions(
+                        processed,
+                        regions,
+                        barrier_strength,
+                        detail_map,
+                        merge_min_area,
+                        experience_mode,
+                        illustration_hard_cap,
+                    )
+                    illustration_region_count = int(len(np.unique(regions[regions > 0])))
+
 
         # Safety check: if Smart Auto chose illustration but the foreground
         # detector retained only a small portion of the full canvas, the result
@@ -4035,11 +4358,16 @@ def compile_artwork(
         else tolerance
     )
     minimum_paintable_area = max(10, min(28, min_area // 2))
+    # The paintability engine already vectorizes every surviving region to prove
+    # it is exportable. Keep that geometry so the export loop can reuse it
+    # instead of tracing each region a second time.
+    region_geometry: dict = {}
     regions, paintability_engine_report = guarantee_paintable_regions(
         regions,
         tolerance=validation_tolerance,
         min_area=minimum_paintable_area,
         min_label_radius=2.25,
+        geometry=region_geometry,
     )
     if not paintability_engine_report["passed"]:
         remaining = list(paintability_engine_report.get("remainingInvalid", []))
@@ -4065,6 +4393,7 @@ def compile_artwork(
                 min_area=minimum_paintable_area,
                 min_label_radius=2.25,
                 max_passes=2,
+                geometry=region_geometry,
             )
             paintability_engine_report["fallbackMergedRegions"] = fallback_merged
             paintability_engine_report["fallbackStrategy"] = "merge-last-invalid-once"
@@ -4094,93 +4423,116 @@ def compile_artwork(
         if rid > 0
     ]
 
-if active_pipeline == "illustration" and len(region_ids) > illustration_hard_cap:
-    raise ValueError(
-        f"Illustration region cap was not achieved before export: "
-        f"{len(region_ids)} > {illustration_hard_cap}"
-    )
-
-if not region_ids:
-    raise ValueError(
-        "No usable paint regions were generated. Reduce minimum region area."
-    )
-
-update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
-if active_pipeline == "lineart":
-    region_to_color, centers, original_region_means = assign_premium_lineart_palette(
-        regions,
-        processed,
-    )
-else:
-    region_to_color, centers, original_region_means = assign_region_palette(
-        processed,
-        regions,
-        region_ids,
-        color_count,
-    )
-
-update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
-h, w = processed.shape[:2]
-records: List[dict] = []
-region_labels: dict[str, int] = {}
-rendered_coverage = np.zeros((h, w), dtype=bool)
-
-total_region_ids = len(region_ids)
-for index, rid in enumerate(region_ids, start=1):
-    if index == 1 or index % 100 == 0 or index == total_region_ids:
+    if (
+        active_pipeline == "illustration"
+        and illustration_hard_cap is not None
+        and len(region_ids) > illustration_hard_cap
+    ):
+        # The bounded merge above does its best; never abort an otherwise valid
+        # package over a region-count shortfall.
         update(
-            min(89, 80 + int(9 * index / max(1, total_region_ids))),
-            "Vectorizing closed paint regions",
-            {"vectorized": index - 1, "regionCandidates": total_region_ids},
-        )
-    mask = regions == rid
-    area = int(mask.sum())
-    region_detail = float(detail_map[mask].mean()) if area else 0.0
-    poly = mask_polygon(mask, validation_tolerance)
-    if poly is None:
-        raise ValueError(
-            f"Validated region {rid} became non-vectorizable during export."
-        )
-    path = polygon_path(poly)
-    if not path:
-        raise ValueError(
-            f"Validated region {rid} produced an empty SVG path."
+            71,
+            "Illustration region count exceeded the hard cap — continuing to export",
+            {
+                "illustrationRegionCount": len(region_ids),
+                "hardCap": illustration_hard_cap,
+            },
         )
 
-    rendered_coverage |= mask
-    color_id = region_to_color[rid]
-    palette_fill = rgb_to_hex(centers[color_id])
-    original_fill = rgb_to_hex(
-        np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
-    )
-    x, y, radius = label_point(mask)
-    region_id = f"region_{index}"
-    region_labels[region_id] = int(rid)
-    records.append(
-        {
-            "regionId": region_id,
-            "colorId": str(color_id + 1),
-            "fillColor": palette_fill,
-            "paletteColor": palette_fill,
-            "originalColor": original_fill,
-            "painted": False,
-            "area": area,
-            "detailScore": round(region_detail, 4),
-            "paintability": (
-                "tiny" if area < 80
-                else "small" if area < 180
-                else "comfortable"
-            ),
-            "path": path,
-            "label": {
-                "x": x,
-                "y": y,
-                "radius": radius,
-                "fontSize": max(5.2, min(14.0, radius * 0.68)),
-                "visible": True,
-            },
-        }
-    )
+    if not region_ids:
+        raise ValueError(
+            "No usable paint regions were generated. Reduce minimum region area."
+        )
+
+    update(72, "Assigning final paint colors", {"regionCandidates": len(region_ids)})
+    if active_pipeline == "lineart":
+        region_to_color, centers, original_region_means = assign_premium_lineart_palette(
+            regions,
+            processed,
+        )
+    else:
+        region_to_color, centers, original_region_means = assign_region_palette(
+            processed,
+            regions,
+            region_ids,
+            color_count,
+        )
+
+    update(80, "Vectorizing closed paint regions", {"regionCandidates": len(region_ids)})
+    h, w = processed.shape[:2]
+    records: List[dict] = []
+    region_labels: dict[str, int] = {}
+    rendered_coverage = np.zeros((h, w), dtype=bool)
+
+    total_region_ids = len(region_ids)
+    # Every per-region step below works inside the region's padded bounding box.
+    # Masking, contour tracing and the distance transform used to run over the
+    # whole canvas once per region.
+    export_boxes = region_boxes(regions)
+    for index, rid in enumerate(region_ids, start=1):
+        if index == 1 or index % 100 == 0 or index == total_region_ids:
+            update(
+                min(89, 80 + int(9 * index / max(1, total_region_ids))),
+                "Vectorizing closed paint regions",
+                {"vectorized": index - 1, "regionCandidates": total_region_ids},
+            )
+        crop = padded_box(export_boxes[rid - 1], regions.shape)
+        crop_offset = (crop[1].start, crop[0].start)
+        mask = regions[crop] == rid
+        area = int(mask.sum())
+        region_detail = float(detail_map[crop][mask].mean()) if area else 0.0
+        # The paintability engine already traced this exact crop; reuse its path
+        # and label point instead of vectorizing the region a second time.
+        cached_geometry = region_geometry.get(rid)
+        if cached_geometry is not None:
+            path, x, y, radius = cached_geometry
+        else:
+            poly = mask_polygon(mask, validation_tolerance, crop_offset)
+            if poly is None:
+                raise ValueError(
+                    f"Validated region {rid} became non-vectorizable during export."
+                )
+            path = polygon_path(poly)
+            if not path:
+                raise ValueError(
+                    f"Validated region {rid} produced an empty SVG path."
+                )
+            x, y, radius = label_point(mask)
+
+        rendered_coverage[crop] |= mask
+        color_id = region_to_color[rid]
+        palette_fill = rgb_to_hex(centers[color_id])
+        original_fill = rgb_to_hex(
+            np.clip(np.round(original_region_means[rid]), 0, 255).astype(np.uint8)
+        )
+        x, y = x + crop_offset[0], y + crop_offset[1]
+        region_id = f"region_{index}"
+        region_labels[region_id] = int(rid)
+        records.append(
+            {
+                "regionId": region_id,
+                "colorId": str(color_id + 1),
+                "fillColor": palette_fill,
+                "paletteColor": palette_fill,
+                "originalColor": original_fill,
+                "painted": False,
+                "area": area,
+                "detailScore": round(region_detail, 4),
+                "paintability": (
+                    "tiny" if area < 80
+                    else "small" if area < 180
+                    else "comfortable"
+                ),
+                "path": path,
+                "label": {
+                    "x": x,
+                    "y": y,
+                    "radius": radius,
+                    "fontSize": max(5.2, min(14.0, radius * 0.68)),
+                    "visible": True,
+                },
+            }
+        )
 
     if not records:
         raise ValueError("No vector paint regions could be created.")
@@ -4213,13 +4565,16 @@ for index, rid in enumerate(region_ids, start=1):
         for i, center in enumerate(centers)
     ]
 
-    palette_preview = np.full((h, w, 3), 255, dtype=np.uint8)
-    reference_preview = np.full((h, w, 3), 255, dtype=np.uint8)
+    # Label 0 (no region) stays white.
+    palette_lookup = np.full((int(regions.max()) + 1, 3), 255, dtype=np.uint8)
+    reference_lookup = palette_lookup.copy()
     for rid in region_ids:
-        palette_preview[regions == rid] = centers[region_to_color[rid]]
-        reference_preview[regions == rid] = np.clip(
+        palette_lookup[rid] = centers[region_to_color[rid]]
+        reference_lookup[rid] = np.clip(
             np.round(original_region_means[rid]), 0, 255
         ).astype(np.uint8)
+    palette_preview = palette_lookup[regions]
+    reference_preview = reference_lookup[regions]
     Image.fromarray(palette_preview).save(output_dir / "preview_palette.png")
     Image.fromarray(reference_preview).save(output_dir / "preview_reference.png")
     Image.fromarray(reference_preview).save(output_dir / "preview.png")

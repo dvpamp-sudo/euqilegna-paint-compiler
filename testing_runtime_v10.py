@@ -12,6 +12,9 @@ import os
 import secrets
 import sqlite3
 
+from canvas_progress import CanvasProgress
+from paintings import Painting, PaintingStatus
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -88,8 +91,58 @@ class RuntimeDatabase:
                     created_at TEXT NOT NULL,
                     uses INTEGER NOT NULL DEFAULT 0
                 );
+
+                CREATE TABLE IF NOT EXISTS paintings (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    date_created TEXT NOT NULL,
+                    medium TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'planned',
+                    source_image TEXT,
+                    package_dir TEXT,
+                    svg_path TEXT,
+                    player_path TEXT,
+                    region_count INTEGER,
+                    color_count INTEGER
+                );
+
+                CREATE TABLE IF NOT EXISTS canvas_sessions (
+                    session_id TEXT NOT NULL,
+                    artwork_key TEXT NOT NULL,
+                    selected INTEGER NOT NULL DEFAULT 1,
+                    completed_json TEXT NOT NULL DEFAULT '[]',
+                    region_total INTEGER,
+                    saves INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (session_id, artwork_key)
+                );
                 """
             )
+            self._ensure_columns(
+                connection,
+                "paintings",
+                {
+                    "source_image": "TEXT",
+                    "package_dir": "TEXT",
+                    "svg_path": "TEXT",
+                    "player_path": "TEXT",
+                    "region_count": "INTEGER",
+                    "color_count": "INTEGER",
+                },
+            )
+
+    def _ensure_columns(
+        self,
+        connection: sqlite3.Connection,
+        table: str,
+        columns: dict[str, str],
+    ) -> None:
+        """Add columns that were introduced after a database was first created."""
+        existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in columns.items():
+            if name not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
 
     def save_job(self, job: dict[str, Any]) -> None:
         # Persist the full internal job record so another process or a restarted
@@ -151,6 +204,12 @@ class RuntimeDatabase:
         payload.setdefault("cancelRequested", False)
         return payload
 
+    def delete_job(self, job_id: str) -> int:
+        """Drop a job's persisted record once its files have been removed."""
+        with self.lock, self.connect() as connection:
+            cursor = connection.execute("DELETE FROM jobs WHERE id=?", (job_id,))
+        return cursor.rowcount
+
     def set_cancel_requested(self, job_id: str, requested: bool = True) -> dict[str, Any] | None:
         job = self.load_job(job_id)
         if job is None:
@@ -200,6 +259,173 @@ class RuntimeDatabase:
                 (limit,),
             ).fetchall()
         return [json.loads(row["payload_json"] or "{}") for row in rows]
+
+    def save_painting(self, painting: Painting) -> Painting:
+        with self.lock, self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO paintings(
+                    id,title,date_created,medium,status,
+                    source_image,package_dir,svg_path,player_path,
+                    region_count,color_count
+                )
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title,
+                    date_created=excluded.date_created,
+                    medium=excluded.medium,
+                    status=excluded.status,
+                    source_image=excluded.source_image,
+                    package_dir=excluded.package_dir,
+                    svg_path=excluded.svg_path,
+                    player_path=excluded.player_path,
+                    region_count=excluded.region_count,
+                    color_count=excluded.color_count
+                """,
+                (
+                    painting.id,
+                    painting.title,
+                    painting.date_created,
+                    painting.medium,
+                    str(painting.status),
+                    painting.source_image,
+                    painting.package_dir,
+                    painting.svg_path,
+                    painting.player_path,
+                    painting.region_count,
+                    painting.color_count,
+                ),
+            )
+        return painting
+
+    def load_painting(self, painting_id: str) -> Painting | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id,title,date_created,medium,status,
+                       source_image,package_dir,svg_path,player_path,
+                       region_count,color_count
+                FROM paintings
+                WHERE id=?
+                """,
+                (painting_id,),
+            ).fetchone()
+        return _row_to_painting(row) if row else None
+
+    def list_paintings(self, status: str | None = None) -> list[Painting]:
+        query = (
+            "SELECT id,title,date_created,medium,status,"
+            "source_image,package_dir,svg_path,player_path,"
+            "region_count,color_count FROM paintings"
+        )
+        params: tuple[Any, ...] = ()
+        if status is not None:
+            query += " WHERE status=?"
+            params = (str(status),)
+        query += " ORDER BY date_created DESC, title ASC"
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [_row_to_painting(row) for row in rows]
+
+    def delete_paintings_by_package(self, package_dir: str) -> int:
+        """Remove the painting rows that point at one compiled package."""
+        with self.lock, self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM paintings WHERE package_dir=?", (package_dir,)
+            )
+        return cursor.rowcount
+
+    def save_canvas_progress(self, progress: CanvasProgress) -> CanvasProgress:
+        """Store a session's canvas state, creating the row or updating it in place."""
+        now = utc_now()
+        with self.lock, self.connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT created_at,saves FROM canvas_sessions
+                WHERE session_id=? AND artwork_key=?
+                """,
+                (progress.session_id, progress.artwork_key),
+            ).fetchone()
+            progress.created_at = existing["created_at"] if existing else now
+            progress.saves = int(existing["saves"]) + 1 if existing else 1
+            progress.updated_at = now
+            connection.execute(
+                """
+                INSERT INTO canvas_sessions(
+                    session_id,artwork_key,selected,completed_json,
+                    region_total,saves,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(session_id,artwork_key) DO UPDATE SET
+                    selected=excluded.selected,
+                    completed_json=excluded.completed_json,
+                    region_total=excluded.region_total,
+                    saves=excluded.saves,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    progress.session_id,
+                    progress.artwork_key,
+                    int(progress.selected),
+                    json.dumps(list(progress.completed)),
+                    progress.region_total,
+                    progress.saves,
+                    progress.created_at,
+                    progress.updated_at,
+                ),
+            )
+        return progress
+
+    def reset_canvas_progress(self, session_id: str, artwork_key: str | None = None) -> int:
+        """Un-paint a session's regions so the tester starts that painting fresh.
+
+        One artwork when ``artwork_key`` is given, every artwork of the session
+        otherwise. ``saves`` is left alone — it records how much the tester
+        engaged, not what is currently painted. ``updated_at`` moves to now, so a
+        canvas still holding its own copy prefers this cleared one when it next
+        opens, which is what makes the reset stick.
+        """
+        now = utc_now()
+        sql = "UPDATE canvas_sessions SET completed_json='[]', selected=1, updated_at=?"
+        params: list[Any] = [now]
+        if artwork_key:
+            sql += " WHERE session_id=? AND artwork_key=?"
+            params.extend((session_id, artwork_key))
+        else:
+            sql += " WHERE session_id=?"
+            params.append(session_id)
+        with self.lock, self.connect() as connection:
+            return connection.execute(sql, tuple(params)).rowcount
+
+    def load_canvas_session(self, session_id: str, limit: int = 20) -> list[CanvasProgress]:
+        """Every artwork this session painted, most recently saved first."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT session_id,artwork_key,selected,completed_json,
+                       region_total,saves,created_at,updated_at
+                FROM canvas_sessions
+                WHERE session_id=?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return [_row_to_canvas_progress(row) for row in rows]
+
+    def list_canvas_sessions(self, limit: int = 200) -> list[CanvasProgress]:
+        """Every saved canvas session, most recently painted first."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT session_id,artwork_key,selected,completed_json,
+                       region_total,saves,created_at,updated_at
+                FROM canvas_sessions
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_row_to_canvas_progress(row) for row in rows]
 
     def save_feedback(self, payload: dict[str, Any]) -> int:
         submitted_at = payload.get("submittedAt") or utc_now()
@@ -285,6 +511,39 @@ class RuntimeDatabase:
                 (code,),
             )
             return True
+
+
+def _row_to_canvas_progress(row: sqlite3.Row) -> CanvasProgress:
+    try:
+        completed = tuple(int(value) for value in json.loads(row["completed_json"] or "[]"))
+    except (TypeError, ValueError):
+        completed = ()
+    return CanvasProgress(
+        session_id=row["session_id"],
+        artwork_key=row["artwork_key"],
+        selected=int(row["selected"] or 1),
+        completed=completed,
+        region_total=row["region_total"],
+        saves=int(row["saves"] or 0),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _row_to_painting(row: sqlite3.Row) -> Painting:
+    return Painting(
+        id=row["id"],
+        title=row["title"],
+        date_created=row["date_created"],
+        medium=row["medium"],
+        status=PaintingStatus(row["status"]),
+        source_image=row["source_image"],
+        package_dir=row["package_dir"],
+        svg_path=row["svg_path"],
+        player_path=row["player_path"],
+        region_count=row["region_count"],
+        color_count=row["color_count"],
+    )
 
 
 def _as_int(value: Any) -> int | None:
