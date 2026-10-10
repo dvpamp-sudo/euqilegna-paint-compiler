@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -20,6 +21,7 @@ import io
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
 
 from admin_dashboard import build_admin_overview, render_admin_dashboard
 from canvas_progress import CanvasProgress
@@ -684,8 +686,35 @@ def paintings_data():
     }
 
 
+PREVIEW_THUMB_MIN_WIDTH = 64
+PREVIEW_THUMB_MAX_WIDTH = 1200
+
+
+@lru_cache(maxsize=128)
+def preview_thumbnail(source: str, width: int, modified: float) -> bytes | None:
+    """A gallery-sized JPEG copy of a preview image, cached in memory.
+
+    "My Paintings" shows every artwork as a small card, but the preview is the
+    full-resolution package image: thirteen of them made the dashboard decode over
+    100 MB of pixels, which is enough to stall the page. ``modified`` is part of the
+    cache key so a repainted artwork is re-rendered instead of served stale.
+    """
+    try:
+        with Image.open(source) as image:
+            image = image.convert("RGB")
+            if image.width > width:
+                height = max(1, round(image.height * width / image.width))
+                image = image.resize((width, height), Image.LANCZOS)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=82, optimize=True)
+        return buffer.getvalue()
+    except Exception:
+        return None
+
+
 @app.get("/api/paintings/{painting_id}/preview")
-def painting_preview(painting_id: str):
+def painting_preview(painting_id: str, w: int = 0):
+    """The painting's preview image; ``?w=`` serves a downscaled gallery thumbnail."""
     painting = RUNTIME_DB.load_painting(painting_id)
     if painting is None:
         raise HTTPException(status_code=404, detail="Painting not found.")
@@ -693,6 +722,20 @@ def painting_preview(painting_id: str):
     path = painting_preview_path(painting)
     if path is None:
         raise HTTPException(status_code=404, detail="No preview image for this painting.")
+
+    if w:
+        width = max(PREVIEW_THUMB_MIN_WIDTH, min(w, PREVIEW_THUMB_MAX_WIDTH))
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = 0.0
+        thumbnail = preview_thumbnail(str(path), width, modified)
+        if thumbnail:
+            return Response(
+                content=thumbnail,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
 
     return FileResponse(path)
 

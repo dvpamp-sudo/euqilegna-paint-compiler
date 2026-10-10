@@ -33,7 +33,7 @@ fetch('/api/paintings').then(r=>r.json()).then(data=>{
  box.innerHTML='';
  items.forEach(p=>{
   const card=document.createElement('article');card.className='art';
-  const img=document.createElement('img');img.src=p.previewUrl;img.alt=p.title||'Painting';img.loading='lazy';img.onerror=()=>{img.style.display='none'};
+  const img=document.createElement('img');img.src=p.previewUrl+'?w=480';img.alt=p.title||'Painting';img.loading='lazy';img.decoding='async';img.onerror=()=>{img.style.display='none'};
   const copy=document.createElement('div');copy.className='copy';
   const title=document.createElement('h3');title.textContent=p.title||'Untitled';
   const date=document.createElement('small');date.textContent=p.date_created||'';
