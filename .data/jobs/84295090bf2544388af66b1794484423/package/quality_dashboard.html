@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Euqilegna QA Report</title>
+<style>
+body{font-family:Arial,sans-serif;background:#fff8f1;color:#2b190f;margin:0;padding:24px}
+main{max-width:900px;margin:auto;background:white;border:1px solid #ead6c5;border-radius:18px;padding:26px}
+h1{font-family:Georgia,serif}.score{font-size:54px;font-weight:800}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{border:1px solid #ead6c5;border-radius:12px;padding:14px;background:#fffaf6}
+.pass{color:#216e39}.review{color:#9a5b00}.fail{color:#a71919}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<h1>Euqilegna Paint Studio QA</h1>
+<p class="fail"><strong>FAIL</strong></p>
+<div class="score">82/100</div>
+<p>Difficulty: <strong>Advanced</strong> · Estimated interactive time: <strong>5 minutes</strong></p>
+<div class="grid">
+<div class="card"><strong>38</strong><br>regions</div>
+<div class="card"><strong>13</strong><br>tiny regions (34.2%)</div>
+<div class="card"><strong>0</strong><br>unlabeled regions (0.0%)</div>
+</div>
+<h2>Recommendations</h2><ul><li>Merge more tiny regions before publishing.</li></ul>
+<p>This report is a pre-publish gate. Complete the private Review Lab before setting websiteReady to true.</p>
+</main></body></html>

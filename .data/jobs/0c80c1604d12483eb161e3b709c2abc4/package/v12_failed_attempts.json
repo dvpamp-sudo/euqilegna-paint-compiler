@@ -1,0 +1,33 @@
+{
+  "version": "12.0",
+  "sourceAnalysis": {
+    "family": "landscape_or_scene",
+    "width": 1456,
+    "height": 816,
+    "darkRatio": 0.60974,
+    "lightRatio": 0.04045,
+    "saturation": 0.66462,
+    "edgeDensity": 0.08703,
+    "tonalStd": 0.22995
+  },
+  "attempts": [
+    {
+      "name": "smart-auto",
+      "success": false,
+      "output_dir": "/tmp/euqilegna_v12_sarjarzw/01_smart-auto",
+      "score": 0.0,
+      "error": "No skimage.measure attribute find_objects",
+      "validation": null,
+      "metadata": null
+    },
+    {
+      "name": "full-canvas-illustration-recovery",
+      "success": false,
+      "output_dir": "/tmp/euqilegna_v12_sarjarzw/02_full-canvas-illustration-recovery",
+      "score": 0.0,
+      "error": "No skimage.measure attribute find_objects",
+      "validation": null,
+      "metadata": null
+    }
+  ]
+}

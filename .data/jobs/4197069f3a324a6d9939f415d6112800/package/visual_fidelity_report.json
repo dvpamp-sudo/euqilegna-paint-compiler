@@ -1,0 +1,7 @@
+{
+  "artworkProfile": "photo",
+  "edgeRetention": 0.1189,
+  "tonalMeanAbsoluteError": 18.34,
+  "regions": 360,
+  "passed": true
+}

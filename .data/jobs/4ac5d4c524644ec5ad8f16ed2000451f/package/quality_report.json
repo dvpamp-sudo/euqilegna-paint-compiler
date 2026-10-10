@@ -1,0 +1,26 @@
+{
+  "studio": "Euqilegna Paint Studio 1.0",
+  "status": "PASS",
+  "paintabilityScore": 100,
+  "difficulty": "Intermediate",
+  "estimatedInteractiveMinutes": 36,
+  "metrics": {
+    "regions": 360,
+    "colors": 20,
+    "tinyRegions": 0,
+    "tinyRegionPercent": 0.0,
+    "smallRegions": 0,
+    "smallRegionPercent": 0.0,
+    "unlabeledRegions": 0,
+    "unlabeledRegionPercent": 0.0,
+    "highDetailRegions": 0
+  },
+  "publishGate": {
+    "automaticApproval": true,
+    "manualReviewRequired": false,
+    "websiteReady": false
+  },
+  "recommendations": [
+    "The project is suitable for private customer-experience testing."
+  ]
+}
