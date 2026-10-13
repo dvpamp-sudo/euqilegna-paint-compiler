@@ -93,9 +93,12 @@ shows its local state at once and only swaps to the studio copy when that one is
   explicit (a copied SVG does not carry the page's stylesheet, so `.zone` fills, strokes and
   the `#paintGrain` filter are written onto the copy) and the browser draws it to a PNG. It
   is stored as `canvas_finished.png` — beside the package for a compiled artwork, and under
-  `.data/canvas/<artwork key>/` for one that has no package (the built-in design) — and
-  `PAINTING_PREVIEW_FILES` now lists it first, so "My Paintings" shows the artwork the
-  painter actually completed rather than the source upload.
+  `.data/canvas/<artwork key>/` for one that has no package (the built-in design).
+  `main.painting_preview_path` shows that finished canvas on a "My Paintings" card, and falls
+  back to the original uploaded image (`painting.source_image`, else the package's
+  `original.png`) when there is none. The compiler's artistic renders
+  (`finished_masterpiece`, `completion_reveal`) are written into every package whether or not
+  anything was painted, so they are deliberately never a card preview.
 - `/api/paintings/<id>/preview` serves that file; with `?w=` it also serves a downscaled
   JPEG built with Pillow and cached in memory (`main.preview_thumbnail`, keyed by the source
   file's mtime, so a repainted artwork is never served stale). "My Paintings" asks for

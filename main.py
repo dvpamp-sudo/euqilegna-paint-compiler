@@ -643,26 +643,30 @@ def dashboard_data():
     }
 
 
-# The painter's own finished canvas first, then the generated artwork, the
-# progressive reveal, and finally the source upload.
-PAINTING_PREVIEW_FILES = (
-    "canvas_finished.png",
-    "finished_masterpiece.png",
-    "completion_reveal.png",
-    "original.png",
-)
+# A card shows the painting that was actually painted: the finished canvas the painter
+# saved. The compiler also writes artistic renders (``finished_masterpiece``,
+# ``completion_reveal``) into every package, but those exist whether or not anything was
+# ever painted — they read as a finished artwork on a card nobody finished, so they are
+# not used here. Without a finished canvas the card shows the original uploaded image.
+PAINTING_FINISHED_FILE = "canvas_finished.png"
+PAINTING_SOURCE_FILES = ("original.png",)
 
 
 def painting_preview_path(painting) -> Path | None:
-    """Image to show for a painting: the generated artwork, else its source upload."""
-    if painting.package_dir:
-        package_dir = Path(painting.package_dir)
-        for name in PAINTING_PREVIEW_FILES:
+    """Image to show for a painting: its finished canvas, else the uploaded source."""
+    package_dir = Path(painting.package_dir) if painting.package_dir else None
+
+    if package_dir and (package_dir / PAINTING_FINISHED_FILE).is_file():
+        return package_dir / PAINTING_FINISHED_FILE
+
+    if painting.source_image and Path(painting.source_image).is_file():
+        return Path(painting.source_image)
+
+    if package_dir:
+        for name in PAINTING_SOURCE_FILES:
             candidate = package_dir / name
             if candidate.is_file():
                 return candidate
-    if painting.source_image and Path(painting.source_image).is_file():
-        return Path(painting.source_image)
     return None
 
 
