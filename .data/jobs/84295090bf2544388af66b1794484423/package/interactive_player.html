@@ -1,0 +1,1838 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Euqilegna Interactive Paint Event Review Lab</title>
+<style>
+:root{--accent:#9c4a22;--accent2:#d47b48;--bg:#fff8f1;--panel:#fff;--line:#ead6c5;--text:#2b190f;--ok:#216e39;--warn:#9a5b00}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{padding:16px 20px;background:#fff;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{margin:0;font-family:Georgia,serif;font-size:23px}
+.mode-switch{display:flex;gap:8px}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 68px)}
+.canvas-wrap{position:relative;overflow:hidden;background:#f3ede8;display:flex;align-items:center;justify-content:center;padding:18px}
+#artboard{position:relative;width:min(100%,1000px);aspect-ratio:180/140;background:#fff;box-shadow:0 10px 30px #0002;overflow:hidden;touch-action:none;cursor:crosshair}#artboard.dragging{cursor:grabbing}#canvasContent{position:absolute;inset:0;width:100%;height:100%;transform-origin:center center;will-change:transform;backface-visibility:hidden;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+#svgHost,#completion,#referenceOverlay,#masterReveal{position:absolute;inset:0;width:100%;height:100%}#svgHost{z-index:2;transition:opacity .35s ease,filter .35s ease}#masterReveal{z-index:4;pointer-events:none;overflow:hidden;display:block}#masterReveal image{image-rendering:auto}
+#svgHost svg{width:100%;height:100%;display:block;shape-rendering:geometricPrecision;text-rendering:geometricPrecision}
+#completion,#referenceOverlay{object-fit:contain;pointer-events:none;transition:opacity .5s ease}
+#completion{opacity:0;z-index:20;background:#fff;clip-path:inset(0 100% 0 0);transition:clip-path 1.8s cubic-bezier(.22,.61,.36,1),opacity .35s ease}
+#referenceOverlay{opacity:0;z-index:3;transition:opacity .5s ease}
+.sidebar{background:#fff;border-left:1px solid var(--line);padding:18px;overflow:auto}
+.progress{height:12px;border-radius:999px;background:#eee;overflow:hidden;margin:8px 0 14px}
+#bar{height:100%;width:0;background:var(--accent);transition:width .25s}
+.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.swatch{aspect-ratio:1;border-radius:8px;border:2px solid transparent;cursor:pointer;font-weight:700;font-size:12px}
+.swatch.active{border-color:#111;transform:scale(1.05);box-shadow:0 0 0 3px #d9d9d9}.swatch.complete{opacity:.48;filter:grayscale(.35)}.swatch.locked{opacity:.55;cursor:not-allowed;filter:saturate(.55)}.swatch.complete::after{content:'✓';position:absolute;right:5px;top:3px;background:#216e39;color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}.swatch{position:relative;overflow:hidden}.swatch .swatch-number{position:relative;z-index:2}.swatch .swatch-progress{position:absolute;left:0;bottom:0;height:6px;background:#ffffffaa;z-index:1}.swatch .swatch-count{position:absolute;left:4px;bottom:7px;font-size:10px;line-height:1;background:#0008;color:#fff;padding:2px 4px;border-radius:4px;z-index:3}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+button{border:0;border-radius:8px;padding:10px 12px;font-weight:700;cursor:pointer}
+.primary{background:var(--accent);color:#fff}.secondary{background:#eee4dc}.danger{background:#f8e3e3;color:#8d1717}.success{background:var(--ok);color:#fff}
+#message{font-weight:700;min-height:24px}
+.hint{font-size:13px;color:#765d4c;line-height:1.4}
+.review-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px;background:#fffaf6}
+.review-card h3{margin:0 0 10px}
+.checklist label{display:flex;gap:9px;align-items:flex-start;margin:8px 0;font-weight:400}
+textarea{width:100%;min-height:90px;border:1px solid #ccb7a7;border-radius:8px;padding:9px}
+.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-weight:700;font-size:12px;background:#eee4dc}
+.hidden{display:none!important}
+.customer-only.review-mode{display:none!important}
+.review-only.customer-mode{display:none!important}
+.zoom-readout{min-width:62px;text-align:center;padding:9px 4px}
+.region-info{font-family:Consolas,monospace;font-size:12px;background:#241f1c;color:#f7ede5;padding:9px;border-radius:8px;white-space:pre-wrap}.region-number{transition:opacity .2s ease,font-size .2s ease;text-rendering:geometricPrecision;paint-order:stroke;stroke-linejoin:round}.region-number.selected-number{opacity:1!important;font-weight:900;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round;filter:drop-shadow(0 0 2px #fff)}.region-number.unrelated-number{opacity:0!important}.region-number.painted-number{opacity:0!important}
+.hint-marker-ring{fill:#fff7;stroke:#ff2f92;stroke-width:3.2px;vector-effect:non-scaling-stroke;pointer-events:none;animation:hintPulse 1s ease-in-out infinite alternate}
+.hint-marker-core{fill:#ff2f92;stroke:#fff;stroke-width:2px;vector-effect:non-scaling-stroke;pointer-events:none}
+.hint-marker-text{fill:#fff;stroke:#561033;stroke-width:1.5px;paint-order:stroke;font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+@keyframes hintPulse{from{opacity:.5}to{opacity:1}}
+@media(max-width:820px){.app{grid-template-columns:1fr}.sidebar{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body class="review-mode">
+<header>
+  <h1>Euqilegna Interactive Paint Event</h1>
+  <div class="mode-switch">
+    <button id="reviewModeBtn" class="primary">Private Review Lab</button>
+    <button id="customerModeBtn" class="secondary">Preview as Customer</button>
+  </div>
+</header>
+
+<div class="app">
+  <main class="canvas-wrap">
+    <div id="artboard">
+      <div id="canvasContent">
+      <div id="svgHost"><svg xmlns="http://www.w3.org/2000/svg" width="180" height="140" viewBox="0 0 180 140">
+<style>.paint-region{stroke:#202020;stroke-width:0.38;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;cursor:pointer}}.paint-region{fill:#fff}.region-number{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;dominant-baseline:middle;pointer-events:none;paint-order:stroke;stroke:#ffffff;stroke-width:2.2px;stroke-linejoin:round;fill:#111111}.region-hit{fill:rgba(0,0,0,0.001);stroke:rgba(0,0,0,0.001);stroke-width:8px;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}.ink-line{fill:none;stroke:#171717;stroke-width:0.34;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:none}</style>
+<path class="paint-region" id="region_38" data-region-id="region_38" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 14.50 79.00 L 15.00 79.50 L 19.00 79.50 L 19.50 80.00 L 19.50 84.00 L 20.00 84.50 L 25.00 84.50 L 28.00 88.50 L 30.00 88.50 L 34.50 93.00 L 34.50 95.00 L 35.00 95.50 L 36.00 95.50 L 38.00 97.50 L 39.00 97.50 L 42.00 99.50 L 44.00 99.50 L 45.00 100.50 L 49.00 100.50 L 50.00 101.50 L 60.00 101.50 L 61.00 100.50 L 64.00 100.50 L 65.00 99.50 L 67.00 99.50 L 68.00 97.50 L 69.00 97.50 L 70.00 96.50 L 71.00 96.50 L 73.00 94.50 L 75.00 94.50 L 77.00 92.50 L 78.00 92.50 L 79.50 94.00 L 79.50 99.00 L 80.00 99.50 L 84.00 99.50 L 84.50 100.00 L 84.50 104.00 L 85.00 104.50 L 89.00 104.50 L 89.50 105.00 L 89.50 114.00 L 90.00 114.50 L 94.00 114.50 L 94.50 115.00 L 94.50 119.00 L 95.00 119.50 L 99.00 119.50 L 100.00 118.50 L 108.00 118.50 L 109.50 116.00 L 109.50 115.00 L 111.00 113.50 L 114.00 115.50 L 117.00 112.50 L 119.00 112.50 L 122.00 114.50 L 124.00 114.50 L 126.00 112.50 L 129.00 112.50 L 130.00 113.50 L 134.00 113.50 L 135.00 112.50 L 138.00 112.50 L 140.00 114.50 L 142.00 114.50 L 145.50 112.00 L 145.00 111.50 L 142.00 111.50 L 141.50 111.00 L 142.00 109.50 L 152.00 109.50 L 153.00 110.50 L 159.00 110.50 L 159.82 109.68 L 14.50 73.15 L 14.50 79.00 Z M 160.00 111.50 L 158.50 112.00 L 160.00 114.50 L 179.00 114.50 L 161.42 110.08 L 160.00 111.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_38" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 14.50 79.00 L 15.00 79.50 L 19.00 79.50 L 19.50 80.00 L 19.50 84.00 L 20.00 84.50 L 25.00 84.50 L 28.00 88.50 L 30.00 88.50 L 34.50 93.00 L 34.50 95.00 L 35.00 95.50 L 36.00 95.50 L 38.00 97.50 L 39.00 97.50 L 42.00 99.50 L 44.00 99.50 L 45.00 100.50 L 49.00 100.50 L 50.00 101.50 L 60.00 101.50 L 61.00 100.50 L 64.00 100.50 L 65.00 99.50 L 67.00 99.50 L 68.00 97.50 L 69.00 97.50 L 70.00 96.50 L 71.00 96.50 L 73.00 94.50 L 75.00 94.50 L 77.00 92.50 L 78.00 92.50 L 79.50 94.00 L 79.50 99.00 L 80.00 99.50 L 84.00 99.50 L 84.50 100.00 L 84.50 104.00 L 85.00 104.50 L 89.00 104.50 L 89.50 105.00 L 89.50 114.00 L 90.00 114.50 L 94.00 114.50 L 94.50 115.00 L 94.50 119.00 L 95.00 119.50 L 99.00 119.50 L 100.00 118.50 L 108.00 118.50 L 109.50 116.00 L 109.50 115.00 L 111.00 113.50 L 114.00 115.50 L 117.00 112.50 L 119.00 112.50 L 122.00 114.50 L 124.00 114.50 L 126.00 112.50 L 129.00 112.50 L 130.00 113.50 L 134.00 113.50 L 135.00 112.50 L 138.00 112.50 L 140.00 114.50 L 142.00 114.50 L 145.50 112.00 L 145.00 111.50 L 142.00 111.50 L 141.50 111.00 L 142.00 109.50 L 152.00 109.50 L 153.00 110.50 L 159.00 110.50 L 159.82 109.68 L 14.50 73.15 L 14.50 79.00 Z M 160.00 111.50 L 158.50 112.00 L 160.00 114.50 L 179.00 114.50 L 161.42 110.08 L 160.00 111.50 Z"/>
+<path class="paint-region" id="region_5" data-region-id="region_5" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 150.00 19.50 L 152.57 19.50 L 149.50 18.92 L 150.00 19.50 Z M 160.00 24.50 L 179.00 24.50 L 159.50 20.81 L 159.50 24.00 L 160.00 24.50 Z M 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.50 13.00 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 14.00 L 60.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.50 31.00 L 82.50 32.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 40.00 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 89.50 46.00 L 89.50 48.00 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 54.00 L 98.50 45.00 L 99.50 44.00 L 99.50 30.00 L 100.00 29.50 L 111.00 29.50 L 111.50 29.00 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 126.14 14.50 L 49.50 0.00 L 49.50 10.00 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_5" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 150.00 19.50 L 152.57 19.50 L 149.50 18.92 L 150.00 19.50 Z M 160.00 24.50 L 179.00 24.50 L 159.50 20.81 L 159.50 24.00 L 160.00 24.50 Z M 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.50 13.00 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 14.00 L 60.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.50 31.00 L 82.50 32.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 40.00 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 89.50 46.00 L 89.50 48.00 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 54.00 L 98.50 45.00 L 99.50 44.00 L 99.50 30.00 L 100.00 29.50 L 111.00 29.50 L 111.50 29.00 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 126.14 14.50 L 49.50 0.00 L 49.50 10.00 Z"/>
+<path class="paint-region" id="region_31" data-region-id="region_31" data-color-id="3" data-fill-color="#2D3F51" fill-rule="evenodd" d="M 159.00 110.50 L 153.00 110.50 L 152.00 109.50 L 147.00 109.50 L 144.00 105.50 L 140.00 105.50 L 139.50 105.00 L 139.50 103.00 L 138.00 101.50 L 135.00 101.50 L 134.50 101.00 L 134.50 90.00 L 134.00 89.50 L 115.00 89.50 L 114.50 89.00 L 114.50 45.00 L 115.00 44.50 L 146.00 44.50 L 147.00 43.50 L 149.00 43.50 L 150.50 45.00 L 150.50 49.00 L 151.00 49.50 L 155.00 49.50 L 155.50 50.00 L 155.50 54.00 L 159.50 56.00 L 159.50 58.00 L 158.50 59.00 L 158.50 74.00 L 159.50 75.00 L 159.50 91.00 L 161.50 92.00 L 161.50 101.00 L 160.50 102.00 L 160.50 109.00 L 159.00 110.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_31" data-color-id="3" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 159.00 110.50 L 153.00 110.50 L 152.00 109.50 L 147.00 109.50 L 144.00 105.50 L 140.00 105.50 L 139.50 105.00 L 139.50 103.00 L 138.00 101.50 L 135.00 101.50 L 134.50 101.00 L 134.50 90.00 L 134.00 89.50 L 115.00 89.50 L 114.50 89.00 L 114.50 45.00 L 115.00 44.50 L 146.00 44.50 L 147.00 43.50 L 149.00 43.50 L 150.50 45.00 L 150.50 49.00 L 151.00 49.50 L 155.00 49.50 L 155.50 50.00 L 155.50 54.00 L 159.50 56.00 L 159.50 58.00 L 158.50 59.00 L 158.50 74.00 L 159.50 75.00 L 159.50 91.00 L 161.50 92.00 L 161.50 101.00 L 160.50 102.00 L 160.50 109.00 L 159.00 110.50 Z"/>
+<path class="paint-region" id="region_17" data-region-id="region_17" data-color-id="6" data-fill-color="#C03A2C" fill-rule="evenodd" d="M 89.00 64.50 L 30.00 64.50 L 29.50 64.00 L 29.50 55.00 L 28.00 53.50 L 27.00 53.50 L 26.00 54.50 L 24.00 54.50 L 21.50 53.00 L 21.50 49.00 L 22.50 48.00 L 22.50 46.00 L 23.50 45.00 L 23.50 41.00 L 24.50 40.00 L 24.50 39.00 L 26.00 38.50 L 28.50 36.00 L 28.50 35.00 L 29.50 34.00 L 29.50 30.00 L 34.00 25.50 L 39.00 25.50 L 41.00 23.50 L 42.00 23.50 L 43.00 22.50 L 45.00 22.50 L 46.00 21.50 L 49.00 21.50 L 50.00 20.50 L 59.00 20.50 L 60.00 21.50 L 63.00 21.50 L 64.00 22.50 L 67.00 22.50 L 68.00 23.50 L 71.00 23.50 L 72.50 25.00 L 72.50 26.00 L 75.00 28.50 L 76.00 28.50 L 79.00 31.50 L 80.00 29.50 L 83.50 33.00 L 83.50 34.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 47.00 L 84.50 49.00 L 84.50 51.00 L 85.50 52.00 L 85.50 54.00 L 84.50 55.00 L 84.50 59.00 L 85.00 59.50 L 89.00 59.50 L 89.50 60.00 L 89.50 64.00 L 89.00 64.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_17" data-color-id="6" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 89.00 64.50 L 30.00 64.50 L 29.50 64.00 L 29.50 55.00 L 28.00 53.50 L 27.00 53.50 L 26.00 54.50 L 24.00 54.50 L 21.50 53.00 L 21.50 49.00 L 22.50 48.00 L 22.50 46.00 L 23.50 45.00 L 23.50 41.00 L 24.50 40.00 L 24.50 39.00 L 26.00 38.50 L 28.50 36.00 L 28.50 35.00 L 29.50 34.00 L 29.50 30.00 L 34.00 25.50 L 39.00 25.50 L 41.00 23.50 L 42.00 23.50 L 43.00 22.50 L 45.00 22.50 L 46.00 21.50 L 49.00 21.50 L 50.00 20.50 L 59.00 20.50 L 60.00 21.50 L 63.00 21.50 L 64.00 22.50 L 67.00 22.50 L 68.00 23.50 L 71.00 23.50 L 72.50 25.00 L 72.50 26.00 L 75.00 28.50 L 76.00 28.50 L 79.00 31.50 L 80.00 29.50 L 83.50 33.00 L 83.50 34.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 47.00 L 84.50 49.00 L 84.50 51.00 L 85.50 52.00 L 85.50 54.00 L 84.50 55.00 L 84.50 59.00 L 85.00 59.50 L 89.00 59.50 L 89.50 60.00 L 89.50 64.00 L 89.00 64.50 Z"/>
+<path class="paint-region" id="region_36" data-region-id="region_36" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 179.00 114.50 L 160.00 114.50 L 158.50 112.00 L 160.00 111.50 L 161.50 110.00 L 162.00 108.50 L 163.00 109.50 L 166.00 109.50 L 167.00 108.50 L 168.00 108.50 L 168.50 108.00 L 168.50 105.00 L 169.50 104.00 L 169.50 100.00 L 169.00 99.50 L 165.00 99.50 L 164.00 98.50 L 163.00 98.50 L 161.50 96.00 L 161.50 86.00 L 163.50 83.00 L 163.50 80.00 L 162.50 79.00 L 162.50 77.00 L 161.50 76.00 L 162.50 75.00 L 162.50 69.00 L 161.50 68.00 L 162.50 67.00 L 162.50 65.00 L 163.50 64.00 L 163.50 61.00 L 161.50 58.00 L 161.50 53.00 L 159.50 51.00 L 159.50 41.00 L 160.00 40.50 L 161.00 42.50 L 161.50 42.00 L 161.50 31.00 L 163.00 30.50 L 164.50 29.00 L 164.50 25.00 L 165.00 24.50 L 179.00 24.50 L 179.00 114.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_36" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 179.00 114.50 L 160.00 114.50 L 158.50 112.00 L 160.00 111.50 L 161.50 110.00 L 162.00 108.50 L 163.00 109.50 L 166.00 109.50 L 167.00 108.50 L 168.00 108.50 L 168.50 108.00 L 168.50 105.00 L 169.50 104.00 L 169.50 100.00 L 169.00 99.50 L 165.00 99.50 L 164.00 98.50 L 163.00 98.50 L 161.50 96.00 L 161.50 86.00 L 163.50 83.00 L 163.50 80.00 L 162.50 79.00 L 162.50 77.00 L 161.50 76.00 L 162.50 75.00 L 162.50 69.00 L 161.50 68.00 L 162.50 67.00 L 162.50 65.00 L 163.50 64.00 L 163.50 61.00 L 161.50 58.00 L 161.50 53.00 L 159.50 51.00 L 159.50 41.00 L 160.00 40.50 L 161.00 42.50 L 161.50 42.00 L 161.50 31.00 L 163.00 30.50 L 164.50 29.00 L 164.50 25.00 L 165.00 24.50 L 179.00 24.50 L 179.00 114.50 Z"/>
+<path class="paint-region" id="region_32" data-region-id="region_32" data-color-id="3" data-fill-color="#2D3F51" fill-rule="evenodd" d="M 103.00 111.50 L 100.00 111.50 L 98.50 110.00 L 98.50 103.00 L 99.50 102.00 L 99.50 94.00 L 100.50 93.00 L 100.50 85.00 L 101.50 84.00 L 101.50 72.00 L 100.50 71.00 L 100.50 68.00 L 99.50 67.00 L 99.50 58.00 L 100.50 57.00 L 100.50 48.00 L 99.50 47.00 L 99.50 30.00 L 100.00 29.50 L 117.00 29.50 L 117.50 30.00 L 117.00 30.50 L 115.00 30.50 L 114.50 31.00 L 114.50 35.00 L 113.50 36.00 L 113.50 37.00 L 114.50 38.00 L 114.50 94.00 L 115.00 94.50 L 124.00 94.50 L 124.50 95.00 L 124.50 100.00 L 124.00 100.50 L 120.00 100.50 L 119.50 101.00 L 119.50 106.00 L 116.00 109.50 L 110.00 109.50 L 109.00 110.50 L 104.00 110.50 L 103.00 111.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_32" data-color-id="3" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 103.00 111.50 L 100.00 111.50 L 98.50 110.00 L 98.50 103.00 L 99.50 102.00 L 99.50 94.00 L 100.50 93.00 L 100.50 85.00 L 101.50 84.00 L 101.50 72.00 L 100.50 71.00 L 100.50 68.00 L 99.50 67.00 L 99.50 58.00 L 100.50 57.00 L 100.50 48.00 L 99.50 47.00 L 99.50 30.00 L 100.00 29.50 L 117.00 29.50 L 117.50 30.00 L 117.00 30.50 L 115.00 30.50 L 114.50 31.00 L 114.50 35.00 L 113.50 36.00 L 113.50 37.00 L 114.50 38.00 L 114.50 94.00 L 115.00 94.50 L 124.00 94.50 L 124.50 95.00 L 124.50 100.00 L 124.00 100.50 L 120.00 100.50 L 119.50 101.00 L 119.50 106.00 L 116.00 109.50 L 110.00 109.50 L 109.00 110.50 L 104.00 110.50 L 103.00 111.50 Z"/>
+<path class="paint-region" id="region_6" data-region-id="region_6" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 0.00 9.50 L 44.00 9.50 L 44.50 10.00 L 44.50 20.00 L 44.00 20.50 L 36.00 20.50 L 35.50 21.00 L 35.50 25.00 L 34.00 25.50 L 28.00 31.50 L 27.00 31.50 L 25.00 29.50 L 23.00 29.50 L 20.50 31.00 L 20.50 34.00 L 23.00 35.50 L 25.00 35.50 L 26.50 37.00 L 26.50 38.00 L 25.00 38.50 L 23.50 41.00 L 23.50 45.00 L 23.00 45.50 L 22.00 45.50 L 21.00 44.50 L 15.00 44.50 L 14.50 45.00 L 14.50 49.00 L 14.00 49.50 L 0.00 49.50 L 0.00 9.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_6" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 0.00 9.50 L 44.00 9.50 L 44.50 10.00 L 44.50 20.00 L 44.00 20.50 L 36.00 20.50 L 35.50 21.00 L 35.50 25.00 L 34.00 25.50 L 28.00 31.50 L 27.00 31.50 L 25.00 29.50 L 23.00 29.50 L 20.50 31.00 L 20.50 34.00 L 23.00 35.50 L 25.00 35.50 L 26.50 37.00 L 26.50 38.00 L 25.00 38.50 L 23.50 41.00 L 23.50 45.00 L 23.00 45.50 L 22.00 45.50 L 21.00 44.50 L 15.00 44.50 L 14.50 45.00 L 14.50 49.00 L 14.00 49.50 L 0.00 49.50 L 0.00 9.50 Z"/>
+<path class="paint-region" id="region_20" data-region-id="region_20" data-color-id="6" data-fill-color="#C03A2C" fill-rule="evenodd" d="M 35.00 94.50 L 33.50 92.00 L 33.50 89.00 L 32.50 88.00 L 33.50 87.00 L 33.50 81.00 L 34.50 80.00 L 34.50 65.00 L 35.00 64.50 L 84.00 64.50 L 84.50 65.00 L 84.50 69.00 L 80.50 71.00 L 80.50 74.00 L 83.00 75.50 L 85.00 75.50 L 86.50 77.00 L 86.50 78.00 L 85.50 79.00 L 85.50 82.00 L 85.00 82.50 L 84.00 80.50 L 83.00 81.50 L 82.00 81.50 L 80.00 79.50 L 78.00 79.50 L 75.50 81.00 L 75.50 84.00 L 75.00 84.50 L 70.00 84.50 L 69.50 84.00 L 69.50 80.00 L 69.00 79.50 L 40.00 79.50 L 39.50 80.00 L 39.50 84.00 L 40.00 84.50 L 44.00 84.50 L 44.50 85.00 L 44.50 89.00 L 44.00 89.50 L 40.00 89.50 L 37.00 92.50 L 36.00 92.50 L 35.00 94.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_20" data-color-id="6" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 35.00 94.50 L 33.50 92.00 L 33.50 89.00 L 32.50 88.00 L 33.50 87.00 L 33.50 81.00 L 34.50 80.00 L 34.50 65.00 L 35.00 64.50 L 84.00 64.50 L 84.50 65.00 L 84.50 69.00 L 80.50 71.00 L 80.50 74.00 L 83.00 75.50 L 85.00 75.50 L 86.50 77.00 L 86.50 78.00 L 85.50 79.00 L 85.50 82.00 L 85.00 82.50 L 84.00 80.50 L 83.00 81.50 L 82.00 81.50 L 80.00 79.50 L 78.00 79.50 L 75.50 81.00 L 75.50 84.00 L 75.00 84.50 L 70.00 84.50 L 69.50 84.00 L 69.50 80.00 L 69.00 79.50 L 40.00 79.50 L 39.50 80.00 L 39.50 84.00 L 40.00 84.50 L 44.00 84.50 L 44.50 85.00 L 44.50 89.00 L 44.00 89.50 L 40.00 89.50 L 37.00 92.50 L 36.00 92.50 L 35.00 94.50 Z"/>
+<path class="paint-region" id="region_4" data-region-id="region_4" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 161.00 33.50 L 160.00 30.50 L 155.00 30.50 L 154.00 29.50 L 144.00 29.50 L 143.00 30.50 L 134.00 30.50 L 131.00 28.50 L 128.00 28.50 L 127.50 28.00 L 129.50 27.00 L 129.50 21.00 L 129.00 20.50 L 125.00 20.50 L 124.50 21.00 L 124.50 27.00 L 124.00 27.50 L 120.00 27.50 L 119.00 28.50 L 109.00 28.50 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 149.00 14.50 L 149.50 15.00 L 149.50 19.00 L 150.00 19.50 L 159.00 19.50 L 159.50 20.00 L 159.50 24.00 L 160.00 24.50 L 164.00 24.50 L 164.50 25.00 L 164.50 29.00 L 163.00 30.50 L 161.50 31.00 L 161.50 33.00 L 161.00 33.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_4" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 161.00 33.50 L 160.00 30.50 L 155.00 30.50 L 154.00 29.50 L 144.00 29.50 L 143.00 30.50 L 134.00 30.50 L 131.00 28.50 L 128.00 28.50 L 127.50 28.00 L 129.50 27.00 L 129.50 21.00 L 129.00 20.50 L 125.00 20.50 L 124.50 21.00 L 124.50 27.00 L 124.00 27.50 L 120.00 27.50 L 119.00 28.50 L 109.00 28.50 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 149.00 14.50 L 149.50 15.00 L 149.50 19.00 L 150.00 19.50 L 159.00 19.50 L 159.50 20.00 L 159.50 24.00 L 160.00 24.50 L 164.00 24.50 L 164.50 25.00 L 164.50 29.00 L 163.00 30.50 L 161.50 31.00 L 161.50 33.00 L 161.00 33.50 Z"/>
+<path class="paint-region" id="region_11" data-region-id="region_11" data-color-id="3" data-fill-color="#2D3F51" fill-rule="evenodd" d="M 156.00 49.50 L 151.00 49.50 L 150.50 49.00 L 150.50 45.00 L 149.00 43.50 L 147.00 43.50 L 146.00 44.50 L 115.00 44.50 L 114.50 44.00 L 114.50 38.00 L 113.50 37.00 L 113.50 36.00 L 114.50 35.00 L 114.50 32.00 L 115.00 31.50 L 122.00 31.50 L 123.00 30.50 L 124.00 30.50 L 125.00 31.50 L 134.00 31.50 L 135.00 30.50 L 143.00 30.50 L 144.00 29.50 L 154.00 29.50 L 156.50 31.00 L 154.50 34.00 L 154.50 36.00 L 155.50 37.00 L 155.50 38.00 L 156.00 38.50 L 159.00 38.50 L 159.50 39.00 L 159.50 46.00 L 156.00 49.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_11" data-color-id="3" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 156.00 49.50 L 151.00 49.50 L 150.50 49.00 L 150.50 45.00 L 149.00 43.50 L 147.00 43.50 L 146.00 44.50 L 115.00 44.50 L 114.50 44.00 L 114.50 38.00 L 113.50 37.00 L 113.50 36.00 L 114.50 35.00 L 114.50 32.00 L 115.00 31.50 L 122.00 31.50 L 123.00 30.50 L 124.00 30.50 L 125.00 31.50 L 134.00 31.50 L 135.00 30.50 L 143.00 30.50 L 144.00 29.50 L 154.00 29.50 L 156.50 31.00 L 154.50 34.00 L 154.50 36.00 L 155.50 37.00 L 155.50 38.00 L 156.00 38.50 L 159.00 38.50 L 159.50 39.00 L 159.50 46.00 L 156.00 49.50 Z"/>
+<path class="paint-region" id="region_1" data-region-id="region_1" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 49.50 0.00 L 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.00 14.50 L 45.00 14.50 L 44.50 14.00 L 44.50 10.00 L 44.00 9.50 L 0.00 9.50 L 49.50 0.00 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_1" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 49.50 0.00 L 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.00 14.50 L 45.00 14.50 L 44.50 14.00 L 44.50 10.00 L 44.00 9.50 L 0.00 9.50 L 49.50 0.00 Z"/>
+<path class="paint-region" id="region_28" data-region-id="region_28" data-color-id="6" data-fill-color="#C03A2C" fill-rule="evenodd" d="M 69.50 97.00 L 68.00 97.50 L 65.00 94.50 L 63.00 94.50 L 62.00 95.50 L 60.00 95.50 L 59.00 94.50 L 50.00 94.50 L 48.50 93.00 L 48.00 91.50 L 45.00 91.50 L 44.50 91.00 L 44.50 85.00 L 44.00 84.50 L 40.00 84.50 L 39.50 84.00 L 39.50 80.00 L 40.00 79.50 L 69.00 79.50 L 69.50 80.00 L 69.50 84.00 L 70.00 84.50 L 74.00 84.50 L 74.50 85.00 L 74.50 90.00 L 74.00 90.50 L 71.00 90.50 L 70.50 91.00 L 70.50 94.00 L 69.50 95.00 L 69.50 97.00 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_28" data-color-id="6" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 69.50 97.00 L 68.00 97.50 L 65.00 94.50 L 63.00 94.50 L 62.00 95.50 L 60.00 95.50 L 59.00 94.50 L 50.00 94.50 L 48.50 93.00 L 48.00 91.50 L 45.00 91.50 L 44.50 91.00 L 44.50 85.00 L 44.00 84.50 L 40.00 84.50 L 39.50 84.00 L 39.50 80.00 L 40.00 79.50 L 69.00 79.50 L 69.50 80.00 L 69.50 84.00 L 70.00 84.50 L 74.00 84.50 L 74.50 85.00 L 74.50 90.00 L 74.00 90.50 L 71.00 90.50 L 70.50 91.00 L 70.50 94.00 L 69.50 95.00 L 69.50 97.00 Z"/>
+<path class="paint-region" id="region_27" data-region-id="region_27" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 98.00 109.50 L 95.00 109.50 L 94.50 109.00 L 94.50 104.00 L 95.50 103.00 L 94.50 102.00 L 94.50 100.00 L 97.50 97.00 L 97.50 95.00 L 96.50 94.00 L 96.50 91.00 L 95.00 89.50 L 91.00 89.50 L 90.50 89.00 L 90.50 86.00 L 88.00 83.50 L 86.00 83.50 L 85.00 84.50 L 84.50 84.00 L 84.50 83.00 L 85.50 82.00 L 85.50 79.00 L 87.50 78.00 L 87.50 77.00 L 89.50 75.00 L 89.50 74.00 L 91.50 71.00 L 91.50 54.00 L 90.50 53.00 L 90.50 49.00 L 91.00 48.50 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 55.00 L 98.50 89.00 L 99.50 90.00 L 99.50 102.00 L 98.50 103.00 L 98.50 109.00 L 98.00 109.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_27" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 98.00 109.50 L 95.00 109.50 L 94.50 109.00 L 94.50 104.00 L 95.50 103.00 L 94.50 102.00 L 94.50 100.00 L 97.50 97.00 L 97.50 95.00 L 96.50 94.00 L 96.50 91.00 L 95.00 89.50 L 91.00 89.50 L 90.50 89.00 L 90.50 86.00 L 88.00 83.50 L 86.00 83.50 L 85.00 84.50 L 84.50 84.00 L 84.50 83.00 L 85.50 82.00 L 85.50 79.00 L 87.50 78.00 L 87.50 77.00 L 89.50 75.00 L 89.50 74.00 L 91.50 71.00 L 91.50 54.00 L 90.50 53.00 L 90.50 49.00 L 91.00 48.50 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 55.00 L 98.50 89.00 L 99.50 90.00 L 99.50 102.00 L 98.50 103.00 L 98.50 109.00 L 98.00 109.50 Z"/>
+<path class="paint-region" id="region_23" data-region-id="region_23" data-color-id="6" data-fill-color="#C03A2C" fill-rule="evenodd" d="M 33.00 91.50 L 28.50 87.00 L 28.50 85.00 L 26.50 84.00 L 26.50 82.00 L 24.50 81.00 L 24.50 78.00 L 23.50 77.00 L 23.50 75.00 L 22.50 74.00 L 22.50 72.00 L 21.50 71.00 L 21.50 70.00 L 20.50 69.00 L 20.50 67.00 L 19.50 66.00 L 19.50 60.00 L 20.50 59.00 L 20.50 54.00 L 21.00 53.50 L 23.00 53.50 L 24.00 54.50 L 26.00 54.50 L 27.00 53.50 L 28.00 53.50 L 29.50 55.00 L 29.50 64.00 L 30.00 64.50 L 34.00 64.50 L 34.50 65.00 L 34.50 80.00 L 33.50 81.00 L 33.50 87.00 L 32.50 88.00 L 33.50 89.00 L 33.50 91.00 L 33.00 91.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_23" data-color-id="6" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 33.00 91.50 L 28.50 87.00 L 28.50 85.00 L 26.50 84.00 L 26.50 82.00 L 24.50 81.00 L 24.50 78.00 L 23.50 77.00 L 23.50 75.00 L 22.50 74.00 L 22.50 72.00 L 21.50 71.00 L 21.50 70.00 L 20.50 69.00 L 20.50 67.00 L 19.50 66.00 L 19.50 60.00 L 20.50 59.00 L 20.50 54.00 L 21.00 53.50 L 23.00 53.50 L 24.00 54.50 L 26.00 54.50 L 27.00 53.50 L 28.00 53.50 L 29.50 55.00 L 29.50 64.00 L 30.00 64.50 L 34.00 64.50 L 34.50 65.00 L 34.50 80.00 L 33.50 81.00 L 33.50 87.00 L 32.50 88.00 L 33.50 89.00 L 33.50 91.00 L 33.00 91.50 Z"/>
+<path class="paint-region" id="region_19" data-region-id="region_19" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 0.00 49.50 L 14.00 49.50 L 14.50 50.00 L 14.50 54.00 L 16.00 54.50 L 17.50 56.00 L 17.50 59.00 L 18.50 60.00 L 18.50 62.00 L 16.00 64.50 L 14.50 65.00 L 14.50 69.00 L 14.00 69.50 L 0.00 69.50 L 0.00 49.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_19" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 0.00 49.50 L 14.00 49.50 L 14.50 50.00 L 14.50 54.00 L 16.00 54.50 L 17.50 56.00 L 17.50 59.00 L 18.50 60.00 L 18.50 62.00 L 16.00 64.50 L 14.50 65.00 L 14.50 69.00 L 14.00 69.50 L 0.00 69.50 L 0.00 49.50 Z"/>
+<path class="paint-region" id="region_33" data-region-id="region_33" data-color-id="3" data-fill-color="#2D3F51" fill-rule="evenodd" d="M 137.00 109.50 L 134.00 107.50 L 131.00 107.50 L 130.00 106.50 L 128.00 108.50 L 127.00 108.50 L 126.00 109.50 L 117.00 109.50 L 116.50 109.00 L 119.50 106.00 L 119.50 101.00 L 120.00 100.50 L 124.00 100.50 L 124.50 100.00 L 124.50 95.00 L 124.00 94.50 L 115.00 94.50 L 114.50 94.00 L 114.50 90.00 L 115.00 89.50 L 134.00 89.50 L 134.50 90.00 L 134.50 101.00 L 135.00 101.50 L 138.00 101.50 L 139.50 103.00 L 139.50 107.00 L 137.00 109.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_33" data-color-id="3" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 137.00 109.50 L 134.00 107.50 L 131.00 107.50 L 130.00 106.50 L 128.00 108.50 L 127.00 108.50 L 126.00 109.50 L 117.00 109.50 L 116.50 109.00 L 119.50 106.00 L 119.50 101.00 L 120.00 100.50 L 124.00 100.50 L 124.50 100.00 L 124.50 95.00 L 124.00 94.50 L 115.00 94.50 L 114.50 94.00 L 114.50 90.00 L 115.00 89.50 L 134.00 89.50 L 134.50 90.00 L 134.50 101.00 L 135.00 101.50 L 138.00 101.50 L 139.50 103.00 L 139.50 107.00 L 137.00 109.50 Z"/>
+<path class="paint-region" id="region_30" data-region-id="region_30" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 94.00 104.50 L 85.00 104.50 L 84.50 104.00 L 84.50 100.00 L 84.00 99.50 L 80.00 99.50 L 79.50 99.00 L 79.50 94.00 L 77.50 92.00 L 86.00 83.50 L 88.00 83.50 L 90.50 86.00 L 90.50 89.00 L 91.00 89.50 L 95.00 89.50 L 96.50 91.00 L 96.50 94.00 L 97.50 95.00 L 97.50 97.00 L 94.50 100.00 L 94.50 102.00 L 95.50 103.00 L 94.00 104.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_30" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 94.00 104.50 L 85.00 104.50 L 84.50 104.00 L 84.50 100.00 L 84.00 99.50 L 80.00 99.50 L 79.50 99.00 L 79.50 94.00 L 77.50 92.00 L 86.00 83.50 L 88.00 83.50 L 90.50 86.00 L 90.50 89.00 L 91.00 89.50 L 95.00 89.50 L 96.50 91.00 L 96.50 94.00 L 97.50 95.00 L 97.50 97.00 L 94.50 100.00 L 94.50 102.00 L 95.50 103.00 L 94.00 104.50 Z"/>
+<path class="paint-region" id="region_22" data-region-id="region_22" data-color-id="9" data-fill-color="#F8EAE8" fill-rule="evenodd" d="M 29.50 88.00 L 28.00 88.50 L 25.00 84.50 L 20.00 84.50 L 19.50 84.00 L 19.50 80.00 L 19.00 79.50 L 15.00 79.50 L 14.50 79.00 L 14.50 65.00 L 16.00 64.50 L 18.50 62.00 L 18.50 60.00 L 17.50 59.00 L 17.50 56.00 L 16.00 54.50 L 14.50 54.00 L 14.50 45.00 L 15.00 44.50 L 21.00 44.50 L 22.50 46.00 L 22.50 48.00 L 21.50 49.00 L 21.50 53.00 L 20.50 54.00 L 20.50 59.00 L 19.50 60.00 L 19.50 66.00 L 20.50 67.00 L 20.50 69.00 L 22.50 72.00 L 22.50 74.00 L 23.50 75.00 L 23.50 77.00 L 24.50 78.00 L 24.50 81.00 L 26.00 81.50 L 26.50 82.00 L 26.50 84.00 L 28.50 85.00 L 28.50 87.00 L 29.50 88.00 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_22" data-color-id="9" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 29.50 88.00 L 28.00 88.50 L 25.00 84.50 L 20.00 84.50 L 19.50 84.00 L 19.50 80.00 L 19.00 79.50 L 15.00 79.50 L 14.50 79.00 L 14.50 65.00 L 16.00 64.50 L 18.50 62.00 L 18.50 60.00 L 17.50 59.00 L 17.50 56.00 L 16.00 54.50 L 14.50 54.00 L 14.50 45.00 L 15.00 44.50 L 21.00 44.50 L 22.50 46.00 L 22.50 48.00 L 21.50 49.00 L 21.50 53.00 L 20.50 54.00 L 20.50 59.00 L 19.50 60.00 L 19.50 66.00 L 20.50 67.00 L 20.50 69.00 L 22.50 72.00 L 22.50 74.00 L 23.50 75.00 L 23.50 77.00 L 24.50 78.00 L 24.50 81.00 L 26.00 81.50 L 26.50 82.00 L 26.50 84.00 L 28.50 85.00 L 28.50 87.00 L 29.50 88.00 Z"/>
+<path class="paint-region" id="region_37" data-region-id="region_37" data-color-id="4" data-fill-color="#FEFEFE" fill-rule="evenodd" d="M 99.00 119.50 L 95.00 119.50 L 94.50 119.00 L 94.50 115.00 L 94.00 114.50 L 90.00 114.50 L 89.50 114.00 L 89.50 105.00 L 90.00 104.50 L 94.00 104.50 L 94.50 105.00 L 94.50 109.00 L 95.00 109.50 L 98.00 109.50 L 100.00 111.50 L 145.00 111.50 L 145.50 112.00 L 142.00 114.50 L 140.00 114.50 L 138.00 112.50 L 135.00 112.50 L 134.00 113.50 L 130.00 113.50 L 129.00 112.50 L 126.00 112.50 L 124.00 114.50 L 122.00 114.50 L 119.00 112.50 L 117.00 112.50 L 114.00 115.50 L 111.00 113.50 L 109.50 115.00 L 109.50 116.00 L 108.00 118.50 L 100.00 118.50 L 99.00 119.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_37" data-color-id="4" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 99.00 119.50 L 95.00 119.50 L 94.50 119.00 L 94.50 115.00 L 94.00 114.50 L 90.00 114.50 L 89.50 114.00 L 89.50 105.00 L 90.00 104.50 L 94.00 104.50 L 94.50 105.00 L 94.50 109.00 L 95.00 109.50 L 98.00 109.50 L 100.00 111.50 L 145.00 111.50 L 145.50 112.00 L 142.00 114.50 L 140.00 114.50 L 138.00 112.50 L 135.00 112.50 L 134.00 113.50 L 130.00 113.50 L 129.00 112.50 L 126.00 112.50 L 124.00 114.50 L 122.00 114.50 L 119.00 112.50 L 117.00 112.50 L 114.00 115.50 L 111.00 113.50 L 109.50 115.00 L 109.50 116.00 L 108.00 118.50 L 100.00 118.50 L 99.00 119.50 Z"/>
+<path class="paint-region" id="region_29" data-region-id="region_29" data-color-id="1" data-fill-color="#C95549" fill-rule="evenodd" d="M 60.00 101.50 L 50.00 101.50 L 49.00 100.50 L 45.00 100.50 L 44.00 99.50 L 42.00 99.50 L 41.00 98.50 L 38.00 97.50 L 36.00 95.50 L 34.50 95.00 L 35.50 94.00 L 35.50 93.00 L 37.00 92.50 L 40.00 89.50 L 44.00 89.50 L 45.00 91.50 L 48.00 91.50 L 48.50 93.00 L 50.00 94.50 L 59.00 94.50 L 60.00 95.50 L 62.00 95.50 L 63.00 94.50 L 65.00 94.50 L 67.50 97.00 L 67.50 99.00 L 67.00 99.50 L 65.00 99.50 L 64.00 100.50 L 61.00 100.50 L 60.00 101.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_29" data-color-id="1" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 60.00 101.50 L 50.00 101.50 L 49.00 100.50 L 45.00 100.50 L 44.00 99.50 L 42.00 99.50 L 41.00 98.50 L 38.00 97.50 L 36.00 95.50 L 34.50 95.00 L 35.50 94.00 L 35.50 93.00 L 37.00 92.50 L 40.00 89.50 L 44.00 89.50 L 45.00 91.50 L 48.00 91.50 L 48.50 93.00 L 50.00 94.50 L 59.00 94.50 L 60.00 95.50 L 62.00 95.50 L 63.00 94.50 L 65.00 94.50 L 67.50 97.00 L 67.50 99.00 L 67.00 99.50 L 65.00 99.50 L 64.00 100.50 L 61.00 100.50 L 60.00 101.50 Z"/>
+<path class="paint-region" id="region_9" data-region-id="region_9" data-color-id="9" data-fill-color="#F8EAE8" fill-rule="evenodd" d="M 82.00 31.50 L 80.00 29.50 L 79.00 31.50 L 76.00 28.50 L 75.00 28.50 L 72.50 26.00 L 72.50 25.00 L 71.00 23.50 L 68.00 23.50 L 67.00 22.50 L 64.00 22.50 L 63.50 22.00 L 63.50 20.00 L 64.50 19.00 L 64.50 15.00 L 65.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.00 31.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_9" data-color-id="9" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 82.00 31.50 L 80.00 29.50 L 79.00 31.50 L 76.00 28.50 L 75.00 28.50 L 72.50 26.00 L 72.50 25.00 L 71.00 23.50 L 68.00 23.50 L 67.00 22.50 L 64.00 22.50 L 63.50 22.00 L 63.50 20.00 L 64.50 19.00 L 64.50 15.00 L 65.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.00 31.50 Z"/>
+<path class="paint-region" id="region_15" data-region-id="region_15" data-color-id="11" data-fill-color="#CF695E" fill-rule="evenodd" d="M 90.00 73.50 L 89.00 71.50 L 86.00 70.50 L 84.50 69.00 L 84.50 65.00 L 85.00 64.50 L 89.00 64.50 L 89.50 64.00 L 89.50 60.00 L 89.00 59.50 L 85.00 59.50 L 84.50 59.00 L 84.50 55.00 L 85.50 54.00 L 85.50 52.00 L 84.50 51.00 L 84.50 49.00 L 86.50 47.00 L 87.00 45.50 L 89.00 45.50 L 89.50 46.00 L 89.50 48.00 L 90.50 49.00 L 90.50 53.00 L 91.50 54.00 L 91.50 71.00 L 90.00 73.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_15" data-color-id="11" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 90.00 73.50 L 89.00 71.50 L 86.00 70.50 L 84.50 69.00 L 84.50 65.00 L 85.00 64.50 L 89.00 64.50 L 89.50 64.00 L 89.50 60.00 L 89.00 59.50 L 85.00 59.50 L 84.50 59.00 L 84.50 55.00 L 85.50 54.00 L 85.50 52.00 L 84.50 51.00 L 84.50 49.00 L 86.50 47.00 L 87.00 45.50 L 89.00 45.50 L 89.50 46.00 L 89.50 48.00 L 90.50 49.00 L 90.50 53.00 L 91.50 54.00 L 91.50 71.00 L 90.00 73.50 Z"/>
+<path class="paint-region" id="region_26" data-region-id="region_26" data-color-id="1" data-fill-color="#C95549" fill-rule="evenodd" d="M 71.00 96.50 L 69.50 96.00 L 69.50 95.00 L 70.50 94.00 L 70.50 91.00 L 71.00 90.50 L 74.00 90.50 L 74.50 90.00 L 74.50 85.00 L 75.50 84.00 L 75.50 81.00 L 78.00 79.50 L 80.00 79.50 L 82.00 81.50 L 83.00 81.50 L 84.00 80.50 L 84.50 81.00 L 84.50 85.00 L 75.00 94.50 L 73.00 94.50 L 71.00 96.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_26" data-color-id="1" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 71.00 96.50 L 69.50 96.00 L 69.50 95.00 L 70.50 94.00 L 70.50 91.00 L 71.00 90.50 L 74.00 90.50 L 74.50 90.00 L 74.50 85.00 L 75.50 84.00 L 75.50 81.00 L 78.00 79.50 L 80.00 79.50 L 82.00 81.50 L 83.00 81.50 L 84.00 80.50 L 84.50 81.00 L 84.50 85.00 L 75.00 94.50 L 73.00 94.50 L 71.00 96.50 Z"/>
+<path class="paint-region" id="region_8" data-region-id="region_8" data-color-id="5" data-fill-color="#ADB4BB" fill-rule="evenodd" d="M 134.00 31.50 L 125.00 31.50 L 124.00 30.50 L 123.00 30.50 L 122.00 31.50 L 115.00 31.50 L 114.50 31.00 L 115.00 30.50 L 117.00 30.50 L 117.50 30.00 L 117.00 29.50 L 112.00 29.50 L 111.50 29.00 L 112.00 28.50 L 119.00 28.50 L 120.00 27.50 L 124.00 27.50 L 124.50 27.00 L 124.50 21.00 L 125.00 20.50 L 129.00 20.50 L 129.50 21.00 L 129.50 27.00 L 127.50 28.00 L 128.00 28.50 L 131.00 28.50 L 132.00 29.50 L 133.00 29.50 L 134.50 31.00 L 134.00 31.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_8" data-color-id="5" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 134.00 31.50 L 125.00 31.50 L 124.00 30.50 L 123.00 30.50 L 122.00 31.50 L 115.00 31.50 L 114.50 31.00 L 115.00 30.50 L 117.00 30.50 L 117.50 30.00 L 117.00 29.50 L 112.00 29.50 L 111.50 29.00 L 112.00 28.50 L 119.00 28.50 L 120.00 27.50 L 124.00 27.50 L 124.50 27.00 L 124.50 21.00 L 125.00 20.50 L 129.00 20.50 L 129.50 21.00 L 129.50 27.00 L 127.50 28.00 L 128.00 28.50 L 131.00 28.50 L 132.00 29.50 L 133.00 29.50 L 134.50 31.00 L 134.00 31.50 Z"/>
+<path class="paint-region" id="region_2" data-region-id="region_2" data-color-id="9" data-fill-color="#F8EAE8" fill-rule="evenodd" d="M 45.00 22.50 L 43.00 22.50 L 42.50 22.00 L 42.50 21.00 L 44.50 20.00 L 44.50 15.00 L 45.00 14.50 L 49.00 14.50 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 15.00 L 57.50 17.00 L 57.00 18.50 L 51.00 18.50 L 49.50 20.00 L 49.00 21.50 L 46.00 21.50 L 45.00 22.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_2" data-color-id="9" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 45.00 22.50 L 43.00 22.50 L 42.50 22.00 L 42.50 21.00 L 44.50 20.00 L 44.50 15.00 L 45.00 14.50 L 49.00 14.50 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 15.00 L 57.50 17.00 L 57.00 18.50 L 51.00 18.50 L 49.50 20.00 L 49.00 21.50 L 46.00 21.50 L 45.00 22.50 Z"/>
+<path class="paint-region" id="region_16" data-region-id="region_16" data-color-id="5" data-fill-color="#ADB4BB" fill-rule="evenodd" d="M 160.00 82.50 L 159.50 82.00 L 159.50 75.00 L 158.50 74.00 L 158.50 66.00 L 159.50 65.00 L 159.50 64.00 L 161.50 62.00 L 161.50 59.00 L 162.00 58.50 L 163.50 61.00 L 163.50 64.00 L 162.50 65.00 L 162.50 67.00 L 161.50 68.00 L 162.50 69.00 L 162.50 75.00 L 161.50 76.00 L 161.50 81.00 L 160.00 82.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_16" data-color-id="5" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 160.00 82.50 L 159.50 82.00 L 159.50 75.00 L 158.50 74.00 L 158.50 66.00 L 159.50 65.00 L 159.50 64.00 L 161.50 62.00 L 161.50 59.00 L 162.00 58.50 L 163.50 61.00 L 163.50 64.00 L 162.50 65.00 L 162.50 67.00 L 161.50 68.00 L 162.50 69.00 L 162.50 75.00 L 161.50 76.00 L 161.50 81.00 L 160.00 82.50 Z"/>
+<path class="paint-region" id="region_35" data-region-id="region_35" data-color-id="12" data-fill-color="#848F99" fill-rule="evenodd" d="M 131.00 111.50 L 104.00 111.50 L 103.50 111.00 L 104.00 110.50 L 109.00 110.50 L 110.00 109.50 L 126.00 109.50 L 127.00 108.50 L 128.00 108.50 L 130.00 106.50 L 131.00 107.50 L 134.00 107.50 L 136.50 109.00 L 136.00 109.50 L 132.00 109.50 L 131.00 111.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_35" data-color-id="12" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 131.00 111.50 L 104.00 111.50 L 103.50 111.00 L 104.00 110.50 L 109.00 110.50 L 110.00 109.50 L 126.00 109.50 L 127.00 108.50 L 128.00 108.50 L 130.00 106.50 L 131.00 107.50 L 134.00 107.50 L 136.50 109.00 L 136.00 109.50 L 132.00 109.50 L 131.00 111.50 Z"/>
+<path class="paint-region" id="region_3" data-region-id="region_3" data-color-id="2" data-fill-color="#F0D1CE" fill-rule="evenodd" d="M 63.00 21.50 L 60.00 21.50 L 59.00 20.50 L 50.00 20.50 L 49.50 20.00 L 51.00 18.50 L 57.00 18.50 L 57.50 17.00 L 60.00 14.50 L 64.00 14.50 L 64.50 15.00 L 64.50 19.00 L 63.00 21.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_3" data-color-id="2" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 63.00 21.50 L 60.00 21.50 L 59.00 20.50 L 50.00 20.50 L 49.50 20.00 L 51.00 18.50 L 57.00 18.50 L 57.50 17.00 L 60.00 14.50 L 64.00 14.50 L 64.50 15.00 L 64.50 19.00 L 63.00 21.50 Z"/>
+<path class="paint-region" id="region_14" data-region-id="region_14" data-color-id="7" data-fill-color="#536271" fill-rule="evenodd" d="M 159.00 65.50 L 158.50 65.00 L 158.50 59.00 L 159.50 58.00 L 159.50 56.00 L 155.50 54.00 L 155.50 50.00 L 159.00 46.50 L 159.50 47.00 L 159.50 51.00 L 161.50 53.00 L 161.50 62.00 L 159.50 64.00 L 159.00 65.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_14" data-color-id="7" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 159.00 65.50 L 158.50 65.00 L 158.50 59.00 L 159.50 58.00 L 159.50 56.00 L 155.50 54.00 L 155.50 50.00 L 159.00 46.50 L 159.50 47.00 L 159.50 51.00 L 161.50 53.00 L 161.50 62.00 L 159.50 64.00 L 159.00 65.50 Z"/>
+<path class="paint-region" id="region_12" data-region-id="region_12" data-color-id="7" data-fill-color="#536271" fill-rule="evenodd" d="M 161.00 42.50 L 159.50 40.00 L 159.50 39.00 L 159.00 38.50 L 156.00 38.50 L 154.50 36.00 L 154.50 34.00 L 157.00 30.50 L 160.00 30.50 L 160.50 31.00 L 160.50 33.00 L 161.50 34.00 L 161.50 42.00 L 161.00 42.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_12" data-color-id="7" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 161.00 42.50 L 159.50 40.00 L 159.50 39.00 L 159.00 38.50 L 156.00 38.50 L 154.50 36.00 L 154.50 34.00 L 157.00 30.50 L 160.00 30.50 L 160.50 31.00 L 160.50 33.00 L 161.50 34.00 L 161.50 42.00 L 161.00 42.50 Z"/>
+<path class="paint-region" id="region_18" data-region-id="region_18" data-color-id="5" data-fill-color="#ADB4BB" fill-rule="evenodd" d="M 101.00 74.50 L 99.00 74.50 L 98.50 74.00 L 98.50 45.00 L 99.00 44.50 L 99.50 45.00 L 99.50 47.00 L 100.50 48.00 L 100.50 57.00 L 99.50 58.00 L 99.50 67.00 L 100.50 68.00 L 100.50 71.00 L 101.50 72.00 L 101.50 74.00 L 101.00 74.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_18" data-color-id="5" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 101.00 74.50 L 99.00 74.50 L 98.50 74.00 L 98.50 45.00 L 99.00 44.50 L 99.50 45.00 L 99.50 47.00 L 100.50 48.00 L 100.50 57.00 L 99.50 58.00 L 99.50 67.00 L 100.50 68.00 L 100.50 71.00 L 101.50 72.00 L 101.50 74.00 L 101.00 74.50 Z"/>
+<path class="paint-region" id="region_21" data-region-id="region_21" data-color-id="1" data-fill-color="#C95549" fill-rule="evenodd" d="M 87.00 78.50 L 86.50 77.00 L 85.00 75.50 L 83.00 75.50 L 80.50 74.00 L 80.50 71.00 L 81.00 70.50 L 82.00 70.50 L 83.00 69.50 L 85.00 69.50 L 86.00 70.50 L 87.00 70.50 L 89.50 72.00 L 89.50 75.00 L 87.50 77.00 L 87.00 78.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_21" data-color-id="1" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 87.00 78.50 L 86.50 77.00 L 85.00 75.50 L 83.00 75.50 L 80.50 74.00 L 80.50 71.00 L 81.00 70.50 L 82.00 70.50 L 83.00 69.50 L 85.00 69.50 L 86.00 70.50 L 87.00 70.50 L 89.50 72.00 L 89.50 75.00 L 87.50 77.00 L 87.00 78.50 Z"/>
+<path class="paint-region" id="region_10" data-region-id="region_10" data-color-id="9" data-fill-color="#F8EAE8" fill-rule="evenodd" d="M 27.00 37.50 L 25.00 35.50 L 23.00 35.50 L 20.50 34.00 L 20.50 31.00 L 21.00 30.50 L 22.00 30.50 L 23.00 29.50 L 25.00 29.50 L 27.00 31.50 L 28.00 31.50 L 29.00 30.50 L 29.50 31.00 L 29.50 34.00 L 27.00 37.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_10" data-color-id="9" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 27.00 37.50 L 25.00 35.50 L 23.00 35.50 L 20.50 34.00 L 20.50 31.00 L 21.00 30.50 L 22.00 30.50 L 23.00 29.50 L 25.00 29.50 L 27.00 31.50 L 28.00 31.50 L 29.00 30.50 L 29.50 31.00 L 29.50 34.00 L 27.00 37.50 Z"/>
+<path class="paint-region" id="region_34" data-region-id="region_34" data-color-id="7" data-fill-color="#536271" fill-rule="evenodd" d="M 141.00 111.50 L 132.00 111.50 L 131.50 110.00 L 132.00 109.50 L 137.00 109.50 L 139.50 107.00 L 140.00 105.50 L 144.00 105.50 L 146.50 109.00 L 146.00 109.50 L 142.00 109.50 L 141.00 111.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_34" data-color-id="7" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 141.00 111.50 L 132.00 111.50 L 131.50 110.00 L 132.00 109.50 L 137.00 109.50 L 139.50 107.00 L 140.00 105.50 L 144.00 105.50 L 146.50 109.00 L 146.00 109.50 L 142.00 109.50 L 141.00 111.50 Z"/>
+<path class="paint-region" id="region_24" data-region-id="region_24" data-color-id="8" data-fill-color="#74808C" fill-rule="evenodd" d="M 100.00 93.50 L 99.50 93.00 L 99.50 90.00 L 98.50 89.00 L 98.50 75.00 L 99.00 74.50 L 101.00 74.50 L 101.50 75.00 L 101.50 84.00 L 100.50 85.00 L 100.50 93.00 L 100.00 93.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_24" data-color-id="8" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 100.00 93.50 L 99.50 93.00 L 99.50 90.00 L 98.50 89.00 L 98.50 75.00 L 99.00 74.50 L 101.00 74.50 L 101.50 75.00 L 101.50 84.00 L 100.50 85.00 L 100.50 93.00 L 100.00 93.50 Z"/>
+<path class="paint-region" id="region_13" data-region-id="region_13" data-color-id="9" data-fill-color="#F8EAE8" fill-rule="evenodd" d="M 91.00 45.50 L 87.00 45.50 L 86.50 45.00 L 86.50 41.00 L 87.00 40.50 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 91.00 45.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_13" data-color-id="9" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 91.00 45.50 L 87.00 45.50 L 86.50 45.00 L 86.50 41.00 L 87.00 40.50 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 91.00 45.50 Z"/>
+<path class="paint-region" id="region_25" data-region-id="region_25" data-color-id="10" data-fill-color="#C4C9CE" fill-rule="evenodd" d="M 161.00 91.50 L 159.50 91.00 L 159.50 83.00 L 161.50 81.00 L 161.50 77.00 L 162.00 76.50 L 162.50 77.00 L 162.50 79.00 L 163.50 80.00 L 163.50 83.00 L 161.50 86.00 L 161.50 91.00 L 161.00 91.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_25" data-color-id="10" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 161.00 91.50 L 159.50 91.00 L 159.50 83.00 L 161.50 81.00 L 161.50 77.00 L 162.00 76.50 L 162.50 77.00 L 162.50 79.00 L 163.50 80.00 L 163.50 83.00 L 161.50 86.00 L 161.50 91.00 L 161.00 91.50 Z"/>
+<path class="paint-region" id="region_7" data-region-id="region_7" data-color-id="2" data-fill-color="#F0D1CE" fill-rule="evenodd" d="M 39.00 25.50 L 36.00 25.50 L 35.50 25.00 L 35.50 21.00 L 36.00 20.50 L 42.00 20.50 L 42.50 21.00 L 42.50 23.00 L 41.00 23.50 L 39.00 25.50 Z" fill="#ffffff"/>
+<path class="region-hit" data-target-region="region_7" data-color-id="2" fill-rule="evenodd" fill="rgba(0,0,0,0.001)" d="M 39.00 25.50 L 36.00 25.50 L 35.50 25.00 L 35.50 21.00 L 36.00 20.50 L 42.00 20.50 L 42.50 21.00 L 42.50 23.00 L 41.00 23.50 L 39.00 25.50 Z"/>
+<text class="region-number" data-region-id="region_38" data-color-id="4" x="0.00" y="139.00" font-size="14.0px">4</text>
+<text class="region-number" data-region-id="region_5" data-color-id="4" x="174.00" y="0.00" font-size="14.0px">4</text>
+<text class="region-number" data-region-id="region_31" data-color-id="3" x="136.00" y="66.00" font-size="14.0px">3</text>
+<text class="region-number" data-region-id="region_17" data-color-id="6" x="52.00" y="43.00" font-size="14.0px">6</text>
+<text class="region-number" data-region-id="region_36" data-color-id="4" x="179.00" y="47.00" font-size="12.7px">4</text>
+<text class="region-number" data-region-id="region_32" data-color-id="3" x="109.00" y="101.00" font-size="6.2px">3</text>
+<text class="region-number" data-region-id="region_6" data-color-id="4" x="0.00" y="29.00" font-size="13.6px">4</text>
+<text class="region-number" data-region-id="region_20" data-color-id="6" x="42.00" y="72.00" font-size="5.4px">6</text>
+<text class="region-number" data-region-id="region_4" data-color-id="4" x="137.00" y="22.00" font-size="5.4px">4</text>
+<text class="region-number" data-region-id="region_11" data-color-id="3" x="145.00" y="37.00" font-size="5.2px">3</text>
+<text class="region-number" data-region-id="region_1" data-color-id="4" x="0.00" y="0.00" font-size="6.8px">4</text>
+<text class="region-number" data-region-id="region_28" data-color-id="6" x="55.00" y="87.00" font-size="5.4px">6</text>
+<text class="region-number" data-region-id="region_27" data-color-id="4" x="93.00" y="80.00" font-size="5.2px">4</text>
+<text class="region-number" data-region-id="region_23" data-color-id="6" x="28.00" y="70.00" font-size="5.2px">6</text>
+<text class="region-number" data-region-id="region_19" data-color-id="4" x="0.00" y="59.00" font-size="6.8px">4</text>
+<text class="region-number" data-region-id="region_33" data-color-id="3" x="129.00" y="101.00" font-size="5.2px">3</text>
+<text class="region-number" data-region-id="region_30" data-color-id="4" x="86.00" y="93.00" font-size="5.2px">4</text>
+<text class="region-number" data-region-id="region_22" data-color-id="9" x="19.00" y="75.00" font-size="5.2px">9</text>
+<text class="region-number" data-region-id="region_37" data-color-id="4" x="99.00" y="115.00" font-size="5.2px">4</text>
+<text class="region-number" data-region-id="region_29" data-color-id="1" x="43.00" y="95.00" font-size="5.2px">1</text>
+<text class="region-number" data-region-id="region_9" data-color-id="9" x="69.00" y="19.00" font-size="5.2px">9</text>
+<text class="region-number" data-region-id="region_15" data-color-id="11" x="88.00" y="56.00" font-size="5.2px">11</text>
+<text class="region-number" data-region-id="region_26" data-color-id="1" x="79.00" y="85.00" font-size="5.2px">1</text>
+<text class="region-number" data-region-id="region_8" data-color-id="5" x="127.00" y="23.00" font-size="5.2px">5</text>
+<text class="region-number" data-region-id="region_2" data-color-id="9" x="47.00" y="17.00" font-size="5.2px">9</text>
+<text class="region-number" data-region-id="region_16" data-color-id="5" x="161.00" y="65.00" font-size="5.2px">5</text>
+<text class="region-number" data-region-id="region_35" data-color-id="12" x="130.00" y="109.00" font-size="5.2px">12</text>
+<text class="region-number" data-region-id="region_3" data-color-id="2" x="61.00" y="18.00" font-size="5.2px">2</text>
+<text class="region-number" data-region-id="region_14" data-color-id="7" x="158.00" y="52.00" font-size="5.2px">7</text>
+<text class="region-number" data-region-id="region_12" data-color-id="7" x="158.00" y="35.00" font-size="5.2px">7</text>
+<text class="region-number" data-region-id="region_18" data-color-id="5" x="100.00" y="73.00" font-size="5.2px">5</text>
+<text class="region-number" data-region-id="region_21" data-color-id="1" x="85.00" y="73.00" font-size="5.2px">1</text>
+<text class="region-number" data-region-id="region_10" data-color-id="9" x="24.00" y="32.00" font-size="5.2px">9</text>
+<text class="region-number" data-region-id="region_34" data-color-id="7" x="141.00" y="108.00" font-size="5.2px">7</text>
+<text class="region-number" data-region-id="region_24" data-color-id="8" x="100.00" y="76.00" font-size="5.2px">8</text>
+<text class="region-number" data-region-id="region_13" data-color-id="9" x="91.00" y="42.00" font-size="5.2px">9</text>
+<text class="region-number" data-region-id="region_25" data-color-id="10" x="161.00" y="84.00" font-size="5.2px">10</text>
+<text class="region-number" data-region-id="region_7" data-color-id="2" x="38.00" y="23.00" font-size="5.2px">2</text>
+</svg></div>
+      <svg id="masterReveal" aria-label="Original artwork revealed through painted regions"></svg>
+      <img id="revealSource" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAACMCAIAAABahhSlAAAC5klEQVR4nO3cTW4TQRSF0RhlObABJlkDK2UNmbAB2E9nEMmyRC6RuuvnVXHOGJTXrq+f25GV23EcT/CRL7MHoC5xEImDSBxE4iASB5E4iMRBJA4icRCJg0gcROIgEgeROIjEQSQOInEQiYPoefYAH3v9/vXf/+Dl158xk/zPbnW+YPxpEIlQOpkfx+km/qaStmbG0TCLRxJpZU4cnbJ4JJHrJnxaGVDGsJ+yt6GbY8qBWSGnjdscs25lK+S0QXHMPSF9nDMijgpnU2GG5XR/5ih1KhefP769/Gg1yUi/X3+e+499N0epMp7qzVNcxzhqnkTNqWrqFUflM6g8Wyld4qj/6tefsALf5yBqH8cqN+Uqc07UOI61XvG1ph3P2wpRyzhWvBFXnHkYm4OoWRzr3oLrTt6bzUHUJo7Vb77V5+/E5iASB1GDOPbYyXtcRVs2B5E4iK7GsdM23ulamrA5iMRBJA4icRBdimO/J7j9rugKm4NIHETiIBIHkTiIxEEkDiJxEImDSBxE4iASB9GlOPb7+6/7XdEVNgeROIjEQSQOoqtx7PQEt9O1NGFzEImDqEEce2zjPa6iLZuDSBxEbeJYfSevPn8nNgdRszjWvfnWnbw3m4OoZRwr3oIrzjyMzUHUOI61bsS1ph2v/eZY5RVfZc6JvK0QdYmj/k1Zf8IKem2Oyq9+5dlK6fi2UvMMak5VU99njmonUW2e4ro/kNY5jzqTrGLEp5UKp1JhhuUM+ig792yUcc6433PMOiFlnPY88oe9n9OwPwQri4sm/IZ0zJkp47qhm+Ou6wqRRStz4njXPBFZtDUzjnf3Ez1diSY6mR/H3eMZfxqKIAYoFMcjZ1+B73MQiYNIHETiIBIHkTiIxEEkDiJxEN2O45g9A0XZHETiIBIHkTiIxEEkDiJxEImDSBxE4iASB5E4iMRBJA4icRCJg0gcROIgEgeROIjEQSQOInEQiYNIHETiIBIHkTiI3gA/6a7P3wxRPgAAAABJRU5ErkJggg==" alt="Original artwork reveal source" style="display:none">
+      <img id="referenceOverlay" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMTQwIiB2aWV3Qm94PSIwIDAgMTgwIDE0MCI+CjxzdHlsZT4ucGFpbnQtcmVnaW9ue3N0cm9rZTojMjAyMDIwO3N0cm9rZS13aWR0aDowLjM4O3N0cm9rZS1saW5lY2FwOnJvdW5kO3N0cm9rZS1saW5lam9pbjpyb3VuZDt2ZWN0b3ItZWZmZWN0Om5vbi1zY2FsaW5nLXN0cm9rZTtjdXJzb3I6cG9pbnRlcn19Lmluay1saW5le2ZpbGw6bm9uZTtzdHJva2U6IzE3MTcxNztzdHJva2Utd2lkdGg6MC4zNDtzdHJva2UtbGluZWNhcDpyb3VuZDtzdHJva2UtbGluZWpvaW46cm91bmQ7dmVjdG9yLWVmZmVjdDpub24tc2NhbGluZy1zdHJva2U7cG9pbnRlci1ldmVudHM6bm9uZX08L3N0eWxlPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzM4IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzM4IiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWZpbGwtY29sb3I9IiNGRUZFRkUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxNC41MCA3OS4wMCBMIDE1LjAwIDc5LjUwIEwgMTkuMDAgNzkuNTAgTCAxOS41MCA4MC4wMCBMIDE5LjUwIDg0LjAwIEwgMjAuMDAgODQuNTAgTCAyNS4wMCA4NC41MCBMIDI4LjAwIDg4LjUwIEwgMzAuMDAgODguNTAgTCAzNC41MCA5My4wMCBMIDM0LjUwIDk1LjAwIEwgMzUuMDAgOTUuNTAgTCAzNi4wMCA5NS41MCBMIDM4LjAwIDk3LjUwIEwgMzkuMDAgOTcuNTAgTCA0Mi4wMCA5OS41MCBMIDQ0LjAwIDk5LjUwIEwgNDUuMDAgMTAwLjUwIEwgNDkuMDAgMTAwLjUwIEwgNTAuMDAgMTAxLjUwIEwgNjAuMDAgMTAxLjUwIEwgNjEuMDAgMTAwLjUwIEwgNjQuMDAgMTAwLjUwIEwgNjUuMDAgOTkuNTAgTCA2Ny4wMCA5OS41MCBMIDY4LjAwIDk3LjUwIEwgNjkuMDAgOTcuNTAgTCA3MC4wMCA5Ni41MCBMIDcxLjAwIDk2LjUwIEwgNzMuMDAgOTQuNTAgTCA3NS4wMCA5NC41MCBMIDc3LjAwIDkyLjUwIEwgNzguMDAgOTIuNTAgTCA3OS41MCA5NC4wMCBMIDc5LjUwIDk5LjAwIEwgODAuMDAgOTkuNTAgTCA4NC4wMCA5OS41MCBMIDg0LjUwIDEwMC4wMCBMIDg0LjUwIDEwNC4wMCBMIDg1LjAwIDEwNC41MCBMIDg5LjAwIDEwNC41MCBMIDg5LjUwIDEwNS4wMCBMIDg5LjUwIDExNC4wMCBMIDkwLjAwIDExNC41MCBMIDk0LjAwIDExNC41MCBMIDk0LjUwIDExNS4wMCBMIDk0LjUwIDExOS4wMCBMIDk1LjAwIDExOS41MCBMIDk5LjAwIDExOS41MCBMIDEwMC4wMCAxMTguNTAgTCAxMDguMDAgMTE4LjUwIEwgMTA5LjUwIDExNi4wMCBMIDEwOS41MCAxMTUuMDAgTCAxMTEuMDAgMTEzLjUwIEwgMTE0LjAwIDExNS41MCBMIDExNy4wMCAxMTIuNTAgTCAxMTkuMDAgMTEyLjUwIEwgMTIyLjAwIDExNC41MCBMIDEyNC4wMCAxMTQuNTAgTCAxMjYuMDAgMTEyLjUwIEwgMTI5LjAwIDExMi41MCBMIDEzMC4wMCAxMTMuNTAgTCAxMzQuMDAgMTEzLjUwIEwgMTM1LjAwIDExMi41MCBMIDEzOC4wMCAxMTIuNTAgTCAxNDAuMDAgMTE0LjUwIEwgMTQyLjAwIDExNC41MCBMIDE0NS41MCAxMTIuMDAgTCAxNDUuMDAgMTExLjUwIEwgMTQyLjAwIDExMS41MCBMIDE0MS41MCAxMTEuMDAgTCAxNDIuMDAgMTA5LjUwIEwgMTUyLjAwIDEwOS41MCBMIDE1My4wMCAxMTAuNTAgTCAxNTkuMDAgMTEwLjUwIEwgMTU5LjgyIDEwOS42OCBMIDE0LjUwIDczLjE1IEwgMTQuNTAgNzkuMDAgWiBNIDE2MC4wMCAxMTEuNTAgTCAxNTguNTAgMTEyLjAwIEwgMTYwLjAwIDExNC41MCBMIDE3OS4wMCAxMTQuNTAgTCAxNjEuNDIgMTEwLjA4IEwgMTYwLjAwIDExMS41MCBaIiBmaWxsPSIjRkZGRkZGIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fNSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl81IiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWZpbGwtY29sb3I9IiNGRUZFRkUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxNTAuMDAgMTkuNTAgTCAxNTIuNTcgMTkuNTAgTCAxNDkuNTAgMTguOTIgTCAxNTAuMDAgMTkuNTAgWiBNIDE2MC4wMCAyNC41MCBMIDE3OS4wMCAyNC41MCBMIDE1OS41MCAyMC44MSBMIDE1OS41MCAyNC4wMCBMIDE2MC4wMCAyNC41MCBaIE0gNDkuNTAgMTAuMDAgTCA1MC41MCAxMS4wMCBMIDUwLjUwIDEyLjAwIEwgNDkuNTAgMTMuMDAgTCA0OS41MCAxNi4wMCBMIDUxLjAwIDE3LjUwIEwgNTQuMDAgMTcuNTAgTCA1NC41MCAxNy4wMCBMIDU0LjUwIDExLjAwIEwgNTUuMDAgMTAuNTAgTCA1OC4wMCAxMC41MCBMIDU5LjUwIDEyLjAwIEwgNTkuNTAgMTQuMDAgTCA2MC4wMCAxNC41MCBMIDY5LjAwIDE0LjUwIEwgNzAuMDAgMTUuNTAgTCA3My4wMCAxNS41MCBMIDc0LjUwIDE3LjAwIEwgNzQuNTAgMTkuMDAgTCA3Ni4wMCAyMC41MCBMIDc4LjAwIDIwLjUwIEwgODAuMDAgMjQuNTAgTCA4NC4wMCAyNC41MCBMIDg0LjUwIDI1LjAwIEwgODQuNTAgMjkuMDAgTCA4Mi41MCAzMS4wMCBMIDgyLjUwIDMyLjAwIEwgODQuNTAgMzUuMDAgTCA4NC41MCAzOC4wMCBMIDg2LjUwIDM5LjAwIEwgODYuNTAgNDAuMDAgTCA4OC4wMCA0Mi41MCBMIDg4LjUwIDQxLjAwIEwgOTAuMDAgMzkuNTAgTCA5Mi4wMCAzOS41MCBMIDk0LjUwIDQxLjAwIEwgOTMuNTAgNDIuMDAgTCA5My41MCA0NC4wMCBMIDg5LjUwIDQ2LjAwIEwgODkuNTAgNDguMDAgTCA5Mi4wMCA0OS41MCBMIDk0LjAwIDQ5LjUwIEwgOTQuNTAgNTAuMDAgTCA5NC41MCA1My4wMCBMIDk2LjAwIDU0LjUwIEwgOTguMDAgNTQuNTAgTCA5OC41MCA1NC4wMCBMIDk4LjUwIDQ1LjAwIEwgOTkuNTAgNDQuMDAgTCA5OS41MCAzMC4wMCBMIDEwMC4wMCAyOS41MCBMIDExMS4wMCAyOS41MCBMIDExMS41MCAyOS4wMCBMIDEwOC41MCAyOC4wMCBMIDEwOS41MCAyNy4wMCBMIDEwOS41MCAxNS4wMCBMIDExMC4wMCAxNC41MCBMIDEyNi4xNCAxNC41MCBMIDQ5LjUwIDAuMDAgTCA0OS41MCAxMC4wMCBaIiBmaWxsPSIjRkZGRkZGIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMzEiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMzEiIGRhdGEtY29sb3ItaWQ9IjMiIGRhdGEtZmlsbC1jb2xvcj0iIzJEM0Y1MSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDE1OS4wMCAxMTAuNTAgTCAxNTMuMDAgMTEwLjUwIEwgMTUyLjAwIDEwOS41MCBMIDE0Ny4wMCAxMDkuNTAgTCAxNDQuMDAgMTA1LjUwIEwgMTQwLjAwIDEwNS41MCBMIDEzOS41MCAxMDUuMDAgTCAxMzkuNTAgMTAzLjAwIEwgMTM4LjAwIDEwMS41MCBMIDEzNS4wMCAxMDEuNTAgTCAxMzQuNTAgMTAxLjAwIEwgMTM0LjUwIDkwLjAwIEwgMTM0LjAwIDg5LjUwIEwgMTE1LjAwIDg5LjUwIEwgMTE0LjUwIDg5LjAwIEwgMTE0LjUwIDQ1LjAwIEwgMTE1LjAwIDQ0LjUwIEwgMTQ2LjAwIDQ0LjUwIEwgMTQ3LjAwIDQzLjUwIEwgMTQ5LjAwIDQzLjUwIEwgMTUwLjUwIDQ1LjAwIEwgMTUwLjUwIDQ5LjAwIEwgMTUxLjAwIDQ5LjUwIEwgMTU1LjAwIDQ5LjUwIEwgMTU1LjUwIDUwLjAwIEwgMTU1LjUwIDU0LjAwIEwgMTU5LjUwIDU2LjAwIEwgMTU5LjUwIDU4LjAwIEwgMTU4LjUwIDU5LjAwIEwgMTU4LjUwIDc0LjAwIEwgMTU5LjUwIDc1LjAwIEwgMTU5LjUwIDkxLjAwIEwgMTYxLjUwIDkyLjAwIEwgMTYxLjUwIDEwMS4wMCBMIDE2MC41MCAxMDIuMDAgTCAxNjAuNTAgMTA5LjAwIEwgMTU5LjAwIDExMC41MCBaIiBmaWxsPSIjMkQzRjUxIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMTciIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMTciIGRhdGEtY29sb3ItaWQ9IjYiIGRhdGEtZmlsbC1jb2xvcj0iI0MwM0EyQyIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDg5LjAwIDY0LjUwIEwgMzAuMDAgNjQuNTAgTCAyOS41MCA2NC4wMCBMIDI5LjUwIDU1LjAwIEwgMjguMDAgNTMuNTAgTCAyNy4wMCA1My41MCBMIDI2LjAwIDU0LjUwIEwgMjQuMDAgNTQuNTAgTCAyMS41MCA1My4wMCBMIDIxLjUwIDQ5LjAwIEwgMjIuNTAgNDguMDAgTCAyMi41MCA0Ni4wMCBMIDIzLjUwIDQ1LjAwIEwgMjMuNTAgNDEuMDAgTCAyNC41MCA0MC4wMCBMIDI0LjUwIDM5LjAwIEwgMjYuMDAgMzguNTAgTCAyOC41MCAzNi4wMCBMIDI4LjUwIDM1LjAwIEwgMjkuNTAgMzQuMDAgTCAyOS41MCAzMC4wMCBMIDM0LjAwIDI1LjUwIEwgMzkuMDAgMjUuNTAgTCA0MS4wMCAyMy41MCBMIDQyLjAwIDIzLjUwIEwgNDMuMDAgMjIuNTAgTCA0NS4wMCAyMi41MCBMIDQ2LjAwIDIxLjUwIEwgNDkuMDAgMjEuNTAgTCA1MC4wMCAyMC41MCBMIDU5LjAwIDIwLjUwIEwgNjAuMDAgMjEuNTAgTCA2My4wMCAyMS41MCBMIDY0LjAwIDIyLjUwIEwgNjcuMDAgMjIuNTAgTCA2OC4wMCAyMy41MCBMIDcxLjAwIDIzLjUwIEwgNzIuNTAgMjUuMDAgTCA3Mi41MCAyNi4wMCBMIDc1LjAwIDI4LjUwIEwgNzYuMDAgMjguNTAgTCA3OS4wMCAzMS41MCBMIDgwLjAwIDI5LjUwIEwgODMuNTAgMzMuMDAgTCA4My41MCAzNC4wMCBMIDg0LjUwIDM1LjAwIEwgODQuNTAgMzguMDAgTCA4Ni41MCAzOS4wMCBMIDg2LjUwIDQ3LjAwIEwgODQuNTAgNDkuMDAgTCA4NC41MCA1MS4wMCBMIDg1LjUwIDUyLjAwIEwgODUuNTAgNTQuMDAgTCA4NC41MCA1NS4wMCBMIDg0LjUwIDU5LjAwIEwgODUuMDAgNTkuNTAgTCA4OS4wMCA1OS41MCBMIDg5LjUwIDYwLjAwIEwgODkuNTAgNjQuMDAgTCA4OS4wMCA2NC41MCBaIiBmaWxsPSIjQzEzQjJEIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMzYiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMzYiIGRhdGEtY29sb3ItaWQ9IjQiIGRhdGEtZmlsbC1jb2xvcj0iI0ZFRkVGRSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDE3OS4wMCAxMTQuNTAgTCAxNjAuMDAgMTE0LjUwIEwgMTU4LjUwIDExMi4wMCBMIDE2MC4wMCAxMTEuNTAgTCAxNjEuNTAgMTEwLjAwIEwgMTYyLjAwIDEwOC41MCBMIDE2My4wMCAxMDkuNTAgTCAxNjYuMDAgMTA5LjUwIEwgMTY3LjAwIDEwOC41MCBMIDE2OC4wMCAxMDguNTAgTCAxNjguNTAgMTA4LjAwIEwgMTY4LjUwIDEwNS4wMCBMIDE2OS41MCAxMDQuMDAgTCAxNjkuNTAgMTAwLjAwIEwgMTY5LjAwIDk5LjUwIEwgMTY1LjAwIDk5LjUwIEwgMTY0LjAwIDk4LjUwIEwgMTYzLjAwIDk4LjUwIEwgMTYxLjUwIDk2LjAwIEwgMTYxLjUwIDg2LjAwIEwgMTYzLjUwIDgzLjAwIEwgMTYzLjUwIDgwLjAwIEwgMTYyLjUwIDc5LjAwIEwgMTYyLjUwIDc3LjAwIEwgMTYxLjUwIDc2LjAwIEwgMTYyLjUwIDc1LjAwIEwgMTYyLjUwIDY5LjAwIEwgMTYxLjUwIDY4LjAwIEwgMTYyLjUwIDY3LjAwIEwgMTYyLjUwIDY1LjAwIEwgMTYzLjUwIDY0LjAwIEwgMTYzLjUwIDYxLjAwIEwgMTYxLjUwIDU4LjAwIEwgMTYxLjUwIDUzLjAwIEwgMTU5LjUwIDUxLjAwIEwgMTU5LjUwIDQxLjAwIEwgMTYwLjAwIDQwLjUwIEwgMTYxLjAwIDQyLjUwIEwgMTYxLjUwIDQyLjAwIEwgMTYxLjUwIDMxLjAwIEwgMTYzLjAwIDMwLjUwIEwgMTY0LjUwIDI5LjAwIEwgMTY0LjUwIDI1LjAwIEwgMTY1LjAwIDI0LjUwIEwgMTc5LjAwIDI0LjUwIEwgMTc5LjAwIDExNC41MCBaIiBmaWxsPSIjRkRGREZEIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMzIiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMzIiIGRhdGEtY29sb3ItaWQ9IjMiIGRhdGEtZmlsbC1jb2xvcj0iIzJEM0Y1MSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDEwMy4wMCAxMTEuNTAgTCAxMDAuMDAgMTExLjUwIEwgOTguNTAgMTEwLjAwIEwgOTguNTAgMTAzLjAwIEwgOTkuNTAgMTAyLjAwIEwgOTkuNTAgOTQuMDAgTCAxMDAuNTAgOTMuMDAgTCAxMDAuNTAgODUuMDAgTCAxMDEuNTAgODQuMDAgTCAxMDEuNTAgNzIuMDAgTCAxMDAuNTAgNzEuMDAgTCAxMDAuNTAgNjguMDAgTCA5OS41MCA2Ny4wMCBMIDk5LjUwIDU4LjAwIEwgMTAwLjUwIDU3LjAwIEwgMTAwLjUwIDQ4LjAwIEwgOTkuNTAgNDcuMDAgTCA5OS41MCAzMC4wMCBMIDEwMC4wMCAyOS41MCBMIDExNy4wMCAyOS41MCBMIDExNy41MCAzMC4wMCBMIDExNy4wMCAzMC41MCBMIDExNS4wMCAzMC41MCBMIDExNC41MCAzMS4wMCBMIDExNC41MCAzNS4wMCBMIDExMy41MCAzNi4wMCBMIDExMy41MCAzNy4wMCBMIDExNC41MCAzOC4wMCBMIDExNC41MCA5NC4wMCBMIDExNS4wMCA5NC41MCBMIDEyNC4wMCA5NC41MCBMIDEyNC41MCA5NS4wMCBMIDEyNC41MCAxMDAuMDAgTCAxMjQuMDAgMTAwLjUwIEwgMTIwLjAwIDEwMC41MCBMIDExOS41MCAxMDEuMDAgTCAxMTkuNTAgMTA2LjAwIEwgMTE2LjAwIDEwOS41MCBMIDExMC4wMCAxMDkuNTAgTCAxMDkuMDAgMTEwLjUwIEwgMTA0LjAwIDExMC41MCBMIDEwMy4wMCAxMTEuNTAgWiIgZmlsbD0iIzJFNDA1MiIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzYiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fNiIgZGF0YS1jb2xvci1pZD0iNCIgZGF0YS1maWxsLWNvbG9yPSIjRkVGRUZFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMC4wMCA5LjUwIEwgNDQuMDAgOS41MCBMIDQ0LjUwIDEwLjAwIEwgNDQuNTAgMjAuMDAgTCA0NC4wMCAyMC41MCBMIDM2LjAwIDIwLjUwIEwgMzUuNTAgMjEuMDAgTCAzNS41MCAyNS4wMCBMIDM0LjAwIDI1LjUwIEwgMjguMDAgMzEuNTAgTCAyNy4wMCAzMS41MCBMIDI1LjAwIDI5LjUwIEwgMjMuMDAgMjkuNTAgTCAyMC41MCAzMS4wMCBMIDIwLjUwIDM0LjAwIEwgMjMuMDAgMzUuNTAgTCAyNS4wMCAzNS41MCBMIDI2LjUwIDM3LjAwIEwgMjYuNTAgMzguMDAgTCAyNS4wMCAzOC41MCBMIDIzLjUwIDQxLjAwIEwgMjMuNTAgNDUuMDAgTCAyMy4wMCA0NS41MCBMIDIyLjAwIDQ1LjUwIEwgMjEuMDAgNDQuNTAgTCAxNS4wMCA0NC41MCBMIDE0LjUwIDQ1LjAwIEwgMTQuNTAgNDkuMDAgTCAxNC4wMCA0OS41MCBMIDAuMDAgNDkuNTAgTCAwLjAwIDkuNTAgWiIgZmlsbD0iI0ZGRkVGRSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzIwIiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzIwIiBkYXRhLWNvbG9yLWlkPSI2IiBkYXRhLWZpbGwtY29sb3I9IiNDMDNBMkMiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAzNS4wMCA5NC41MCBMIDMzLjUwIDkyLjAwIEwgMzMuNTAgODkuMDAgTCAzMi41MCA4OC4wMCBMIDMzLjUwIDg3LjAwIEwgMzMuNTAgODEuMDAgTCAzNC41MCA4MC4wMCBMIDM0LjUwIDY1LjAwIEwgMzUuMDAgNjQuNTAgTCA4NC4wMCA2NC41MCBMIDg0LjUwIDY1LjAwIEwgODQuNTAgNjkuMDAgTCA4MC41MCA3MS4wMCBMIDgwLjUwIDc0LjAwIEwgODMuMDAgNzUuNTAgTCA4NS4wMCA3NS41MCBMIDg2LjUwIDc3LjAwIEwgODYuNTAgNzguMDAgTCA4NS41MCA3OS4wMCBMIDg1LjUwIDgyLjAwIEwgODUuMDAgODIuNTAgTCA4NC4wMCA4MC41MCBMIDgzLjAwIDgxLjUwIEwgODIuMDAgODEuNTAgTCA4MC4wMCA3OS41MCBMIDc4LjAwIDc5LjUwIEwgNzUuNTAgODEuMDAgTCA3NS41MCA4NC4wMCBMIDc1LjAwIDg0LjUwIEwgNzAuMDAgODQuNTAgTCA2OS41MCA4NC4wMCBMIDY5LjUwIDgwLjAwIEwgNjkuMDAgNzkuNTAgTCA0MC4wMCA3OS41MCBMIDM5LjUwIDgwLjAwIEwgMzkuNTAgODQuMDAgTCA0MC4wMCA4NC41MCBMIDQ0LjAwIDg0LjUwIEwgNDQuNTAgODUuMDAgTCA0NC41MCA4OS4wMCBMIDQ0LjAwIDg5LjUwIEwgNDAuMDAgODkuNTAgTCAzNy4wMCA5Mi41MCBMIDM2LjAwIDkyLjUwIEwgMzUuMDAgOTQuNTAgWiIgZmlsbD0iI0MwMzkyQiIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzQiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fNCIgZGF0YS1jb2xvci1pZD0iNCIgZGF0YS1maWxsLWNvbG9yPSIjRkVGRUZFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMTYxLjAwIDMzLjUwIEwgMTYwLjAwIDMwLjUwIEwgMTU1LjAwIDMwLjUwIEwgMTU0LjAwIDI5LjUwIEwgMTQ0LjAwIDI5LjUwIEwgMTQzLjAwIDMwLjUwIEwgMTM0LjAwIDMwLjUwIEwgMTMxLjAwIDI4LjUwIEwgMTI4LjAwIDI4LjUwIEwgMTI3LjUwIDI4LjAwIEwgMTI5LjUwIDI3LjAwIEwgMTI5LjUwIDIxLjAwIEwgMTI5LjAwIDIwLjUwIEwgMTI1LjAwIDIwLjUwIEwgMTI0LjUwIDIxLjAwIEwgMTI0LjUwIDI3LjAwIEwgMTI0LjAwIDI3LjUwIEwgMTIwLjAwIDI3LjUwIEwgMTE5LjAwIDI4LjUwIEwgMTA5LjAwIDI4LjUwIEwgMTA4LjUwIDI4LjAwIEwgMTA5LjUwIDI3LjAwIEwgMTA5LjUwIDE1LjAwIEwgMTEwLjAwIDE0LjUwIEwgMTQ5LjAwIDE0LjUwIEwgMTQ5LjUwIDE1LjAwIEwgMTQ5LjUwIDE5LjAwIEwgMTUwLjAwIDE5LjUwIEwgMTU5LjAwIDE5LjUwIEwgMTU5LjUwIDIwLjAwIEwgMTU5LjUwIDI0LjAwIEwgMTYwLjAwIDI0LjUwIEwgMTY0LjAwIDI0LjUwIEwgMTY0LjUwIDI1LjAwIEwgMTY0LjUwIDI5LjAwIEwgMTYzLjAwIDMwLjUwIEwgMTYxLjUwIDMxLjAwIEwgMTYxLjUwIDMzLjAwIEwgMTYxLjAwIDMzLjUwIFoiIGZpbGw9IiNGOUZBRkEiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8xMSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8xMSIgZGF0YS1jb2xvci1pZD0iMyIgZGF0YS1maWxsLWNvbG9yPSIjMkQzRjUxIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMTU2LjAwIDQ5LjUwIEwgMTUxLjAwIDQ5LjUwIEwgMTUwLjUwIDQ5LjAwIEwgMTUwLjUwIDQ1LjAwIEwgMTQ5LjAwIDQzLjUwIEwgMTQ3LjAwIDQzLjUwIEwgMTQ2LjAwIDQ0LjUwIEwgMTE1LjAwIDQ0LjUwIEwgMTE0LjUwIDQ0LjAwIEwgMTE0LjUwIDM4LjAwIEwgMTEzLjUwIDM3LjAwIEwgMTEzLjUwIDM2LjAwIEwgMTE0LjUwIDM1LjAwIEwgMTE0LjUwIDMyLjAwIEwgMTE1LjAwIDMxLjUwIEwgMTIyLjAwIDMxLjUwIEwgMTIzLjAwIDMwLjUwIEwgMTI0LjAwIDMwLjUwIEwgMTI1LjAwIDMxLjUwIEwgMTM0LjAwIDMxLjUwIEwgMTM1LjAwIDMwLjUwIEwgMTQzLjAwIDMwLjUwIEwgMTQ0LjAwIDI5LjUwIEwgMTU0LjAwIDI5LjUwIEwgMTU2LjUwIDMxLjAwIEwgMTU0LjUwIDM0LjAwIEwgMTU0LjUwIDM2LjAwIEwgMTU1LjUwIDM3LjAwIEwgMTU1LjUwIDM4LjAwIEwgMTU2LjAwIDM4LjUwIEwgMTU5LjAwIDM4LjUwIEwgMTU5LjUwIDM5LjAwIEwgMTU5LjUwIDQ2LjAwIEwgMTU2LjAwIDQ5LjUwIFoiIGZpbGw9IiMyQzNFNTAiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8xIiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzEiIGRhdGEtY29sb3ItaWQ9IjQiIGRhdGEtZmlsbC1jb2xvcj0iI0ZFRkVGRSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDQ5LjUwIDAuMDAgTCA0OS41MCAxMC4wMCBMIDUwLjUwIDExLjAwIEwgNTAuNTAgMTIuMDAgTCA0OS4wMCAxNC41MCBMIDQ1LjAwIDE0LjUwIEwgNDQuNTAgMTQuMDAgTCA0NC41MCAxMC4wMCBMIDQ0LjAwIDkuNTAgTCAwLjAwIDkuNTAgTCA0OS41MCAwLjAwIFoiIGZpbGw9IiNGRkZGRkYiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8yOCIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8yOCIgZGF0YS1jb2xvci1pZD0iNiIgZGF0YS1maWxsLWNvbG9yPSIjQzAzQTJDIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gNjkuNTAgOTcuMDAgTCA2OC4wMCA5Ny41MCBMIDY1LjAwIDk0LjUwIEwgNjMuMDAgOTQuNTAgTCA2Mi4wMCA5NS41MCBMIDYwLjAwIDk1LjUwIEwgNTkuMDAgOTQuNTAgTCA1MC4wMCA5NC41MCBMIDQ4LjUwIDkzLjAwIEwgNDguMDAgOTEuNTAgTCA0NS4wMCA5MS41MCBMIDQ0LjUwIDkxLjAwIEwgNDQuNTAgODUuMDAgTCA0NC4wMCA4NC41MCBMIDQwLjAwIDg0LjUwIEwgMzkuNTAgODQuMDAgTCAzOS41MCA4MC4wMCBMIDQwLjAwIDc5LjUwIEwgNjkuMDAgNzkuNTAgTCA2OS41MCA4MC4wMCBMIDY5LjUwIDg0LjAwIEwgNzAuMDAgODQuNTAgTCA3NC4wMCA4NC41MCBMIDc0LjUwIDg1LjAwIEwgNzQuNTAgOTAuMDAgTCA3NC4wMCA5MC41MCBMIDcxLjAwIDkwLjUwIEwgNzAuNTAgOTEuMDAgTCA3MC41MCA5NC4wMCBMIDY5LjUwIDk1LjAwIEwgNjkuNTAgOTcuMDAgWiIgZmlsbD0iI0MwMzkyQiIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzI3IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzI3IiBkYXRhLWNvbG9yLWlkPSI0IiBkYXRhLWZpbGwtY29sb3I9IiNGRUZFRkUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSA5OC4wMCAxMDkuNTAgTCA5NS4wMCAxMDkuNTAgTCA5NC41MCAxMDkuMDAgTCA5NC41MCAxMDQuMDAgTCA5NS41MCAxMDMuMDAgTCA5NC41MCAxMDIuMDAgTCA5NC41MCAxMDAuMDAgTCA5Ny41MCA5Ny4wMCBMIDk3LjUwIDk1LjAwIEwgOTYuNTAgOTQuMDAgTCA5Ni41MCA5MS4wMCBMIDk1LjAwIDg5LjUwIEwgOTEuMDAgODkuNTAgTCA5MC41MCA4OS4wMCBMIDkwLjUwIDg2LjAwIEwgODguMDAgODMuNTAgTCA4Ni4wMCA4My41MCBMIDg1LjAwIDg0LjUwIEwgODQuNTAgODQuMDAgTCA4NC41MCA4My4wMCBMIDg1LjUwIDgyLjAwIEwgODUuNTAgNzkuMDAgTCA4Ny41MCA3OC4wMCBMIDg3LjUwIDc3LjAwIEwgODkuNTAgNzUuMDAgTCA4OS41MCA3NC4wMCBMIDkxLjUwIDcxLjAwIEwgOTEuNTAgNTQuMDAgTCA5MC41MCA1My4wMCBMIDkwLjUwIDQ5LjAwIEwgOTEuMDAgNDguNTAgTCA5Mi4wMCA0OS41MCBMIDk0LjAwIDQ5LjUwIEwgOTQuNTAgNTAuMDAgTCA5NC41MCA1My4wMCBMIDk2LjAwIDU0LjUwIEwgOTguMDAgNTQuNTAgTCA5OC41MCA1NS4wMCBMIDk4LjUwIDg5LjAwIEwgOTkuNTAgOTAuMDAgTCA5OS41MCAxMDIuMDAgTCA5OC41MCAxMDMuMDAgTCA5OC41MCAxMDkuMDAgTCA5OC4wMCAxMDkuNTAgWiIgZmlsbD0iI0ZFRkVGRSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzIzIiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzIzIiBkYXRhLWNvbG9yLWlkPSI2IiBkYXRhLWZpbGwtY29sb3I9IiNDMDNBMkMiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAzMy4wMCA5MS41MCBMIDI4LjUwIDg3LjAwIEwgMjguNTAgODUuMDAgTCAyNi41MCA4NC4wMCBMIDI2LjUwIDgyLjAwIEwgMjQuNTAgODEuMDAgTCAyNC41MCA3OC4wMCBMIDIzLjUwIDc3LjAwIEwgMjMuNTAgNzUuMDAgTCAyMi41MCA3NC4wMCBMIDIyLjUwIDcyLjAwIEwgMjEuNTAgNzEuMDAgTCAyMS41MCA3MC4wMCBMIDIwLjUwIDY5LjAwIEwgMjAuNTAgNjcuMDAgTCAxOS41MCA2Ni4wMCBMIDE5LjUwIDYwLjAwIEwgMjAuNTAgNTkuMDAgTCAyMC41MCA1NC4wMCBMIDIxLjAwIDUzLjUwIEwgMjMuMDAgNTMuNTAgTCAyNC4wMCA1NC41MCBMIDI2LjAwIDU0LjUwIEwgMjcuMDAgNTMuNTAgTCAyOC4wMCA1My41MCBMIDI5LjUwIDU1LjAwIEwgMjkuNTAgNjQuMDAgTCAzMC4wMCA2NC41MCBMIDM0LjAwIDY0LjUwIEwgMzQuNTAgNjUuMDAgTCAzNC41MCA4MC4wMCBMIDMzLjUwIDgxLjAwIEwgMzMuNTAgODcuMDAgTCAzMi41MCA4OC4wMCBMIDMzLjUwIDg5LjAwIEwgMzMuNTAgOTEuMDAgTCAzMy4wMCA5MS41MCBaIiBmaWxsPSIjQzAzOTJCIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMTkiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMTkiIGRhdGEtY29sb3ItaWQ9IjQiIGRhdGEtZmlsbC1jb2xvcj0iI0ZFRkVGRSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDAuMDAgNDkuNTAgTCAxNC4wMCA0OS41MCBMIDE0LjUwIDUwLjAwIEwgMTQuNTAgNTQuMDAgTCAxNi4wMCA1NC41MCBMIDE3LjUwIDU2LjAwIEwgMTcuNTAgNTkuMDAgTCAxOC41MCA2MC4wMCBMIDE4LjUwIDYyLjAwIEwgMTYuMDAgNjQuNTAgTCAxNC41MCA2NS4wMCBMIDE0LjUwIDY5LjAwIEwgMTQuMDAgNjkuNTAgTCAwLjAwIDY5LjUwIEwgMC4wMCA0OS41MCBaIiBmaWxsPSIjRkZGRUZFIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMzMiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMzMiIGRhdGEtY29sb3ItaWQ9IjMiIGRhdGEtZmlsbC1jb2xvcj0iIzJEM0Y1MSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDEzNy4wMCAxMDkuNTAgTCAxMzQuMDAgMTA3LjUwIEwgMTMxLjAwIDEwNy41MCBMIDEzMC4wMCAxMDYuNTAgTCAxMjguMDAgMTA4LjUwIEwgMTI3LjAwIDEwOC41MCBMIDEyNi4wMCAxMDkuNTAgTCAxMTcuMDAgMTA5LjUwIEwgMTE2LjUwIDEwOS4wMCBMIDExOS41MCAxMDYuMDAgTCAxMTkuNTAgMTAxLjAwIEwgMTIwLjAwIDEwMC41MCBMIDEyNC4wMCAxMDAuNTAgTCAxMjQuNTAgMTAwLjAwIEwgMTI0LjUwIDk1LjAwIEwgMTI0LjAwIDk0LjUwIEwgMTE1LjAwIDk0LjUwIEwgMTE0LjUwIDk0LjAwIEwgMTE0LjUwIDkwLjAwIEwgMTE1LjAwIDg5LjUwIEwgMTM0LjAwIDg5LjUwIEwgMTM0LjUwIDkwLjAwIEwgMTM0LjUwIDEwMS4wMCBMIDEzNS4wMCAxMDEuNTAgTCAxMzguMDAgMTAxLjUwIEwgMTM5LjUwIDEwMy4wMCBMIDEzOS41MCAxMDcuMDAgTCAxMzcuMDAgMTA5LjUwIFoiIGZpbGw9IiMyQzNFNTAiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8zMCIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8zMCIgZGF0YS1jb2xvci1pZD0iNCIgZGF0YS1maWxsLWNvbG9yPSIjRkVGRUZFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gOTQuMDAgMTA0LjUwIEwgODUuMDAgMTA0LjUwIEwgODQuNTAgMTA0LjAwIEwgODQuNTAgMTAwLjAwIEwgODQuMDAgOTkuNTAgTCA4MC4wMCA5OS41MCBMIDc5LjUwIDk5LjAwIEwgNzkuNTAgOTQuMDAgTCA3Ny41MCA5Mi4wMCBMIDg2LjAwIDgzLjUwIEwgODguMDAgODMuNTAgTCA5MC41MCA4Ni4wMCBMIDkwLjUwIDg5LjAwIEwgOTEuMDAgODkuNTAgTCA5NS4wMCA4OS41MCBMIDk2LjUwIDkxLjAwIEwgOTYuNTAgOTQuMDAgTCA5Ny41MCA5NS4wMCBMIDk3LjUwIDk3LjAwIEwgOTQuNTAgMTAwLjAwIEwgOTQuNTAgMTAyLjAwIEwgOTUuNTAgMTAzLjAwIEwgOTQuMDAgMTA0LjUwIFoiIGZpbGw9IiNGRUZFRkUiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8yMiIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8yMiIgZGF0YS1jb2xvci1pZD0iOSIgZGF0YS1maWxsLWNvbG9yPSIjRjhFQUU4IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMjkuNTAgODguMDAgTCAyOC4wMCA4OC41MCBMIDI1LjAwIDg0LjUwIEwgMjAuMDAgODQuNTAgTCAxOS41MCA4NC4wMCBMIDE5LjUwIDgwLjAwIEwgMTkuMDAgNzkuNTAgTCAxNS4wMCA3OS41MCBMIDE0LjUwIDc5LjAwIEwgMTQuNTAgNjUuMDAgTCAxNi4wMCA2NC41MCBMIDE4LjUwIDYyLjAwIEwgMTguNTAgNjAuMDAgTCAxNy41MCA1OS4wMCBMIDE3LjUwIDU2LjAwIEwgMTYuMDAgNTQuNTAgTCAxNC41MCA1NC4wMCBMIDE0LjUwIDQ1LjAwIEwgMTUuMDAgNDQuNTAgTCAyMS4wMCA0NC41MCBMIDIyLjUwIDQ2LjAwIEwgMjIuNTAgNDguMDAgTCAyMS41MCA0OS4wMCBMIDIxLjUwIDUzLjAwIEwgMjAuNTAgNTQuMDAgTCAyMC41MCA1OS4wMCBMIDE5LjUwIDYwLjAwIEwgMTkuNTAgNjYuMDAgTCAyMC41MCA2Ny4wMCBMIDIwLjUwIDY5LjAwIEwgMjIuNTAgNzIuMDAgTCAyMi41MCA3NC4wMCBMIDIzLjUwIDc1LjAwIEwgMjMuNTAgNzcuMDAgTCAyNC41MCA3OC4wMCBMIDI0LjUwIDgxLjAwIEwgMjYuMDAgODEuNTAgTCAyNi41MCA4Mi4wMCBMIDI2LjUwIDg0LjAwIEwgMjguNTAgODUuMDAgTCAyOC41MCA4Ny4wMCBMIDI5LjUwIDg4LjAwIFoiIGZpbGw9IiNGOEU5RTciLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8zNyIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8zNyIgZGF0YS1jb2xvci1pZD0iNCIgZGF0YS1maWxsLWNvbG9yPSIjRkVGRUZFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gOTkuMDAgMTE5LjUwIEwgOTUuMDAgMTE5LjUwIEwgOTQuNTAgMTE5LjAwIEwgOTQuNTAgMTE1LjAwIEwgOTQuMDAgMTE0LjUwIEwgOTAuMDAgMTE0LjUwIEwgODkuNTAgMTE0LjAwIEwgODkuNTAgMTA1LjAwIEwgOTAuMDAgMTA0LjUwIEwgOTQuMDAgMTA0LjUwIEwgOTQuNTAgMTA1LjAwIEwgOTQuNTAgMTA5LjAwIEwgOTUuMDAgMTA5LjUwIEwgOTguMDAgMTA5LjUwIEwgMTAwLjAwIDExMS41MCBMIDE0NS4wMCAxMTEuNTAgTCAxNDUuNTAgMTEyLjAwIEwgMTQyLjAwIDExNC41MCBMIDE0MC4wMCAxMTQuNTAgTCAxMzguMDAgMTEyLjUwIEwgMTM1LjAwIDExMi41MCBMIDEzNC4wMCAxMTMuNTAgTCAxMzAuMDAgMTEzLjUwIEwgMTI5LjAwIDExMi41MCBMIDEyNi4wMCAxMTIuNTAgTCAxMjQuMDAgMTE0LjUwIEwgMTIyLjAwIDExNC41MCBMIDExOS4wMCAxMTIuNTAgTCAxMTcuMDAgMTEyLjUwIEwgMTE0LjAwIDExNS41MCBMIDExMS4wMCAxMTMuNTAgTCAxMDkuNTAgMTE1LjAwIEwgMTA5LjUwIDExNi4wMCBMIDEwOC4wMCAxMTguNTAgTCAxMDAuMDAgMTE4LjUwIEwgOTkuMDAgMTE5LjUwIFoiIGZpbGw9IiNGRkZGRkYiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8yOSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8yOSIgZGF0YS1jb2xvci1pZD0iMSIgZGF0YS1maWxsLWNvbG9yPSIjQzk1NTQ5IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gNjAuMDAgMTAxLjUwIEwgNTAuMDAgMTAxLjUwIEwgNDkuMDAgMTAwLjUwIEwgNDUuMDAgMTAwLjUwIEwgNDQuMDAgOTkuNTAgTCA0Mi4wMCA5OS41MCBMIDQxLjAwIDk4LjUwIEwgMzguMDAgOTcuNTAgTCAzNi4wMCA5NS41MCBMIDM0LjUwIDk1LjAwIEwgMzUuNTAgOTQuMDAgTCAzNS41MCA5My4wMCBMIDM3LjAwIDkyLjUwIEwgNDAuMDAgODkuNTAgTCA0NC4wMCA4OS41MCBMIDQ1LjAwIDkxLjUwIEwgNDguMDAgOTEuNTAgTCA0OC41MCA5My4wMCBMIDUwLjAwIDk0LjUwIEwgNTkuMDAgOTQuNTAgTCA2MC4wMCA5NS41MCBMIDYyLjAwIDk1LjUwIEwgNjMuMDAgOTQuNTAgTCA2NS4wMCA5NC41MCBMIDY3LjUwIDk3LjAwIEwgNjcuNTAgOTkuMDAgTCA2Ny4wMCA5OS41MCBMIDY1LjAwIDk5LjUwIEwgNjQuMDAgMTAwLjUwIEwgNjEuMDAgMTAwLjUwIEwgNjAuMDAgMTAxLjUwIFoiIGZpbGw9IiNDQjVCNEYiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl85IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzkiIGRhdGEtY29sb3ItaWQ9IjkiIGRhdGEtZmlsbC1jb2xvcj0iI0Y4RUFFOCIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDgyLjAwIDMxLjUwIEwgODAuMDAgMjkuNTAgTCA3OS4wMCAzMS41MCBMIDc2LjAwIDI4LjUwIEwgNzUuMDAgMjguNTAgTCA3Mi41MCAyNi4wMCBMIDcyLjUwIDI1LjAwIEwgNzEuMDAgMjMuNTAgTCA2OC4wMCAyMy41MCBMIDY3LjAwIDIyLjUwIEwgNjQuMDAgMjIuNTAgTCA2My41MCAyMi4wMCBMIDYzLjUwIDIwLjAwIEwgNjQuNTAgMTkuMDAgTCA2NC41MCAxNS4wMCBMIDY1LjAwIDE0LjUwIEwgNjkuMDAgMTQuNTAgTCA3MC4wMCAxNS41MCBMIDczLjAwIDE1LjUwIEwgNzQuNTAgMTcuMDAgTCA3NC41MCAxOS4wMCBMIDc2LjAwIDIwLjUwIEwgNzguMDAgMjAuNTAgTCA4MC4wMCAyNC41MCBMIDg0LjAwIDI0LjUwIEwgODQuNTAgMjUuMDAgTCA4NC41MCAyOS4wMCBMIDgyLjAwIDMxLjUwIFoiIGZpbGw9IiNGOUVDRUIiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8xNSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8xNSIgZGF0YS1jb2xvci1pZD0iMTEiIGRhdGEtZmlsbC1jb2xvcj0iI0NGNjk1RSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDkwLjAwIDczLjUwIEwgODkuMDAgNzEuNTAgTCA4Ni4wMCA3MC41MCBMIDg0LjUwIDY5LjAwIEwgODQuNTAgNjUuMDAgTCA4NS4wMCA2NC41MCBMIDg5LjAwIDY0LjUwIEwgODkuNTAgNjQuMDAgTCA4OS41MCA2MC4wMCBMIDg5LjAwIDU5LjUwIEwgODUuMDAgNTkuNTAgTCA4NC41MCA1OS4wMCBMIDg0LjUwIDU1LjAwIEwgODUuNTAgNTQuMDAgTCA4NS41MCA1Mi4wMCBMIDg0LjUwIDUxLjAwIEwgODQuNTAgNDkuMDAgTCA4Ni41MCA0Ny4wMCBMIDg3LjAwIDQ1LjUwIEwgODkuMDAgNDUuNTAgTCA4OS41MCA0Ni4wMCBMIDg5LjUwIDQ4LjAwIEwgOTAuNTAgNDkuMDAgTCA5MC41MCA1My4wMCBMIDkxLjUwIDU0LjAwIEwgOTEuNTAgNzEuMDAgTCA5MC4wMCA3My41MCBaIiBmaWxsPSIjQ0Y2OTVFIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fMjYiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMjYiIGRhdGEtY29sb3ItaWQ9IjEiIGRhdGEtZmlsbC1jb2xvcj0iI0M5NTU0OSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDcxLjAwIDk2LjUwIEwgNjkuNTAgOTYuMDAgTCA2OS41MCA5NS4wMCBMIDcwLjUwIDk0LjAwIEwgNzAuNTAgOTEuMDAgTCA3MS4wMCA5MC41MCBMIDc0LjAwIDkwLjUwIEwgNzQuNTAgOTAuMDAgTCA3NC41MCA4NS4wMCBMIDc1LjUwIDg0LjAwIEwgNzUuNTAgODEuMDAgTCA3OC4wMCA3OS41MCBMIDgwLjAwIDc5LjUwIEwgODIuMDAgODEuNTAgTCA4My4wMCA4MS41MCBMIDg0LjAwIDgwLjUwIEwgODQuNTAgODEuMDAgTCA4NC41MCA4NS4wMCBMIDc1LjAwIDk0LjUwIEwgNzMuMDAgOTQuNTAgTCA3MS4wMCA5Ni41MCBaIiBmaWxsPSIjQzc0RTQyIi8+CjxwYXRoIGNsYXNzPSJwYWludC1yZWdpb24iIGlkPSJyZWdpb25fOCIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl84IiBkYXRhLWNvbG9yLWlkPSI1IiBkYXRhLWZpbGwtY29sb3I9IiNBREI0QkIiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxMzQuMDAgMzEuNTAgTCAxMjUuMDAgMzEuNTAgTCAxMjQuMDAgMzAuNTAgTCAxMjMuMDAgMzAuNTAgTCAxMjIuMDAgMzEuNTAgTCAxMTUuMDAgMzEuNTAgTCAxMTQuNTAgMzEuMDAgTCAxMTUuMDAgMzAuNTAgTCAxMTcuMDAgMzAuNTAgTCAxMTcuNTAgMzAuMDAgTCAxMTcuMDAgMjkuNTAgTCAxMTIuMDAgMjkuNTAgTCAxMTEuNTAgMjkuMDAgTCAxMTIuMDAgMjguNTAgTCAxMTkuMDAgMjguNTAgTCAxMjAuMDAgMjcuNTAgTCAxMjQuMDAgMjcuNTAgTCAxMjQuNTAgMjcuMDAgTCAxMjQuNTAgMjEuMDAgTCAxMjUuMDAgMjAuNTAgTCAxMjkuMDAgMjAuNTAgTCAxMjkuNTAgMjEuMDAgTCAxMjkuNTAgMjcuMDAgTCAxMjcuNTAgMjguMDAgTCAxMjguMDAgMjguNTAgTCAxMzEuMDAgMjguNTAgTCAxMzIuMDAgMjkuNTAgTCAxMzMuMDAgMjkuNTAgTCAxMzQuNTAgMzEuMDAgTCAxMzQuMDAgMzEuNTAgWiIgZmlsbD0iI0I1QkJDMSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzIiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMiIgZGF0YS1jb2xvci1pZD0iOSIgZGF0YS1maWxsLWNvbG9yPSIjRjhFQUU4IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gNDUuMDAgMjIuNTAgTCA0My4wMCAyMi41MCBMIDQyLjUwIDIyLjAwIEwgNDIuNTAgMjEuMDAgTCA0NC41MCAyMC4wMCBMIDQ0LjUwIDE1LjAwIEwgNDUuMDAgMTQuNTAgTCA0OS4wMCAxNC41MCBMIDQ5LjUwIDE2LjAwIEwgNTEuMDAgMTcuNTAgTCA1NC4wMCAxNy41MCBMIDU0LjUwIDE3LjAwIEwgNTQuNTAgMTEuMDAgTCA1NS4wMCAxMC41MCBMIDU4LjAwIDEwLjUwIEwgNTkuNTAgMTIuMDAgTCA1OS41MCAxNS4wMCBMIDU3LjUwIDE3LjAwIEwgNTcuMDAgMTguNTAgTCA1MS4wMCAxOC41MCBMIDQ5LjUwIDIwLjAwIEwgNDkuMDAgMjEuNTAgTCA0Ni4wMCAyMS41MCBMIDQ1LjAwIDIyLjUwIFoiIGZpbGw9IiNGQUVERUMiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8xNiIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8xNiIgZGF0YS1jb2xvci1pZD0iNSIgZGF0YS1maWxsLWNvbG9yPSIjQURCNEJCIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMTYwLjAwIDgyLjUwIEwgMTU5LjUwIDgyLjAwIEwgMTU5LjUwIDc1LjAwIEwgMTU4LjUwIDc0LjAwIEwgMTU4LjUwIDY2LjAwIEwgMTU5LjUwIDY1LjAwIEwgMTU5LjUwIDY0LjAwIEwgMTYxLjUwIDYyLjAwIEwgMTYxLjUwIDU5LjAwIEwgMTYyLjAwIDU4LjUwIEwgMTYzLjUwIDYxLjAwIEwgMTYzLjUwIDY0LjAwIEwgMTYyLjUwIDY1LjAwIEwgMTYyLjUwIDY3LjAwIEwgMTYxLjUwIDY4LjAwIEwgMTYyLjUwIDY5LjAwIEwgMTYyLjUwIDc1LjAwIEwgMTYxLjUwIDc2LjAwIEwgMTYxLjUwIDgxLjAwIEwgMTYwLjAwIDgyLjUwIFoiIGZpbGw9IiNBN0FFQjYiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8zNSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8zNSIgZGF0YS1jb2xvci1pZD0iMTIiIGRhdGEtZmlsbC1jb2xvcj0iIzg0OEY5OSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDEzMS4wMCAxMTEuNTAgTCAxMDQuMDAgMTExLjUwIEwgMTAzLjUwIDExMS4wMCBMIDEwNC4wMCAxMTAuNTAgTCAxMDkuMDAgMTEwLjUwIEwgMTEwLjAwIDEwOS41MCBMIDEyNi4wMCAxMDkuNTAgTCAxMjcuMDAgMTA4LjUwIEwgMTI4LjAwIDEwOC41MCBMIDEzMC4wMCAxMDYuNTAgTCAxMzEuMDAgMTA3LjUwIEwgMTM0LjAwIDEwNy41MCBMIDEzNi41MCAxMDkuMDAgTCAxMzYuMDAgMTA5LjUwIEwgMTMyLjAwIDEwOS41MCBMIDEzMS4wMCAxMTEuNTAgWiIgZmlsbD0iIzg0OEY5OSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzMiIGRhdGEtcmVnaW9uLWlkPSJyZWdpb25fMyIgZGF0YS1jb2xvci1pZD0iMiIgZGF0YS1maWxsLWNvbG9yPSIjRjBEMUNFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gNjMuMDAgMjEuNTAgTCA2MC4wMCAyMS41MCBMIDU5LjAwIDIwLjUwIEwgNTAuMDAgMjAuNTAgTCA0OS41MCAyMC4wMCBMIDUxLjAwIDE4LjUwIEwgNTcuMDAgMTguNTAgTCA1Ny41MCAxNy4wMCBMIDYwLjAwIDE0LjUwIEwgNjQuMDAgMTQuNTAgTCA2NC41MCAxNS4wMCBMIDY0LjUwIDE5LjAwIEwgNjMuMDAgMjEuNTAgWiIgZmlsbD0iI0VFQ0JDNyIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzE0IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzE0IiBkYXRhLWNvbG9yLWlkPSI3IiBkYXRhLWZpbGwtY29sb3I9IiM1MzYyNzEiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxNTkuMDAgNjUuNTAgTCAxNTguNTAgNjUuMDAgTCAxNTguNTAgNTkuMDAgTCAxNTkuNTAgNTguMDAgTCAxNTkuNTAgNTYuMDAgTCAxNTUuNTAgNTQuMDAgTCAxNTUuNTAgNTAuMDAgTCAxNTkuMDAgNDYuNTAgTCAxNTkuNTAgNDcuMDAgTCAxNTkuNTAgNTEuMDAgTCAxNjEuNTAgNTMuMDAgTCAxNjEuNTAgNjIuMDAgTCAxNTkuNTAgNjQuMDAgTCAxNTkuMDAgNjUuNTAgWiIgZmlsbD0iIzUxNjA2RiIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzEyIiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzEyIiBkYXRhLWNvbG9yLWlkPSI3IiBkYXRhLWZpbGwtY29sb3I9IiM1MzYyNzEiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxNjEuMDAgNDIuNTAgTCAxNTkuNTAgNDAuMDAgTCAxNTkuNTAgMzkuMDAgTCAxNTkuMDAgMzguNTAgTCAxNTYuMDAgMzguNTAgTCAxNTQuNTAgMzYuMDAgTCAxNTQuNTAgMzQuMDAgTCAxNTcuMDAgMzAuNTAgTCAxNjAuMDAgMzAuNTAgTCAxNjAuNTAgMzEuMDAgTCAxNjAuNTAgMzMuMDAgTCAxNjEuNTAgMzQuMDAgTCAxNjEuNTAgNDIuMDAgTCAxNjEuMDAgNDIuNTAgWiIgZmlsbD0iIzUwNUY2RSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzE4IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzE4IiBkYXRhLWNvbG9yLWlkPSI1IiBkYXRhLWZpbGwtY29sb3I9IiNBREI0QkIiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxMDEuMDAgNzQuNTAgTCA5OS4wMCA3NC41MCBMIDk4LjUwIDc0LjAwIEwgOTguNTAgNDUuMDAgTCA5OS4wMCA0NC41MCBMIDk5LjUwIDQ1LjAwIEwgOTkuNTAgNDcuMDAgTCAxMDAuNTAgNDguMDAgTCAxMDAuNTAgNTcuMDAgTCA5OS41MCA1OC4wMCBMIDk5LjUwIDY3LjAwIEwgMTAwLjUwIDY4LjAwIEwgMTAwLjUwIDcxLjAwIEwgMTAxLjUwIDcyLjAwIEwgMTAxLjUwIDc0LjAwIEwgMTAxLjAwIDc0LjUwIFoiIGZpbGw9IiNBQkIyQjkiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8yMSIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8yMSIgZGF0YS1jb2xvci1pZD0iMSIgZGF0YS1maWxsLWNvbG9yPSIjQzk1NTQ5IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gODcuMDAgNzguNTAgTCA4Ni41MCA3Ny4wMCBMIDg1LjAwIDc1LjUwIEwgODMuMDAgNzUuNTAgTCA4MC41MCA3NC4wMCBMIDgwLjUwIDcxLjAwIEwgODEuMDAgNzAuNTAgTCA4Mi4wMCA3MC41MCBMIDgzLjAwIDY5LjUwIEwgODUuMDAgNjkuNTAgTCA4Ni4wMCA3MC41MCBMIDg3LjAwIDcwLjUwIEwgODkuNTAgNzIuMDAgTCA4OS41MCA3NS4wMCBMIDg3LjUwIDc3LjAwIEwgODcuMDAgNzguNTAgWiIgZmlsbD0iI0M5NTU0OSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzEwIiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzEwIiBkYXRhLWNvbG9yLWlkPSI5IiBkYXRhLWZpbGwtY29sb3I9IiNGOEVBRTgiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAyNy4wMCAzNy41MCBMIDI1LjAwIDM1LjUwIEwgMjMuMDAgMzUuNTAgTCAyMC41MCAzNC4wMCBMIDIwLjUwIDMxLjAwIEwgMjEuMDAgMzAuNTAgTCAyMi4wMCAzMC41MCBMIDIzLjAwIDI5LjUwIEwgMjUuMDAgMjkuNTAgTCAyNy4wMCAzMS41MCBMIDI4LjAwIDMxLjUwIEwgMjkuMDAgMzAuNTAgTCAyOS41MCAzMS4wMCBMIDI5LjUwIDM0LjAwIEwgMjcuMDAgMzcuNTAgWiIgZmlsbD0iI0Y2RTJERiIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzM0IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzM0IiBkYXRhLWNvbG9yLWlkPSI3IiBkYXRhLWZpbGwtY29sb3I9IiM1MzYyNzEiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxNDEuMDAgMTExLjUwIEwgMTMyLjAwIDExMS41MCBMIDEzMS41MCAxMTAuMDAgTCAxMzIuMDAgMTA5LjUwIEwgMTM3LjAwIDEwOS41MCBMIDEzOS41MCAxMDcuMDAgTCAxNDAuMDAgMTA1LjUwIEwgMTQ0LjAwIDEwNS41MCBMIDE0Ni41MCAxMDkuMDAgTCAxNDYuMDAgMTA5LjUwIEwgMTQyLjAwIDEwOS41MCBMIDE0MS4wMCAxMTEuNTAgWiIgZmlsbD0iIzU5Njc3NSIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzI0IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzI0IiBkYXRhLWNvbG9yLWlkPSI4IiBkYXRhLWZpbGwtY29sb3I9IiM3NDgwOEMiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTSAxMDAuMDAgOTMuNTAgTCA5OS41MCA5My4wMCBMIDk5LjUwIDkwLjAwIEwgOTguNTAgODkuMDAgTCA5OC41MCA3NS4wMCBMIDk5LjAwIDc0LjUwIEwgMTAxLjAwIDc0LjUwIEwgMTAxLjUwIDc1LjAwIEwgMTAxLjUwIDg0LjAwIEwgMTAwLjUwIDg1LjAwIEwgMTAwLjUwIDkzLjAwIEwgMTAwLjAwIDkzLjUwIFoiIGZpbGw9IiM3NDgwOEMiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl8xMyIgZGF0YS1yZWdpb24taWQ9InJlZ2lvbl8xMyIgZGF0YS1jb2xvci1pZD0iOSIgZGF0YS1maWxsLWNvbG9yPSIjRjhFQUU4IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gOTEuMDAgNDUuNTAgTCA4Ny4wMCA0NS41MCBMIDg2LjUwIDQ1LjAwIEwgODYuNTAgNDEuMDAgTCA4Ny4wMCA0MC41MCBMIDg4LjAwIDQyLjUwIEwgODguNTAgNDEuMDAgTCA5MC4wMCAzOS41MCBMIDkyLjAwIDM5LjUwIEwgOTQuNTAgNDEuMDAgTCA5My41MCA0Mi4wMCBMIDkzLjUwIDQ0LjAwIEwgOTEuMDAgNDUuNTAgWiIgZmlsbD0iI0Y5RURFQyIvPgo8cGF0aCBjbGFzcz0icGFpbnQtcmVnaW9uIiBpZD0icmVnaW9uXzI1IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzI1IiBkYXRhLWNvbG9yLWlkPSIxMCIgZGF0YS1maWxsLWNvbG9yPSIjQzRDOUNFIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMTYxLjAwIDkxLjUwIEwgMTU5LjUwIDkxLjAwIEwgMTU5LjUwIDgzLjAwIEwgMTYxLjUwIDgxLjAwIEwgMTYxLjUwIDc3LjAwIEwgMTYyLjAwIDc2LjUwIEwgMTYyLjUwIDc3LjAwIEwgMTYyLjUwIDc5LjAwIEwgMTYzLjUwIDgwLjAwIEwgMTYzLjUwIDgzLjAwIEwgMTYxLjUwIDg2LjAwIEwgMTYxLjUwIDkxLjAwIEwgMTYxLjAwIDkxLjUwIFoiIGZpbGw9IiNDNEM5Q0UiLz4KPHBhdGggY2xhc3M9InBhaW50LXJlZ2lvbiIgaWQ9InJlZ2lvbl83IiBkYXRhLXJlZ2lvbi1pZD0icmVnaW9uXzciIGRhdGEtY29sb3ItaWQ9IjIiIGRhdGEtZmlsbC1jb2xvcj0iI0YwRDFDRSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDM5LjAwIDI1LjUwIEwgMzYuMDAgMjUuNTAgTCAzNS41MCAyNS4wMCBMIDM1LjUwIDIxLjAwIEwgMzYuMDAgMjAuNTAgTCA0Mi4wMCAyMC41MCBMIDQyLjUwIDIxLjAwIEwgNDIuNTAgMjMuMDAgTCA0MS4wMCAyMy41MCBMIDM5LjAwIDI1LjUwIFoiIGZpbGw9IiNGMkQ3RDUiLz4KPC9zdmc+" alt="Reference overlay">
+      <img id="completion" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAACMCAIAAABahhSlAAAC5klEQVR4nO3cTW4TQRSF0RhlObABJlkDK2UNmbAB2E9nEMmyRC6RuuvnVXHOGJTXrq+f25GV23EcT/CRL7MHoC5xEImDSBxE4iASB5E4iMRBJA4icRCJg0gcROIgEgeROIjEQSQOInEQiYPoefYAH3v9/vXf/+Dl158xk/zPbnW+YPxpEIlQOpkfx+km/qaStmbG0TCLRxJpZU4cnbJ4JJHrJnxaGVDGsJ+yt6GbY8qBWSGnjdscs25lK+S0QXHMPSF9nDMijgpnU2GG5XR/5ih1KhefP769/Gg1yUi/X3+e+499N0epMp7qzVNcxzhqnkTNqWrqFUflM6g8Wyld4qj/6tefsALf5yBqH8cqN+Uqc07UOI61XvG1ph3P2wpRyzhWvBFXnHkYm4OoWRzr3oLrTt6bzUHUJo7Vb77V5+/E5iASB1GDOPbYyXtcRVs2B5E4iK7GsdM23ulamrA5iMRBJA4icRBdimO/J7j9rugKm4NIHETiIBIHkTiIxEEkDiJxEImDSBxE4iASB9GlOPb7+6/7XdEVNgeROIjEQSQOoqtx7PQEt9O1NGFzEImDqEEce2zjPa6iLZuDSBxEbeJYfSevPn8nNgdRszjWvfnWnbw3m4OoZRwr3oIrzjyMzUHUOI61bsS1ph2v/eZY5RVfZc6JvK0QdYmj/k1Zf8IKem2Oyq9+5dlK6fi2UvMMak5VU99njmonUW2e4ro/kNY5jzqTrGLEp5UKp1JhhuUM+ig792yUcc6433PMOiFlnPY88oe9n9OwPwQri4sm/IZ0zJkp47qhm+Ou6wqRRStz4njXPBFZtDUzjnf3Ez1diSY6mR/H3eMZfxqKIAYoFMcjZ1+B73MQiYNIHETiIBIHkTiIxEEkDiJxEN2O45g9A0XZHETiIBIHkTiIxEEkDiJxEImDSBxE4iASB5E4iMRBJA4icRCJg0gcROIgEgeROIjEQSQOInEQiYNIHETiIBIHkTiI3gA/6a7P3wxRPgAAAABJRU5ErkJggg==" alt="Completed artwork"><div id="completionMessage" style="position:absolute;inset:auto 20px 20px 20px;z-index:8;background:#ffffffee;border:1px solid #ead6c5;border-radius:14px;padding:14px 16px;text-align:center;font-weight:800;opacity:0;transform:translateY(12px);transition:opacity .5s ease,transform .5s ease;pointer-events:none">Artwork complete — enjoy the full-color reveal.</div>
+      <div id="showcasePanel" style="position:absolute;z-index:30;left:50%;bottom:22px;transform:translate(-50%,18px);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;opacity:0;pointer-events:none;transition:opacity .45s ease,transform .45s ease">
+        <button id="paintAgainBtn" class="primary">Paint Again</button>
+        <button id="downloadArtworkBtn" class="secondary">Download Finished Artwork</button>
+        <button id="downloadShowcaseBtn" class="secondary">Download Showcase Card</button>
+        <button id="shareArtworkBtn" class="secondary">Share Artwork</button>
+      </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="sidebar">
+    <div id="message">Choose a play style, then begin testing.</div>
+
+    <div class="review-only">
+      <span id="difficultyBadge" class="badge">Analyzing difficulty…</span>
+      <div class="review-card">
+        <h3>Customer play style</h3>
+        <label><input type="radio" name="playMode" value="relaxed" checked> <strong>Relaxed:</strong>&nbsp;tap any region and it fills with the correct color.</label>
+        <label><input type="radio" name="playMode" value="guided"> <strong>Guided:</strong>&nbsp;choose a color, then paint matching regions.</label>
+        <label><input type="radio" name="playMode" value="challenge"> <strong>Challenge:</strong>&nbsp;wrong colors give feedback and do not fill.</label>
+      </div>
+    </div>
+
+    <div><strong id="count">0 / 0 regions painted</strong></div><div id="colorStatus" class="hint" style="margin:6px 0 4px"></div><div id="selectedColorStatus" class="hint" style="font-weight:700;margin-bottom:10px"></div>
+    <div class="progress"><div id="bar"></div></div>
+
+    <h3>Paint palette</h3>
+    <p class="hint">All unpainted regions display their number references. Use Focus Selected Number to temporarily show only one number.</p>
+    <div id="palette" class="palette"></div>
+
+    <div class="review-card">
+  <h3>Need a hint?</h3>
+  <p class="hint">Hints stay hidden unless requested. Reveal one remaining section for the selected number.</p>
+  <button id="hintOneBtn" class="secondary">Show One Hint</button>
+  <button id="paintHintBtn" class="secondary">Complete Highlighted Section</button>
+  <button id="clearHintBtn" class="secondary">Clear Hint</button>
+  <button id="resolveHiddenBtn" class="secondary">Resolve Hidden Sections</button>
+  <button id="skipColorBtn" class="secondary">Skip This Color for Now</button>
+</div>
+<div class="controls">
+      <button id="saveBtn" class="secondary">Save Progress</button>
+      <button id="exportProgressBtn" class="secondary">Download Progress</button>
+      <button id="importProgressBtn" class="secondary">Load Progress</button>
+      <input id="progressImportFile" type="file" accept="application/json" style="display:none">
+      <button id="resetBtn" class="secondary">Reset</button>
+    </div>
+
+    <div class="controls">
+      <button id="zoomOut" class="secondary">−</button>
+      <span id="zoomReadout" class="zoom-readout">100%</span>
+      <button id="zoomIn" class="secondary">+</button>
+      <button id="zoomReset" class="secondary">Reset View</button>
+      <button id="canvasLockBtn" class="secondary">Canvas Locked</button>
+      <button id="centerSelected" class="secondary">Center Selected Color</button><button id="toggleNumberFocus" class="secondary">Show All Numbers</button>
+    </div>
+
+    <div class="review-only review-card">
+      <h3>Review tools</h3>
+      <div class="controls">
+        <button id="toggleReference" class="secondary">Show Reference Overlay</button>
+        <button id="inspectMode" class="secondary">Inspect Regions</button>
+      </div>
+      <div id="regionInfo" class="region-info">Click “Inspect Regions,” then select a region.</div>
+    </div>
+
+    <div class="review-only review-card">
+      <h3>Customer Experience Checklist</h3>
+      <div class="checklist" id="checklist">
+        <label><input type="checkbox"> Numbers are readable at normal zoom.</label>
+        <label><input type="checkbox"> Important facial and object features are preserved.</label>
+        <label><input type="checkbox"> No region feels unreasonably tiny or frustrating.</label>
+        <label><input type="checkbox"> Relaxed mode feels easy and enjoyable.</label>
+        <label><input type="checkbox"> Guided mode clearly highlights matching regions.</label>
+        <label><input type="checkbox"> Progress saves and restores correctly.</label>
+        <label><input type="checkbox"> The experience works comfortably on a phone-size window.</label>
+        <label><input type="checkbox"> The completed reveal is correctly fitted and not cropped.</label>
+      </div>
+      <label for="reviewNotes"><strong>Review notes</strong></label>
+      <textarea id="reviewNotes" placeholder="Record anything that needs improvement before publishing."></textarea>
+      <div class="controls">
+        <button id="saveReviewBtn" class="secondary">Save Review Notes</button>
+        <button id="downloadReport" class="secondary">Download QA Report</button>
+        <button id="approveBtn" class="success">Approve for Website</button>
+      </div>
+      <p id="approvalMessage" class="hint">Approval remains private and local until you choose to upload the package.</p>
+    </div>
+
+    <p class="hint customer-only">Your progress is saved automatically. You can leave and come back later without losing your work.</p>
+  </aside>
+</div>
+
+<script>
+const REGIONS=[{"regionId": "region_38", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFFFF", "painted": false, "area": 6730, "detailScore": 0.0131, "paintability": "comfortable", "path": "M 14.50 79.00 L 15.00 79.50 L 19.00 79.50 L 19.50 80.00 L 19.50 84.00 L 20.00 84.50 L 25.00 84.50 L 28.00 88.50 L 30.00 88.50 L 34.50 93.00 L 34.50 95.00 L 35.00 95.50 L 36.00 95.50 L 38.00 97.50 L 39.00 97.50 L 42.00 99.50 L 44.00 99.50 L 45.00 100.50 L 49.00 100.50 L 50.00 101.50 L 60.00 101.50 L 61.00 100.50 L 64.00 100.50 L 65.00 99.50 L 67.00 99.50 L 68.00 97.50 L 69.00 97.50 L 70.00 96.50 L 71.00 96.50 L 73.00 94.50 L 75.00 94.50 L 77.00 92.50 L 78.00 92.50 L 79.50 94.00 L 79.50 99.00 L 80.00 99.50 L 84.00 99.50 L 84.50 100.00 L 84.50 104.00 L 85.00 104.50 L 89.00 104.50 L 89.50 105.00 L 89.50 114.00 L 90.00 114.50 L 94.00 114.50 L 94.50 115.00 L 94.50 119.00 L 95.00 119.50 L 99.00 119.50 L 100.00 118.50 L 108.00 118.50 L 109.50 116.00 L 109.50 115.00 L 111.00 113.50 L 114.00 115.50 L 117.00 112.50 L 119.00 112.50 L 122.00 114.50 L 124.00 114.50 L 126.00 112.50 L 129.00 112.50 L 130.00 113.50 L 134.00 113.50 L 135.00 112.50 L 138.00 112.50 L 140.00 114.50 L 142.00 114.50 L 145.50 112.00 L 145.00 111.50 L 142.00 111.50 L 141.50 111.00 L 142.00 109.50 L 152.00 109.50 L 153.00 110.50 L 159.00 110.50 L 159.82 109.68 L 14.50 73.15 L 14.50 79.00 Z M 160.00 111.50 L 158.50 112.00 L 160.00 114.50 L 179.00 114.50 L 161.42 110.08 L 160.00 111.50 Z", "label": {"x": 0.0, "y": 139.0, "radius": 56.22277118748239, "fontSize": 14.0, "visible": true}}, {"regionId": "region_5", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFFFF", "painted": false, "area": 2906, "detailScore": 0.0171, "paintability": "comfortable", "path": "M 150.00 19.50 L 152.57 19.50 L 149.50 18.92 L 150.00 19.50 Z M 160.00 24.50 L 179.00 24.50 L 159.50 20.81 L 159.50 24.00 L 160.00 24.50 Z M 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.50 13.00 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 14.00 L 60.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.50 31.00 L 82.50 32.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 40.00 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 89.50 46.00 L 89.50 48.00 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 54.00 L 98.50 45.00 L 99.50 44.00 L 99.50 30.00 L 100.00 29.50 L 111.00 29.50 L 111.50 29.00 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 126.14 14.50 L 49.50 0.00 L 49.50 10.00 Z", "label": {"x": 174.0, "y": 0.0, "radius": 25.0, "fontSize": 14.0, "visible": true}}, {"regionId": "region_31", "colorId": "3", "fillColor": "#2D3F51", "paletteColor": "#2D3F51", "originalColor": "#2D3F51", "painted": false, "area": 2417, "detailScore": 0.09, "paintability": "comfortable", "path": "M 159.00 110.50 L 153.00 110.50 L 152.00 109.50 L 147.00 109.50 L 144.00 105.50 L 140.00 105.50 L 139.50 105.00 L 139.50 103.00 L 138.00 101.50 L 135.00 101.50 L 134.50 101.00 L 134.50 90.00 L 134.00 89.50 L 115.00 89.50 L 114.50 89.00 L 114.50 45.00 L 115.00 44.50 L 146.00 44.50 L 147.00 43.50 L 149.00 43.50 L 150.50 45.00 L 150.50 49.00 L 151.00 49.50 L 155.00 49.50 L 155.50 50.00 L 155.50 54.00 L 159.50 56.00 L 159.50 58.00 L 158.50 59.00 L 158.50 74.00 L 159.50 75.00 L 159.50 91.00 L 161.50 92.00 L 161.50 101.00 L 160.50 102.00 L 160.50 109.00 L 159.00 110.50 Z", "label": {"x": 136.0, "y": 66.0, "radius": 22.0, "fontSize": 14.0, "visible": true}}, {"regionId": "region_17", "colorId": "6", "fillColor": "#C03A2C", "paletteColor": "#C03A2C", "originalColor": "#C13B2D", "painted": false, "area": 2356, "detailScore": 0.2018, "paintability": "comfortable", "path": "M 89.00 64.50 L 30.00 64.50 L 29.50 64.00 L 29.50 55.00 L 28.00 53.50 L 27.00 53.50 L 26.00 54.50 L 24.00 54.50 L 21.50 53.00 L 21.50 49.00 L 22.50 48.00 L 22.50 46.00 L 23.50 45.00 L 23.50 41.00 L 24.50 40.00 L 24.50 39.00 L 26.00 38.50 L 28.50 36.00 L 28.50 35.00 L 29.50 34.00 L 29.50 30.00 L 34.00 25.50 L 39.00 25.50 L 41.00 23.50 L 42.00 23.50 L 43.00 22.50 L 45.00 22.50 L 46.00 21.50 L 49.00 21.50 L 50.00 20.50 L 59.00 20.50 L 60.00 21.50 L 63.00 21.50 L 64.00 22.50 L 67.00 22.50 L 68.00 23.50 L 71.00 23.50 L 72.50 25.00 L 72.50 26.00 L 75.00 28.50 L 76.00 28.50 L 79.00 31.50 L 80.00 29.50 L 83.50 33.00 L 83.50 34.00 L 84.50 35.00 L 84.50 38.00 L 86.50 39.00 L 86.50 47.00 L 84.50 49.00 L 84.50 51.00 L 85.50 52.00 L 85.50 54.00 L 84.50 55.00 L 84.50 59.00 L 85.00 59.50 L 89.00 59.50 L 89.50 60.00 L 89.50 64.00 L 89.00 64.50 Z", "label": {"x": 52.0, "y": 43.0, "radius": 22.0, "fontSize": 14.0, "visible": true}}, {"regionId": "region_36", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FDFDFD", "painted": false, "area": 1522, "detailScore": 0.0216, "paintability": "comfortable", "path": "M 179.00 114.50 L 160.00 114.50 L 158.50 112.00 L 160.00 111.50 L 161.50 110.00 L 162.00 108.50 L 163.00 109.50 L 166.00 109.50 L 167.00 108.50 L 168.00 108.50 L 168.50 108.00 L 168.50 105.00 L 169.50 104.00 L 169.50 100.00 L 169.00 99.50 L 165.00 99.50 L 164.00 98.50 L 163.00 98.50 L 161.50 96.00 L 161.50 86.00 L 163.50 83.00 L 163.50 80.00 L 162.50 79.00 L 162.50 77.00 L 161.50 76.00 L 162.50 75.00 L 162.50 69.00 L 161.50 68.00 L 162.50 67.00 L 162.50 65.00 L 163.50 64.00 L 163.50 61.00 L 161.50 58.00 L 161.50 53.00 L 159.50 51.00 L 159.50 41.00 L 160.00 40.50 L 161.00 42.50 L 161.50 42.00 L 161.50 31.00 L 163.00 30.50 L 164.50 29.00 L 164.50 25.00 L 165.00 24.50 L 179.00 24.50 L 179.00 114.50 Z", "label": {"x": 179.0, "y": 47.0, "radius": 18.681541692269406, "fontSize": 12.703448350743196, "visible": true}}, {"regionId": "region_32", "colorId": "3", "fillColor": "#2D3F51", "paletteColor": "#2D3F51", "originalColor": "#2E4052", "painted": false, "area": 1273, "detailScore": 0.1335, "paintability": "comfortable", "path": "M 103.00 111.50 L 100.00 111.50 L 98.50 110.00 L 98.50 103.00 L 99.50 102.00 L 99.50 94.00 L 100.50 93.00 L 100.50 85.00 L 101.50 84.00 L 101.50 72.00 L 100.50 71.00 L 100.50 68.00 L 99.50 67.00 L 99.50 58.00 L 100.50 57.00 L 100.50 48.00 L 99.50 47.00 L 99.50 30.00 L 100.00 29.50 L 117.00 29.50 L 117.50 30.00 L 117.00 30.50 L 115.00 30.50 L 114.50 31.00 L 114.50 35.00 L 113.50 36.00 L 113.50 37.00 L 114.50 38.00 L 114.50 94.00 L 115.00 94.50 L 124.00 94.50 L 124.50 95.00 L 124.50 100.00 L 124.00 100.50 L 120.00 100.50 L 119.50 101.00 L 119.50 106.00 L 116.00 109.50 L 110.00 109.50 L 109.00 110.50 L 104.00 110.50 L 103.00 111.50 Z", "label": {"x": 109.0, "y": 101.0, "radius": 9.055385138137417, "fontSize": 6.157661893933444, "visible": true}}, {"regionId": "region_6", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFEFE", "painted": false, "area": 1244, "detailScore": 0.0109, "paintability": "comfortable", "path": "M 0.00 9.50 L 44.00 9.50 L 44.50 10.00 L 44.50 20.00 L 44.00 20.50 L 36.00 20.50 L 35.50 21.00 L 35.50 25.00 L 34.00 25.50 L 28.00 31.50 L 27.00 31.50 L 25.00 29.50 L 23.00 29.50 L 20.50 31.00 L 20.50 34.00 L 23.00 35.50 L 25.00 35.50 L 26.50 37.00 L 26.50 38.00 L 25.00 38.50 L 23.50 41.00 L 23.50 45.00 L 23.00 45.50 L 22.00 45.50 L 21.00 44.50 L 15.00 44.50 L 14.50 45.00 L 14.50 49.00 L 14.00 49.50 L 0.00 49.50 L 0.00 9.50 Z", "label": {"x": 0.0, "y": 29.0, "radius": 20.0, "fontSize": 13.600000000000001, "visible": true}}, {"regionId": "region_20", "colorId": "6", "fillColor": "#C03A2C", "paletteColor": "#C03A2C", "originalColor": "#C0392B", "painted": false, "area": 879, "detailScore": 0.1997, "paintability": "comfortable", "path": "M 35.00 94.50 L 33.50 92.00 L 33.50 89.00 L 32.50 88.00 L 33.50 87.00 L 33.50 81.00 L 34.50 80.00 L 34.50 65.00 L 35.00 64.50 L 84.00 64.50 L 84.50 65.00 L 84.50 69.00 L 80.50 71.00 L 80.50 74.00 L 83.00 75.50 L 85.00 75.50 L 86.50 77.00 L 86.50 78.00 L 85.50 79.00 L 85.50 82.00 L 85.00 82.50 L 84.00 80.50 L 83.00 81.50 L 82.00 81.50 L 80.00 79.50 L 78.00 79.50 L 75.50 81.00 L 75.50 84.00 L 75.00 84.50 L 70.00 84.50 L 69.50 84.00 L 69.50 80.00 L 69.00 79.50 L 40.00 79.50 L 39.50 80.00 L 39.50 84.00 L 40.00 84.50 L 44.00 84.50 L 44.50 85.00 L 44.50 89.00 L 44.00 89.50 L 40.00 89.50 L 37.00 92.50 L 36.00 92.50 L 35.00 94.50 Z", "label": {"x": 42.0, "y": 72.0, "radius": 8.0, "fontSize": 5.44, "visible": true}}, {"regionId": "region_4", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#F9FAFA", "painted": false, "area": 683, "detailScore": 0.0627, "paintability": "comfortable", "path": "M 161.00 33.50 L 160.00 30.50 L 155.00 30.50 L 154.00 29.50 L 144.00 29.50 L 143.00 30.50 L 134.00 30.50 L 131.00 28.50 L 128.00 28.50 L 127.50 28.00 L 129.50 27.00 L 129.50 21.00 L 129.00 20.50 L 125.00 20.50 L 124.50 21.00 L 124.50 27.00 L 124.00 27.50 L 120.00 27.50 L 119.00 28.50 L 109.00 28.50 L 108.50 28.00 L 109.50 27.00 L 109.50 15.00 L 110.00 14.50 L 149.00 14.50 L 149.50 15.00 L 149.50 19.00 L 150.00 19.50 L 159.00 19.50 L 159.50 20.00 L 159.50 24.00 L 160.00 24.50 L 164.00 24.50 L 164.50 25.00 L 164.50 29.00 L 163.00 30.50 L 161.50 31.00 L 161.50 33.00 L 161.00 33.50 Z", "label": {"x": 137.0, "y": 22.0, "radius": 8.0, "fontSize": 5.44, "visible": true}}, {"regionId": "region_11", "colorId": "3", "fillColor": "#2D3F51", "paletteColor": "#2D3F51", "originalColor": "#2C3E50", "painted": false, "area": 627, "detailScore": 0.0997, "paintability": "comfortable", "path": "M 156.00 49.50 L 151.00 49.50 L 150.50 49.00 L 150.50 45.00 L 149.00 43.50 L 147.00 43.50 L 146.00 44.50 L 115.00 44.50 L 114.50 44.00 L 114.50 38.00 L 113.50 37.00 L 113.50 36.00 L 114.50 35.00 L 114.50 32.00 L 115.00 31.50 L 122.00 31.50 L 123.00 30.50 L 124.00 30.50 L 125.00 31.50 L 134.00 31.50 L 135.00 30.50 L 143.00 30.50 L 144.00 29.50 L 154.00 29.50 L 156.50 31.00 L 154.50 34.00 L 154.50 36.00 L 155.50 37.00 L 155.50 38.00 L 156.00 38.50 L 159.00 38.50 L 159.50 39.00 L 159.50 46.00 L 156.00 49.50 Z", "label": {"x": 145.0, "y": 37.0, "radius": 7.280109889280518, "fontSize": 5.2, "visible": true}}, {"regionId": "region_1", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFFFF", "painted": false, "area": 527, "detailScore": 0.0002, "paintability": "comfortable", "path": "M 49.50 0.00 L 49.50 10.00 L 50.50 11.00 L 50.50 12.00 L 49.00 14.50 L 45.00 14.50 L 44.50 14.00 L 44.50 10.00 L 44.00 9.50 L 0.00 9.50 L 49.50 0.00 Z", "label": {"x": 0.0, "y": 0.0, "radius": 10.0, "fontSize": 6.800000000000001, "visible": true}}, {"regionId": "region_28", "colorId": "6", "fillColor": "#C03A2C", "paletteColor": "#C03A2C", "originalColor": "#C0392B", "painted": false, "area": 433, "detailScore": 0.1956, "paintability": "comfortable", "path": "M 69.50 97.00 L 68.00 97.50 L 65.00 94.50 L 63.00 94.50 L 62.00 95.50 L 60.00 95.50 L 59.00 94.50 L 50.00 94.50 L 48.50 93.00 L 48.00 91.50 L 45.00 91.50 L 44.50 91.00 L 44.50 85.00 L 44.00 84.50 L 40.00 84.50 L 39.50 84.00 L 39.50 80.00 L 40.00 79.50 L 69.00 79.50 L 69.50 80.00 L 69.50 84.00 L 70.00 84.50 L 74.00 84.50 L 74.50 85.00 L 74.50 90.00 L 74.00 90.50 L 71.00 90.50 L 70.50 91.00 L 70.50 94.00 L 69.50 95.00 L 69.50 97.00 Z", "label": {"x": 55.0, "y": 87.0, "radius": 8.0, "fontSize": 5.44, "visible": true}}, {"regionId": "region_27", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FEFEFE", "painted": false, "area": 395, "detailScore": 0.142, "paintability": "comfortable", "path": "M 98.00 109.50 L 95.00 109.50 L 94.50 109.00 L 94.50 104.00 L 95.50 103.00 L 94.50 102.00 L 94.50 100.00 L 97.50 97.00 L 97.50 95.00 L 96.50 94.00 L 96.50 91.00 L 95.00 89.50 L 91.00 89.50 L 90.50 89.00 L 90.50 86.00 L 88.00 83.50 L 86.00 83.50 L 85.00 84.50 L 84.50 84.00 L 84.50 83.00 L 85.50 82.00 L 85.50 79.00 L 87.50 78.00 L 87.50 77.00 L 89.50 75.00 L 89.50 74.00 L 91.50 71.00 L 91.50 54.00 L 90.50 53.00 L 90.50 49.00 L 91.00 48.50 L 92.00 49.50 L 94.00 49.50 L 94.50 50.00 L 94.50 53.00 L 96.00 54.50 L 98.00 54.50 L 98.50 55.00 L 98.50 89.00 L 99.50 90.00 L 99.50 102.00 L 98.50 103.00 L 98.50 109.00 L 98.00 109.50 Z", "label": {"x": 93.0, "y": 80.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_23", "colorId": "6", "fillColor": "#C03A2C", "paletteColor": "#C03A2C", "originalColor": "#C0392B", "painted": false, "area": 351, "detailScore": 0.2206, "paintability": "comfortable", "path": "M 33.00 91.50 L 28.50 87.00 L 28.50 85.00 L 26.50 84.00 L 26.50 82.00 L 24.50 81.00 L 24.50 78.00 L 23.50 77.00 L 23.50 75.00 L 22.50 74.00 L 22.50 72.00 L 21.50 71.00 L 21.50 70.00 L 20.50 69.00 L 20.50 67.00 L 19.50 66.00 L 19.50 60.00 L 20.50 59.00 L 20.50 54.00 L 21.00 53.50 L 23.00 53.50 L 24.00 54.50 L 26.00 54.50 L 27.00 53.50 L 28.00 53.50 L 29.50 55.00 L 29.50 64.00 L 30.00 64.50 L 34.00 64.50 L 34.50 65.00 L 34.50 80.00 L 33.50 81.00 L 33.50 87.00 L 32.50 88.00 L 33.50 89.00 L 33.50 91.00 L 33.00 91.50 Z", "label": {"x": 28.0, "y": 70.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_19", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFEFE", "painted": false, "area": 331, "detailScore": 0.0103, "paintability": "comfortable", "path": "M 0.00 49.50 L 14.00 49.50 L 14.50 50.00 L 14.50 54.00 L 16.00 54.50 L 17.50 56.00 L 17.50 59.00 L 18.50 60.00 L 18.50 62.00 L 16.00 64.50 L 14.50 65.00 L 14.50 69.00 L 14.00 69.50 L 0.00 69.50 L 0.00 49.50 Z", "label": {"x": 0.0, "y": 59.0, "radius": 10.0, "fontSize": 6.800000000000001, "visible": true}}, {"regionId": "region_33", "colorId": "3", "fillColor": "#2D3F51", "paletteColor": "#2D3F51", "originalColor": "#2C3E50", "painted": false, "area": 320, "detailScore": 0.0946, "paintability": "comfortable", "path": "M 137.00 109.50 L 134.00 107.50 L 131.00 107.50 L 130.00 106.50 L 128.00 108.50 L 127.00 108.50 L 126.00 109.50 L 117.00 109.50 L 116.50 109.00 L 119.50 106.00 L 119.50 101.00 L 120.00 100.50 L 124.00 100.50 L 124.50 100.00 L 124.50 95.00 L 124.00 94.50 L 115.00 94.50 L 114.50 94.00 L 114.50 90.00 L 115.00 89.50 L 134.00 89.50 L 134.50 90.00 L 134.50 101.00 L 135.00 101.50 L 138.00 101.50 L 139.50 103.00 L 139.50 107.00 L 137.00 109.50 Z", "label": {"x": 129.0, "y": 101.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_30", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FEFEFE", "painted": false, "area": 268, "detailScore": 0.0542, "paintability": "comfortable", "path": "M 94.00 104.50 L 85.00 104.50 L 84.50 104.00 L 84.50 100.00 L 84.00 99.50 L 80.00 99.50 L 79.50 99.00 L 79.50 94.00 L 77.50 92.00 L 86.00 83.50 L 88.00 83.50 L 90.50 86.00 L 90.50 89.00 L 91.00 89.50 L 95.00 89.50 L 96.50 91.00 L 96.50 94.00 L 97.50 95.00 L 97.50 97.00 L 94.50 100.00 L 94.50 102.00 L 95.50 103.00 L 94.00 104.50 Z", "label": {"x": 86.0, "y": 93.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_22", "colorId": "9", "fillColor": "#F8EAE8", "paletteColor": "#F8EAE8", "originalColor": "#F8E9E7", "painted": false, "area": 249, "detailScore": 0.1521, "paintability": "comfortable", "path": "M 29.50 88.00 L 28.00 88.50 L 25.00 84.50 L 20.00 84.50 L 19.50 84.00 L 19.50 80.00 L 19.00 79.50 L 15.00 79.50 L 14.50 79.00 L 14.50 65.00 L 16.00 64.50 L 18.50 62.00 L 18.50 60.00 L 17.50 59.00 L 17.50 56.00 L 16.00 54.50 L 14.50 54.00 L 14.50 45.00 L 15.00 44.50 L 21.00 44.50 L 22.50 46.00 L 22.50 48.00 L 21.50 49.00 L 21.50 53.00 L 20.50 54.00 L 20.50 59.00 L 19.50 60.00 L 19.50 66.00 L 20.50 67.00 L 20.50 69.00 L 22.50 72.00 L 22.50 74.00 L 23.50 75.00 L 23.50 77.00 L 24.50 78.00 L 24.50 81.00 L 26.00 81.50 L 26.50 82.00 L 26.50 84.00 L 28.50 85.00 L 28.50 87.00 L 29.50 88.00 Z", "label": {"x": 19.0, "y": 75.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_37", "colorId": "4", "fillColor": "#FEFEFE", "paletteColor": "#FEFEFE", "originalColor": "#FFFFFF", "painted": false, "area": 239, "detailScore": 0.0792, "paintability": "comfortable", "path": "M 99.00 119.50 L 95.00 119.50 L 94.50 119.00 L 94.50 115.00 L 94.00 114.50 L 90.00 114.50 L 89.50 114.00 L 89.50 105.00 L 90.00 104.50 L 94.00 104.50 L 94.50 105.00 L 94.50 109.00 L 95.00 109.50 L 98.00 109.50 L 100.00 111.50 L 145.00 111.50 L 145.50 112.00 L 142.00 114.50 L 140.00 114.50 L 138.00 112.50 L 135.00 112.50 L 134.00 113.50 L 130.00 113.50 L 129.00 112.50 L 126.00 112.50 L 124.00 114.50 L 122.00 114.50 L 119.00 112.50 L 117.00 112.50 L 114.00 115.50 L 111.00 113.50 L 109.50 115.00 L 109.50 116.00 L 108.00 118.50 L 100.00 118.50 L 99.00 119.50 Z", "label": {"x": 99.0, "y": 115.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_29", "colorId": "1", "fillColor": "#C95549", "paletteColor": "#C95549", "originalColor": "#CB5B4F", "painted": false, "area": 222, "detailScore": 0.2761, "paintability": "comfortable", "path": "M 60.00 101.50 L 50.00 101.50 L 49.00 100.50 L 45.00 100.50 L 44.00 99.50 L 42.00 99.50 L 41.00 98.50 L 38.00 97.50 L 36.00 95.50 L 34.50 95.00 L 35.50 94.00 L 35.50 93.00 L 37.00 92.50 L 40.00 89.50 L 44.00 89.50 L 45.00 91.50 L 48.00 91.50 L 48.50 93.00 L 50.00 94.50 L 59.00 94.50 L 60.00 95.50 L 62.00 95.50 L 63.00 94.50 L 65.00 94.50 L 67.50 97.00 L 67.50 99.00 L 67.00 99.50 L 65.00 99.50 L 64.00 100.50 L 61.00 100.50 L 60.00 101.50 Z", "label": {"x": 43.0, "y": 95.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_9", "colorId": "9", "fillColor": "#F8EAE8", "paletteColor": "#F8EAE8", "originalColor": "#F9ECEB", "painted": false, "area": 166, "detailScore": 0.1276, "paintability": "small", "path": "M 82.00 31.50 L 80.00 29.50 L 79.00 31.50 L 76.00 28.50 L 75.00 28.50 L 72.50 26.00 L 72.50 25.00 L 71.00 23.50 L 68.00 23.50 L 67.00 22.50 L 64.00 22.50 L 63.50 22.00 L 63.50 20.00 L 64.50 19.00 L 64.50 15.00 L 65.00 14.50 L 69.00 14.50 L 70.00 15.50 L 73.00 15.50 L 74.50 17.00 L 74.50 19.00 L 76.00 20.50 L 78.00 20.50 L 80.00 24.50 L 84.00 24.50 L 84.50 25.00 L 84.50 29.00 L 82.00 31.50 Z", "label": {"x": 69.0, "y": 19.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_15", "colorId": "11", "fillColor": "#CF695E", "paletteColor": "#CF695E", "originalColor": "#CF695E", "painted": false, "area": 136, "detailScore": 0.3095, "paintability": "small", "path": "M 90.00 73.50 L 89.00 71.50 L 86.00 70.50 L 84.50 69.00 L 84.50 65.00 L 85.00 64.50 L 89.00 64.50 L 89.50 64.00 L 89.50 60.00 L 89.00 59.50 L 85.00 59.50 L 84.50 59.00 L 84.50 55.00 L 85.50 54.00 L 85.50 52.00 L 84.50 51.00 L 84.50 49.00 L 86.50 47.00 L 87.00 45.50 L 89.00 45.50 L 89.50 46.00 L 89.50 48.00 L 90.50 49.00 L 90.50 53.00 L 91.50 54.00 L 91.50 71.00 L 90.00 73.50 Z", "label": {"x": 88.0, "y": 56.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_26", "colorId": "1", "fillColor": "#C95549", "paletteColor": "#C95549", "originalColor": "#C74E42", "painted": false, "area": 113, "detailScore": 0.3067, "paintability": "small", "path": "M 71.00 96.50 L 69.50 96.00 L 69.50 95.00 L 70.50 94.00 L 70.50 91.00 L 71.00 90.50 L 74.00 90.50 L 74.50 90.00 L 74.50 85.00 L 75.50 84.00 L 75.50 81.00 L 78.00 79.50 L 80.00 79.50 L 82.00 81.50 L 83.00 81.50 L 84.00 80.50 L 84.50 81.00 L 84.50 85.00 L 75.00 94.50 L 73.00 94.50 L 71.00 96.50 Z", "label": {"x": 79.0, "y": 85.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_8", "colorId": "5", "fillColor": "#ADB4BB", "paletteColor": "#ADB4BB", "originalColor": "#B5BBC1", "painted": false, "area": 97, "detailScore": 0.2125, "paintability": "small", "path": "M 134.00 31.50 L 125.00 31.50 L 124.00 30.50 L 123.00 30.50 L 122.00 31.50 L 115.00 31.50 L 114.50 31.00 L 115.00 30.50 L 117.00 30.50 L 117.50 30.00 L 117.00 29.50 L 112.00 29.50 L 111.50 29.00 L 112.00 28.50 L 119.00 28.50 L 120.00 27.50 L 124.00 27.50 L 124.50 27.00 L 124.50 21.00 L 125.00 20.50 L 129.00 20.50 L 129.50 21.00 L 129.50 27.00 L 127.50 28.00 L 128.00 28.50 L 131.00 28.50 L 132.00 29.50 L 133.00 29.50 L 134.50 31.00 L 134.00 31.50 Z", "label": {"x": 127.0, "y": 23.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_2", "colorId": "9", "fillColor": "#F8EAE8", "paletteColor": "#F8EAE8", "originalColor": "#FAEDEC", "painted": false, "area": 81, "detailScore": 0.1144, "paintability": "small", "path": "M 45.00 22.50 L 43.00 22.50 L 42.50 22.00 L 42.50 21.00 L 44.50 20.00 L 44.50 15.00 L 45.00 14.50 L 49.00 14.50 L 49.50 16.00 L 51.00 17.50 L 54.00 17.50 L 54.50 17.00 L 54.50 11.00 L 55.00 10.50 L 58.00 10.50 L 59.50 12.00 L 59.50 15.00 L 57.50 17.00 L 57.00 18.50 L 51.00 18.50 L 49.50 20.00 L 49.00 21.50 L 46.00 21.50 L 45.00 22.50 Z", "label": {"x": 47.0, "y": 17.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_16", "colorId": "5", "fillColor": "#ADB4BB", "paletteColor": "#ADB4BB", "originalColor": "#A7AEB6", "painted": false, "area": 67, "detailScore": 0.2887, "paintability": "tiny", "path": "M 160.00 82.50 L 159.50 82.00 L 159.50 75.00 L 158.50 74.00 L 158.50 66.00 L 159.50 65.00 L 159.50 64.00 L 161.50 62.00 L 161.50 59.00 L 162.00 58.50 L 163.50 61.00 L 163.50 64.00 L 162.50 65.00 L 162.50 67.00 L 161.50 68.00 L 162.50 69.00 L 162.50 75.00 L 161.50 76.00 L 161.50 81.00 L 160.00 82.50 Z", "label": {"x": 161.0, "y": 65.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_35", "colorId": "12", "fillColor": "#848F99", "paletteColor": "#848F99", "originalColor": "#848F99", "painted": false, "area": 67, "detailScore": 0.3212, "paintability": "tiny", "path": "M 131.00 111.50 L 104.00 111.50 L 103.50 111.00 L 104.00 110.50 L 109.00 110.50 L 110.00 109.50 L 126.00 109.50 L 127.00 108.50 L 128.00 108.50 L 130.00 106.50 L 131.00 107.50 L 134.00 107.50 L 136.50 109.00 L 136.00 109.50 L 132.00 109.50 L 131.00 111.50 Z", "label": {"x": 130.0, "y": 109.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_3", "colorId": "2", "fillColor": "#F0D1CE", "paletteColor": "#F0D1CE", "originalColor": "#EECBC7", "painted": false, "area": 57, "detailScore": 0.2053, "paintability": "tiny", "path": "M 63.00 21.50 L 60.00 21.50 L 59.00 20.50 L 50.00 20.50 L 49.50 20.00 L 51.00 18.50 L 57.00 18.50 L 57.50 17.00 L 60.00 14.50 L 64.00 14.50 L 64.50 15.00 L 64.50 19.00 L 63.00 21.50 Z", "label": {"x": 61.0, "y": 18.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_14", "colorId": "7", "fillColor": "#536271", "paletteColor": "#536271", "originalColor": "#51606F", "painted": false, "area": 57, "detailScore": 0.2652, "paintability": "tiny", "path": "M 159.00 65.50 L 158.50 65.00 L 158.50 59.00 L 159.50 58.00 L 159.50 56.00 L 155.50 54.00 L 155.50 50.00 L 159.00 46.50 L 159.50 47.00 L 159.50 51.00 L 161.50 53.00 L 161.50 62.00 L 159.50 64.00 L 159.00 65.50 Z", "label": {"x": 158.0, "y": 52.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_12", "colorId": "7", "fillColor": "#536271", "paletteColor": "#536271", "originalColor": "#505F6E", "painted": false, "area": 53, "detailScore": 0.2433, "paintability": "tiny", "path": "M 161.00 42.50 L 159.50 40.00 L 159.50 39.00 L 159.00 38.50 L 156.00 38.50 L 154.50 36.00 L 154.50 34.00 L 157.00 30.50 L 160.00 30.50 L 160.50 31.00 L 160.50 33.00 L 161.50 34.00 L 161.50 42.00 L 161.00 42.50 Z", "label": {"x": 158.0, "y": 35.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_18", "colorId": "5", "fillColor": "#ADB4BB", "paletteColor": "#ADB4BB", "originalColor": "#ABB2B9", "painted": false, "area": 50, "detailScore": 0.3655, "paintability": "tiny", "path": "M 101.00 74.50 L 99.00 74.50 L 98.50 74.00 L 98.50 45.00 L 99.00 44.50 L 99.50 45.00 L 99.50 47.00 L 100.50 48.00 L 100.50 57.00 L 99.50 58.00 L 99.50 67.00 L 100.50 68.00 L 100.50 71.00 L 101.50 72.00 L 101.50 74.00 L 101.00 74.50 Z", "label": {"x": 100.0, "y": 73.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_21", "colorId": "1", "fillColor": "#C95549", "paletteColor": "#C95549", "originalColor": "#C95549", "painted": false, "area": 49, "detailScore": 0.2822, "paintability": "tiny", "path": "M 87.00 78.50 L 86.50 77.00 L 85.00 75.50 L 83.00 75.50 L 80.50 74.00 L 80.50 71.00 L 81.00 70.50 L 82.00 70.50 L 83.00 69.50 L 85.00 69.50 L 86.00 70.50 L 87.00 70.50 L 89.50 72.00 L 89.50 75.00 L 87.50 77.00 L 87.00 78.50 Z", "label": {"x": 85.0, "y": 73.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_10", "colorId": "9", "fillColor": "#F8EAE8", "paletteColor": "#F8EAE8", "originalColor": "#F6E2DF", "painted": false, "area": 47, "detailScore": 0.1412, "paintability": "tiny", "path": "M 27.00 37.50 L 25.00 35.50 L 23.00 35.50 L 20.50 34.00 L 20.50 31.00 L 21.00 30.50 L 22.00 30.50 L 23.00 29.50 L 25.00 29.50 L 27.00 31.50 L 28.00 31.50 L 29.00 30.50 L 29.50 31.00 L 29.50 34.00 L 27.00 37.50 Z", "label": {"x": 24.0, "y": 32.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_34", "colorId": "7", "fillColor": "#536271", "paletteColor": "#536271", "originalColor": "#596775", "painted": false, "area": 47, "detailScore": 0.2573, "paintability": "tiny", "path": "M 141.00 111.50 L 132.00 111.50 L 131.50 110.00 L 132.00 109.50 L 137.00 109.50 L 139.50 107.00 L 140.00 105.50 L 144.00 105.50 L 146.50 109.00 L 146.00 109.50 L 142.00 109.50 L 141.00 111.50 Z", "label": {"x": 141.0, "y": 108.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_24", "colorId": "8", "fillColor": "#74808C", "paletteColor": "#74808C", "originalColor": "#74808C", "painted": false, "area": 44, "detailScore": 0.3463, "paintability": "tiny", "path": "M 100.00 93.50 L 99.50 93.00 L 99.50 90.00 L 98.50 89.00 L 98.50 75.00 L 99.00 74.50 L 101.00 74.50 L 101.50 75.00 L 101.50 84.00 L 100.50 85.00 L 100.50 93.00 L 100.00 93.50 Z", "label": {"x": 100.0, "y": 76.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_13", "colorId": "9", "fillColor": "#F8EAE8", "paletteColor": "#F8EAE8", "originalColor": "#F9EDEC", "painted": false, "area": 35, "detailScore": 0.1404, "paintability": "tiny", "path": "M 91.00 45.50 L 87.00 45.50 L 86.50 45.00 L 86.50 41.00 L 87.00 40.50 L 88.00 42.50 L 88.50 41.00 L 90.00 39.50 L 92.00 39.50 L 94.50 41.00 L 93.50 42.00 L 93.50 44.00 L 91.00 45.50 Z", "label": {"x": 91.0, "y": 42.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_25", "colorId": "10", "fillColor": "#C4C9CE", "paletteColor": "#C4C9CE", "originalColor": "#C4C9CE", "painted": false, "area": 32, "detailScore": 0.2708, "paintability": "tiny", "path": "M 161.00 91.50 L 159.50 91.00 L 159.50 83.00 L 161.50 81.00 L 161.50 77.00 L 162.00 76.50 L 162.50 77.00 L 162.50 79.00 L 163.50 80.00 L 163.50 83.00 L 161.50 86.00 L 161.50 91.00 L 161.00 91.50 Z", "label": {"x": 161.0, "y": 84.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}, {"regionId": "region_7", "colorId": "2", "fillColor": "#F0D1CE", "paletteColor": "#F0D1CE", "originalColor": "#F2D7D5", "painted": false, "area": 30, "detailScore": 0.2194, "paintability": "tiny", "path": "M 39.00 25.50 L 36.00 25.50 L 35.50 25.00 L 35.50 21.00 L 36.00 20.50 L 42.00 20.50 L 42.50 21.00 L 42.50 23.00 L 41.00 23.50 L 39.00 25.50 Z", "label": {"x": 38.0, "y": 23.0, "radius": 7.0, "fontSize": 5.2, "visible": true}}];
+const PALETTE=[{"colorId": "1", "hex": "#C95549", "rgb": [201, 85, 73], "label": "Color 1"}, {"colorId": "2", "hex": "#F0D1CE", "rgb": [240, 209, 206], "label": "Color 2"}, {"colorId": "3", "hex": "#2D3F51", "rgb": [45, 63, 81], "label": "Color 3"}, {"colorId": "4", "hex": "#FEFEFE", "rgb": [254, 254, 254], "label": "Color 4"}, {"colorId": "5", "hex": "#ADB4BB", "rgb": [173, 180, 187], "label": "Color 5"}, {"colorId": "6", "hex": "#C03A2C", "rgb": [192, 58, 44], "label": "Color 6"}, {"colorId": "7", "hex": "#536271", "rgb": [83, 98, 113], "label": "Color 7"}, {"colorId": "8", "hex": "#74808C", "rgb": [116, 128, 140], "label": "Color 8"}, {"colorId": "9", "hex": "#F8EAE8", "rgb": [248, 234, 232], "label": "Color 9"}, {"colorId": "10", "hex": "#C4C9CE", "rgb": [196, 201, 206], "label": "Color 10"}, {"colorId": "11", "hex": "#CF695E", "rgb": [207, 105, 94], "label": "Color 11"}, {"colorId": "12", "hex": "#848F99", "rgb": [132, 143, 153], "label": "Color 12"}];
+const STORAGE_KEY='euqilegna-paint-event-' + location.pathname;
+const REVIEW_KEY=STORAGE_KEY+'-review';
+const svgHost=document.getElementById('svgHost');
+const completion=document.getElementById('completion');
+const masterReveal=document.getElementById('masterReveal');
+const revealSource=document.getElementById('revealSource');
+const showcasePanel=document.getElementById('showcasePanel');
+const referenceOverlay=document.getElementById('referenceOverlay');
+const paletteHost=document.getElementById('palette');
+const count=document.getElementById('count');
+const bar=document.getElementById('bar');
+const message=document.getElementById('message');
+const artboard=document.getElementById('artboard');
+const canvasContent=document.getElementById('canvasContent');
+let selectedColor=PALETTE[0]?.colorId || '1';
+let painted={};
+let playMode='relaxed';
+let inspect=false;
+let referenceVisible=false;
+let zoom=1;
+let panX=0;
+let panY=0;
+let isDragging=false;
+let dragStartX=0;
+let dragStartY=0;
+let pointerStartX=0;
+let pointerStartY=0;
+let hasDragged=false;
+let pointerIsDown=false;
+let canvasLocked=true;
+let spacePanActive=false;
+let numberFocus=false;
+let hintedRegionId=null;
+let completionShown=false;
+let skippedColors=new Set();
+
+try{
+  const saved=JSON.parse(safeLocalGet(STORAGE_KEY)||'null');
+  if(saved?.painted) painted=saved.painted;
+  else if(saved && typeof saved==='object') painted=saved;
+}catch(e){painted={}}
+
+
+function setupMasterReveal(){
+  const baseSvg=svgHost.querySelector('svg');
+  if(!baseSvg || !masterReveal) return;
+
+  const viewBox=baseSvg.getAttribute('viewBox') || `0 0 ${baseSvg.clientWidth||1000} ${baseSvg.clientHeight||1000}`;
+  masterReveal.setAttribute('viewBox',viewBox);
+  masterReveal.setAttribute('preserveAspectRatio','xMidYMid meet');
+  masterReveal.innerHTML='';
+
+  const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const clip=document.createElementNS('http://www.w3.org/2000/svg','clipPath');
+  clip.setAttribute('id','paintedMasterClip');
+  clip.setAttribute('clipPathUnits','userSpaceOnUse');
+  defs.appendChild(clip);
+
+  const image=document.createElementNS('http://www.w3.org/2000/svg','image');
+  const parts=viewBox.trim().split(/\s+/).map(Number);
+  const [vx,vy,vw,vh]=parts.length===4?parts:[0,0,1000,1000];
+  image.setAttribute('x',vx);
+  image.setAttribute('y',vy);
+  image.setAttribute('width',vw);
+  image.setAttribute('height',vh);
+  image.setAttribute('preserveAspectRatio','xMidYMid meet');
+  image.setAttribute('href',revealSource.src);
+  image.setAttribute('clip-path','url(#paintedMasterClip)');
+
+  masterReveal.append(defs,image);
+  rebuildMasterReveal();
+}
+
+function rebuildMasterReveal(){
+  const clip=masterReveal?.querySelector('#paintedMasterClip');
+  if(!clip) return;
+  clip.innerHTML='';
+
+  for(const region of REGIONS){
+    if(!painted[region.regionId]) continue;
+    const source=document.getElementById(region.regionId);
+    if(!source) continue;
+
+    const clone=source.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.removeAttribute('style');
+    clone.removeAttribute('class');
+    clone.setAttribute('fill','#000');
+    clone.setAttribute('stroke','none');
+    clone.setAttribute('pointer-events','none');
+    clip.appendChild(clone);
+  }
+}
+
+function revealPaintedRegion(regionId){
+  const clip=masterReveal?.querySelector('#paintedMasterClip');
+  const source=document.getElementById(regionId);
+  if(!clip || !source) return;
+
+  if(clip.querySelector(`[data-reveal-id="${regionId}"]`)) return;
+  const clone=source.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.removeAttribute('style');
+  clone.removeAttribute('class');
+  clone.setAttribute('data-reveal-id',regionId);
+  clone.setAttribute('fill','#000');
+  clone.setAttribute('stroke','none');
+  clone.setAttribute('pointer-events','none');
+  clip.appendChild(clone);
+}
+
+function downloadDataUrl(dataUrl,filename){
+  const link=document.createElement('a');
+  link.href=dataUrl;
+  link.download=filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function createShowcaseCard(){
+  await completion.decode?.().catch(()=>{});
+  const source=completion;
+  const maxWidth=1600;
+  const sourceW=source.naturalWidth || 1200;
+  const sourceH=source.naturalHeight || 1200;
+  const scale=Math.min(1,maxWidth/sourceW);
+  const artW=Math.round(sourceW*scale);
+  const artH=Math.round(sourceH*scale);
+  const pad=70;
+  const footer=150;
+
+  const canvas=document.createElement('canvas');
+  canvas.width=artW+pad*2;
+  canvas.height=artH+pad*2+footer;
+  const ctx=canvas.getContext('2d');
+
+  ctx.fillStyle='#fff8f1';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(pad-12,pad-12,artW+24,artH+24);
+  ctx.drawImage(source,pad,pad,artW,artH);
+
+  ctx.strokeStyle='#9c4a22';
+  ctx.lineWidth=6;
+  ctx.strokeRect(pad-16,pad-16,artW+32,artH+32);
+
+  ctx.fillStyle='#2b190f';
+  ctx.textAlign='center';
+  ctx.font='700 42px Georgia, serif';
+  ctx.fillText('My Completed Paint-by-Number Artwork',canvas.width/2,artH+pad+72);
+
+  ctx.font='24px Arial, sans-serif';
+  ctx.fillStyle='#6c4b3a';
+  ctx.fillText('Created with Euqilegna Paint Studio',canvas.width/2,artH+pad+112);
+
+  return canvas;
+}
+
+async function shareFinishedArtwork(){
+  const canvas=await createShowcaseCard();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!blob) return;
+
+  const file=new File([blob],'euqilegna-painted-artwork.png',{type:'image/png'});
+  if(navigator.canShare?.({files:[file]})){
+    await navigator.share({
+      title:'My Completed Paint-by-Number Artwork',
+      text:'I completed this artwork with Euqilegna Paint Studio.',
+      files:[file],
+    });
+  }else{
+    downloadDataUrl(canvas.toDataURL('image/png'),'euqilegna-painted-artwork-showcase.png');
+    message.textContent='Sharing is not supported in this browser, so the showcase card was downloaded instead.';
+  }
+}
+
+function currentPlayMode(){
+  return document.querySelector('input[name="playMode"]:checked')?.value || 'relaxed';
+}
+
+
+function ensureSelectionPattern(){
+  const svg=svgHost.querySelector('svg');
+  if(!svg) return;
+  let defs=svg.querySelector('defs');
+  if(!defs){
+    defs=document.createElementNS('http://www.w3.org/2000/svg','defs');
+    svg.insertBefore(defs,svg.firstChild);
+  }
+  if(svg.querySelector('#selectedGrayPixelPattern')) return;
+
+  const pattern=document.createElementNS('http://www.w3.org/2000/svg','pattern');
+  pattern.setAttribute('id','selectedGrayPixelPattern');
+  pattern.setAttribute('patternUnits','userSpaceOnUse');
+  pattern.setAttribute('width','12');
+  pattern.setAttribute('height','12');
+
+  const background=document.createElementNS('http://www.w3.org/2000/svg','rect');
+  background.setAttribute('width','12');
+  background.setAttribute('height','12');
+  background.setAttribute('fill','#d8d8d8');
+
+  const sheen=document.createElementNS('http://www.w3.org/2000/svg','path');
+  sheen.setAttribute('d','M0 12 L12 0');
+  sheen.setAttribute('stroke','#eeeeee');
+  sheen.setAttribute('stroke-width','3');
+  sheen.setAttribute('opacity','.55');
+
+  pattern.append(background,sheen);
+  defs.appendChild(pattern);
+}
+
+
+
+function findRegionNumberLabel(regionId){
+  return svgHost.querySelector(
+    `.region-number[data-region-id="${CSS.escape(String(regionId))}"]`
+  );
+}
+
+function ensureEveryPaintableRegionHasNumber(){
+  for(const region of REGIONS){
+    if(regionIsVisuallyPaintable(region)) repairRegionNumber(region);
+  }
+}
+
+function svgPointInsideShape(shape,x,y){
+  try{
+    const svg=shape.ownerSVGElement;
+    if(!svg || typeof shape.isPointInFill!=='function') return true;
+    const point=svg.createSVGPoint();
+    point.x=Number(x);point.y=Number(y);
+    return !!shape.isPointInFill(point);
+  }catch(error){
+    return true;
+  }
+}
+
+function findVisibleInteriorPoint(region,shape){
+  const box=shape.getBBox();
+  if(!box || box.width<=0 || box.height<=0) return null;
+
+  const candidates=[];
+  if(Number.isFinite(Number(region.label?.x)) && Number.isFinite(Number(region.label?.y))){
+    candidates.push([Number(region.label.x),Number(region.label.y)]);
+  }
+  candidates.push([box.x+box.width/2,box.y+box.height/2]);
+
+  // Search more densely so curved bands, crescents, rings, and narrow record
+  // highlights always receive a usable label and hint point.
+  const fractions=[.5,.42,.58,.34,.66,.26,.74,.18,.82,.1,.9];
+  for(const fy of fractions){
+    for(const fx of fractions){
+      candidates.push([box.x+box.width*fx,box.y+box.height*fy]);
+    }
+  }
+
+  for(const [x,y] of candidates){
+    if(svgPointInsideShape(shape,x,y)) return {x,y,box};
+  }
+
+  // Never remove a visible region from the painting merely because a browser
+  // could not confirm isPointInFill. The compiler-provided interior point is
+  // preferred; the bounding-box center is the last-resort display point.
+  const fallbackX=Number.isFinite(Number(region.label?.x))
+    ? Number(region.label.x)
+    : box.x+box.width/2;
+  const fallbackY=Number.isFinite(Number(region.label?.y))
+    ? Number(region.label.y)
+    : box.y+box.height/2;
+  return {x:fallbackX,y:fallbackY,box,fallback:true};
+}
+
+function regionIsVisuallyPaintable(region){
+  // Every exported region is paintable. Tiny regions may need zoom or a hint,
+  // but they must never be silently excluded from the customer's painting.
+  const shape=document.getElementById(region.regionId);
+  if(!shape) return false;
+  try{
+    const box=shape.getBBox();
+    return box.width>0 && box.height>0;
+  }catch(error){
+    return true;
+  }
+}
+
+function repairRegionNumber(region){
+  const shape=document.getElementById(region.regionId);
+  if(!shape) return null;
+  const point=findVisibleInteriorPoint(region,shape);
+  if(!point) return null;
+
+  let label=findRegionNumberLabel(region.regionId);
+  if(!label){
+    label=document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('class','region-number');
+    label.setAttribute('data-region-id',String(region.regionId));
+    label.setAttribute('data-color-id',String(region.colorId));
+    label.setAttribute('text-anchor','middle');
+    label.setAttribute('dominant-baseline','middle');
+    label.setAttribute('pointer-events','none');
+    shape.ownerSVGElement.appendChild(label);
+  }
+
+  label.setAttribute('x',String(point.x));
+  label.setAttribute('y',String(point.y));
+  label.setAttribute('font-size',String(Math.max(8,Number(region.label?.fontSize||8))));
+  label.setAttribute('paint-order','stroke');
+  label.setAttribute('stroke','#ffffff');
+  label.setAttribute('stroke-width','2.2');
+  label.setAttribute('stroke-linejoin','round');
+  label.setAttribute('fill','#111111');
+  label.style.display='';
+  label.style.visibility='visible';
+  label.style.opacity='1';
+  label.textContent=String(region.colorId);
+  return label;
+}
+
+function regionHasUsableNumber(region){
+  if(!regionIsVisuallyPaintable(region)) return false;
+  const label=repairRegionNumber(region);
+  if(!label) return false;
+  return String(label.textContent||'').trim()===String(region.colorId);
+}
+
+function clearHintMarker(){
+  const marker=svgHost.querySelector('#activeHintMarker');
+  if(marker) marker.remove();
+}
+
+function showHintMarker(region){
+  clearHintMarker();
+  const shape=document.getElementById(region.regionId);
+  if(!shape) return false;
+  const point=findVisibleInteriorPoint(region,shape);
+  if(!point) return false;
+
+  const svg=shape.ownerSVGElement;
+  const box=point.box;
+  const viewBox=svg.viewBox.baseVal;
+  const radius=Math.max(
+    Math.min(viewBox.width,viewBox.height)*0.012,
+    Math.min(Math.max(box.width,box.height)*0.65,Math.min(viewBox.width,viewBox.height)*0.035)
+  );
+
+  const group=document.createElementNS('http://www.w3.org/2000/svg','g');
+  group.id='activeHintMarker';
+  group.setAttribute('pointer-events','none');
+
+  const ring=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  ring.setAttribute('class','hint-marker-ring');
+  ring.setAttribute('cx',String(point.x));ring.setAttribute('cy',String(point.y));
+  ring.setAttribute('r',String(radius));
+
+  const core=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  core.setAttribute('class','hint-marker-core');
+  core.setAttribute('cx',String(point.x));core.setAttribute('cy',String(point.y));
+  core.setAttribute('r',String(radius*.58));
+
+  const text=document.createElementNS('http://www.w3.org/2000/svg','text');
+  text.setAttribute('class','hint-marker-text');
+  text.setAttribute('x',String(point.x));text.setAttribute('y',String(point.y));
+  text.setAttribute('font-size',String(Math.max(8,radius*.72)));
+  text.textContent=String(region.colorId);
+
+  group.append(ring,core,text);
+  svg.appendChild(group);
+  return true;
+}
+
+
+function refreshNumberLabels(){
+  ensureEveryPaintableRegionHasNumber();
+  const labels=[...svgHost.querySelectorAll('.region-number')];
+
+  for(const label of labels){
+    const regionId=label.getAttribute('data-region-id');
+    const colorId=label.getAttribute('data-color-id');
+
+    // Backward-compatible fallback: locate the corresponding region by matching
+    // the label position against the generated region records.
+    let record=null;
+    if(regionId){
+      record=REGIONS.find(r=>r.regionId===regionId);
+    }
+    if(!record){
+      const x=parseFloat(label.getAttribute('x')||'0');
+      const y=parseFloat(label.getAttribute('y')||'0');
+      record=REGIONS.find(r=>
+        Math.abs((r.label?.x||0)-x)<0.2 &&
+        Math.abs((r.label?.y||0)-y)<0.2
+      );
+    }
+    if(!record) continue;
+
+    const paintedAlready=!!painted[record.regionId];
+    const selected=String(record.colorId)===String(selectedColor);
+
+    label.classList.remove('selected-number','unrelated-number','painted-number');
+
+    if(paintedAlready){
+      label.classList.add('painted-number');
+      continue;
+    }
+
+    if(numberFocus){
+      if(selected){
+        label.classList.add('selected-number');
+        label.style.fontSize=Math.max(10,Number(record.label?.fontSize||9)*1.18)+'px';
+      }else{
+        label.classList.add('unrelated-number');
+      }
+    }else{
+      label.style.opacity='1';
+      label.style.fontSize=(record.label?.fontSize||9)+'px';
+    }
+  }
+
+  const toggle=document.getElementById('toggleNumberFocus');
+  if(toggle){
+    toggle.textContent=numberFocus?'Show All Numbers':'Focus Selected Number';
+  }
+}
+
+function refreshSelectedRegions(){
+  ensureSelectionPattern();
+  for(const region of REGIONS){
+    const el=document.getElementById(region.regionId);
+    if(!el) continue;
+
+    if(painted[region.regionId]){
+      el.style.fill=region.fillColor || region.paletteColor;
+      el.style.stroke='rgba(32,32,32,0.42)';
+      el.style.opacity='1';
+      el.style.filter='';
+      const hit=svgHost.querySelector(
+        `.region-hit[data-target-region="${region.regionId}"]`
+      );
+      if(hit) hit.style.pointerEvents='none';
+      continue;
+    }
+
+    const matches=String(region.colorId)===String(selectedColor);
+    const hinted=region.regionId===hintedRegionId;
+
+    // Every matching unpainted region receives the soft gray guidance fill.
+    // A requested hint adds a stronger glow, but the normal selection remains
+    // visible at all times.
+    el.style.fill=matches ? 'url(#selectedGrayPixelPattern)' : '#ffffff';
+    el.style.opacity=matches ? '1' : '0.72';
+    el.style.filter=hinted ? 'drop-shadow(0 0 10px #ff2f92)' : '';
+  }
+  refreshNumberLabels();
+}
+
+function applySaved(){
+  for(const region of REGIONS){
+    const el=document.getElementById(region.regionId);
+    if(!el) continue;
+    el.dataset.painted=painted[region.regionId]?'true':'false';
+    const hit=svgHost.querySelector(
+      `.region-hit[data-target-region="${region.regionId}"]`
+    );
+    if(hit){
+      hit.style.pointerEvents=painted[region.regionId]?'none':'all';
+    }
+  }
+  refreshSelectedRegions();
+  renderProgress();
+  updateColorStatus();
+}
+
+function resolveClickedRegion(target){
+  const hit=target.closest?.('.region-hit');
+  const shape=target.closest?.('.paint-region');
+  const regionId=
+    hit?.getAttribute('data-target-region') ||
+    shape?.getAttribute('data-region-id') ||
+    shape?.id;
+
+  if(!regionId) return null;
+  const region=REGIONS.find(item=>item.regionId===regionId);
+  const element=document.getElementById(regionId);
+  if(!region || !element) return null;
+  return {region,element,hit};
+}
+
+// Event delegation is the permanent interaction path. It continues working
+// even when SVG paths are rebuilt, labels are repaired, or hit targets overlap.
+svgHost.addEventListener('click',event=>{
+  if(hasDragged) return;
+  const resolved=resolveClickedRegion(event.target);
+  if(!resolved) return;
+  event.preventDefault();
+  event.stopPropagation();
+  handleRegion(resolved.region,resolved.element);
+});
+
+function handleRegion(region,el){
+  if(hasDragged) return;
+
+  if(inspect){
+    document.getElementById('regionInfo').textContent=
+      `Region: ${region.regionId}\nColor: ${region.colorId}\nArea: ${region.area}\nOriginal: ${region.originalColor}\nPalette: ${region.paletteColor}`;
+    return;
+  }
+
+  playMode=currentPlayMode();
+
+  if(String(region.colorId)!==String(selectedColor)){
+    message.textContent=`You are working on color ${selectedColor}. Finish every color ${selectedColor} section before moving to color ${region.colorId}.`;
+    el.animate([{opacity:1},{opacity:.42},{opacity:1}],{duration:360});
+    return;
+  }
+
+  painted[region.regionId]=true;
+  revealPaintedRegion(region.regionId);
+  if(hintedRegionId===region.regionId){hintedRegionId=null;clearHintMarker();}
+
+  // Give immediate visual confirmation with the selected palette color.
+  el.style.fill=region.fillColor || region.paletteColor;
+  el.style.stroke='rgba(32,32,32,0.42)';
+  el.style.opacity='1';
+
+  const hit=svgHost.querySelector(
+    `.region-hit[data-target-region="${region.regionId}"]`
+  );
+  if(hit) hit.style.pointerEvents='none';
+
+  message.textContent=`Color ${selectedColor} section painted.`;
+  el.dataset.painted='true';
+  save(false);
+  refreshSelectedRegions();
+  renderProgress();
+  updateColorStatus();
+
+  const finishedColor=selectedColor;
+  const finishedState=colorCompletionMap()[String(finishedColor)];
+  if(finishedState?.complete){
+    const next=chooseNextAvailableColor();
+
+    if(next){
+      selectedColor=next.colorId;
+      hintedRegionId=null;
+      renderPalette();
+      refreshSelectedRegions();
+      updateColorStatus();
+      message.textContent=`Color ${finishedColor} complete ✓ Moving to color ${selectedColor}.`;
+    }else{
+      message.textContent=`Color ${finishedColor} complete ✓`;
+    }
+  }
+}
+
+
+function colorCompletionMap(){
+  const map={};
+
+  for(const item of PALETTE){
+    const allRegions=REGIONS.filter(
+      r=>String(r.colorId)===String(item.colorId)
+    );
+
+    // Only count regions that were successfully rendered into the SVG and can
+    // actually be selected. This prevents invisible/missing vector regions from
+    // permanently blocking a color at 49/51.
+    const paintableRegions=allRegions.filter(
+      r=>document.getElementById(r.regionId)
+    );
+
+    const missing=allRegions.length-paintableRegions.length;
+    const done=paintableRegions.filter(r=>painted[r.regionId]).length;
+
+    map[String(item.colorId)]={
+      done,
+      total:paintableRegions.length,
+      sourceTotal:allRegions.length,
+      missing,
+      complete:paintableRegions.length>0&&done===paintableRegions.length
+    };
+  }
+
+  return map;
+}
+
+
+function chooseNextAvailableColor(){
+  const map=colorCompletionMap();
+
+  let next=PALETTE.find(item=>{
+    const state=map[String(item.colorId)];
+    return state && !state.complete && !skippedColors.has(String(item.colorId));
+  });
+
+  // Once every remaining color has been skipped, clear the temporary skips and
+  // cycle back through unfinished colors.
+  if(!next){
+    skippedColors.clear();
+    next=PALETTE.find(item=>{
+      const state=map[String(item.colorId)];
+      return state && !state.complete;
+    });
+  }
+
+  return next || null;
+}
+
+function updateColorStatus(){
+  const map=colorCompletionMap();
+  const completed=Object.values(map).filter(v=>v.complete).length;
+  const total=Object.values(map).filter(v=>v.total>0).length;
+  const selected=map[String(selectedColor)];
+
+  document.getElementById('colorStatus').textContent=
+    `${completed} of ${total} colors complete`;
+
+  const selectedStatus=document.getElementById('selectedColorStatus');
+  if(!selected){
+    selectedStatus.textContent='';
+    return;
+  }
+
+  const percent=selected.total?Math.round(selected.done/selected.total*100):0;
+  const unavailableText=selected.missing
+    ? ` • ${selected.missing} region reference${selected.missing===1?'':'s'} awaiting repair`
+    : '';
+
+  selectedStatus.textContent=selected.complete
+    ? `Color ${selectedColor}: COMPLETE ✓ (${selected.done}/${selected.total})${unavailableText}`
+    : `Color ${selectedColor}: ${selected.done}/${selected.total} regions • ${percent}% complete${unavailableText}`;
+}
+
+function centerOnSelectedColor(){
+  const svg=svgHost.querySelector('svg');
+  if(!svg) return;
+  const matches=REGIONS
+    .filter(r=>String(r.colorId)===String(selectedColor) && !painted[r.regionId] && regionIsVisuallyPaintable(r))
+    .map(r=>document.getElementById(r.regionId))
+    .filter(Boolean);
+
+  if(!matches.length){
+    const unfinishedWithoutNumbers=REGIONS.filter(
+      r=>
+        String(r.colorId)===String(selectedColor) &&
+        !painted[r.regionId] &&
+        document.getElementById(r.regionId) &&
+        !regionHasUsableNumber(r)
+    ).length;
+    message.textContent=unfinishedWithoutNumbers
+      ? `No valid numbered hint is available for color ${selectedColor}. The unnumbered section was excluded from hints.`
+      : `Color ${selectedColor} is complete.`;
+    return;
+  }
+
+  let box=null;
+  for(const el of matches){
+    const b=el.getBBox();
+    if(!box){
+      box={x:b.x,y:b.y,x2:b.x+b.width,y2:b.y+b.height};
+    }else{
+      box.x=Math.min(box.x,b.x);
+      box.y=Math.min(box.y,b.y);
+      box.x2=Math.max(box.x2,b.x+b.width);
+      box.y2=Math.max(box.y2,b.y+b.height);
+    }
+  }
+
+  const svgBox=svg.viewBox.baseVal;
+  const cx=(box.x+box.x2)/2;
+  const cy=(box.y+box.y2)/2;
+  const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
+  const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
+
+  const rect=artboard.getBoundingClientRect();
+  if(zoom<2) zoom=2;
+  panX=-normalizedX*rect.width*zoom;
+  panY=-normalizedY*rect.height*zoom;
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+  message.textContent=`Centered on remaining regions for color ${selectedColor}.`;
+}
+
+function renderPalette(){
+  paletteHost.innerHTML='';
+  const completion=colorCompletionMap();
+
+  for(const item of PALETTE){
+    const state=completion[String(item.colorId)] || {complete:false,done:0,total:0};
+    const percent=state.total?Math.round(state.done/state.total*100):0;
+    const button=document.createElement('button');
+
+    const activeState=completion[String(selectedColor)];
+    const locked=(
+      String(item.colorId)!==String(selectedColor)
+      && activeState
+      && !activeState.complete
+    );
+
+    button.className='swatch'
+      +(String(item.colorId)===String(selectedColor)?' active':'')
+      +(state.complete?' complete':'')
+      +(locked?' locked':'');
+
+    button.style.background=item.hex;
+    button.style.color=luminance(item.rgb)<.48?'#fff':'#111';
+    button.title=state.complete
+      ? `Color ${item.colorId} complete`
+      : `Color ${item.colorId}: ${state.done} of ${state.total} regions`;
+
+    const number=document.createElement('span');
+    number.className='swatch-number';
+    number.textContent=item.colorId;
+
+    const countLabel=document.createElement('span');
+    countLabel.className='swatch-count';
+    countLabel.textContent=`${state.done}/${state.total}`;
+
+    const progress=document.createElement('span');
+    progress.className='swatch-progress';
+    progress.style.width=percent+'%';
+
+    button.append(number,countLabel,progress);
+
+    button.onclick=()=>{
+      const current=colorCompletionMap()[String(selectedColor)];
+
+      if(
+        String(item.colorId)!==String(selectedColor)
+        && current
+        && !current.complete
+        && !skippedColors.has(String(selectedColor))
+      ){
+        message.textContent=
+          `Color ${selectedColor} is still in progress (${current.done}/${current.total}). Complete it or use “Skip This Color for Now.”`;
+        return;
+      }
+
+      selectedColor=item.colorId;
+      skippedColors.delete(String(selectedColor));
+      hintedRegionId=null;
+      renderPalette();
+      refreshSelectedRegions();
+      updateColorStatus();
+
+      message.textContent=state.complete
+        ? `Color ${item.colorId} is complete. Choose an unfinished color.`
+        : `Color ${item.colorId} selected — ${state.done} of ${state.total} sections finished.`;
+    };
+
+    paletteHost.appendChild(button);
+  }
+}
+function luminance(rgb){return (.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2])/255}
+
+
+function runCompletionReveal(){
+  zoom=1;panX=0;panY=0;
+  canvasContent.style.transform='translate3d(0px, 0px, 0) scale(1)';
+  document.getElementById('zoomReadout').textContent='100%';
+
+  referenceOverlay.style.display='none';
+  masterReveal.style.display='none';
+  svgHost.style.display='none';
+
+  // The outcome is the untouched high-resolution artwork uploaded by the
+  // creator—not the quantized palette preview and not the polygon rendering.
+  completion.style.display='block';
+  completion.style.clipPath='none';
+  completion.style.opacity='0';
+  completion.style.objectFit='contain';
+  completion.style.imageRendering='auto';
+  completion.style.width='100%';
+  completion.style.height='100%';
+  completion.style.background='#fff';
+  completion.style.mixBlendMode='normal';
+
+  requestAnimationFrame(()=>{completion.style.opacity='1'});
+  setTimeout(()=>{
+    const banner=document.getElementById('completionMessage');
+    banner.textContent='Masterpiece complete — your original artwork is ready to download and showcase.';
+    banner.style.opacity='1';
+    banner.style.transform='translateY(0)';
+    showcasePanel.style.opacity='1';
+    showcasePanel.style.transform='translate(-50%,0)';
+    showcasePanel.style.pointerEvents='auto';
+  },500);
+}
+
+function resetCompletionReveal(){
+  const banner=document.getElementById('completionMessage');
+  banner.style.opacity='0';
+  banner.style.transform='translateY(12px)';
+  completion.style.opacity='0';
+  completion.style.clipPath='inset(0 100% 0 0)';
+  completion.style.display='block';
+  svgHost.style.display='block';
+  svgHost.style.opacity='1';
+  svgHost.style.filter='none';
+  masterReveal.style.display='block';
+  showcasePanel.style.opacity='0';
+  showcasePanel.style.transform='translate(-50%,18px)';
+  showcasePanel.style.pointerEvents='none';
+  referenceOverlay.style.display='block';
+}
+
+function renderProgress(){
+  const paintable=REGIONS.filter(
+    r=>document.getElementById(r.regionId)
+  );
+  const done=paintable.filter(r=>painted[r.regionId]).length;
+  const total=paintable.length;
+  const percent=total?Math.round(done/total*100):0;
+  count.textContent=`${done} / ${total} regions painted`;
+  bar.style.width=percent+'%';
+  renderPalette();
+  updateColorStatus();
+  if(done===total && total){
+    message.textContent='Complete! Revealing your finished artwork…';
+    if(!completionShown){runCompletionReveal();completionShown=true;}
+  }else{
+    completionShown=false;
+    resetCompletionReveal();
+    referenceOverlay.style.opacity=referenceVisible?'.55':'0';
+  }
+}
+function safeLocalSet(key,value){
+  try{localStorage.setItem(key,value);return true}catch(error){return false}
+}
+function safeLocalGet(key){
+  try{return localStorage.getItem(key)}catch(error){return null}
+}
+function progressPayload(){
+  return {
+    version:2,
+    artwork:location.pathname,
+    selectedColor,
+    painted,
+    skippedColors:[...skippedColors],
+    savedAt:new Date().toISOString()
+  };
+}
+function save(show=true){
+  const ok=safeLocalSet(STORAGE_KEY,JSON.stringify(progressPayload()));
+  if(show) message.textContent=ok
+    ? 'Progress saved on this device.'
+    : 'Browser storage is unavailable. Use Download Progress to save a file.';
+  return ok;
+}
+function downloadJson(data,filename){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download=filename;link.click();
+  URL.revokeObjectURL(url);
+}
+function restoreProgressPayload(payload){
+  if(!payload) return false;
+  painted=payload.painted && typeof payload.painted==='object' ? payload.painted : {};
+  selectedColor=String(payload.selectedColor||selectedColor);
+  skippedColors=new Set(Array.isArray(payload.skippedColors)?payload.skippedColors:[]);
+  rebuildMasterReveal();
+  applySaved();
+  refreshSelectedRegions();
+  renderPalette();
+  renderProgress();
+  updateColorStatus();
+  return true;
+}
+function applyTransform(){
+  panX=Math.round(panX);panY=Math.round(panY);
+  canvasContent.style.transform=`translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`;
+}
+function setZoom(next){
+  zoom=Math.max(.6,Math.min(8,next));
+  if(zoom<=1){panX=0;panY=0;}
+  applyTransform();
+  document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+}
+function setMode(mode){
+  document.body.className=mode==='review'?'review-mode':'customer-mode';
+  document.getElementById('reviewModeBtn').className=mode==='review'?'primary':'secondary';
+  document.getElementById('customerModeBtn').className=mode==='customer'?'primary':'secondary';
+  inspect=false;
+  message.textContent=mode==='review'?'Private testing mode. Nothing is uploaded.':'Customer preview mode.';
+}
+function difficulty(){
+  const total=REGIONS.length;
+  const tiny=REGIONS.filter(r=>r.area<80).length;
+  const ratio=total?tiny/total:0;
+  let label='Comfortable';
+  if(total>1200||ratio>.35) label='Very detailed';
+  else if(total>700||ratio>.22) label='Detailed';
+  else if(total<300&&ratio<.12) label='Easy';
+  const badge=document.getElementById('difficultyBadge');
+  badge.textContent=`Difficulty: ${label} • ${total} regions • ${tiny} tiny`;
+  badge.style.background=label==='Very detailed'?'#f8e3e3':label==='Easy'?'#e4f4e7':'#fff0d8';
+}
+
+
+
+function paintRegionProgrammatically(region,reason='assisted completion'){
+  const el=document.getElementById(region.regionId);
+  if(!el || painted[region.regionId]) return false;
+
+  painted[region.regionId]=true;
+  revealPaintedRegion(region.regionId);
+  el.dataset.painted='true';
+  el.style.fill='rgba(255,255,255,0.015)';
+  el.style.stroke='rgba(32,32,32,0.32)';
+  el.style.opacity='1';
+  el.style.filter='';
+
+  if(hintedRegionId===region.regionId){
+    hintedRegionId=null;
+    clearHintMarker();
+  }
+
+  save(false);
+  refreshSelectedRegions();
+  renderProgress();
+  updateColorStatus();
+  message.textContent=`Color ${region.colorId} section completed by ${reason}.`;
+  return true;
+}
+
+function unresolvedSelectedRegions(){
+  return REGIONS.filter(
+    r=>
+      String(r.colorId)===String(selectedColor) &&
+      !painted[r.regionId] &&
+      document.getElementById(r.regionId)
+  );
+}
+
+function resolveHiddenSelectedRegions(){
+  const unresolved=unresolvedSelectedRegions();
+  let repaired=0;
+  for(const region of unresolved){
+    const label=repairRegionNumber(region);
+    if(label) repaired+=1;
+  }
+  refreshNumberLabels();
+  return repaired;
+}
+
+document.getElementById('hintOneBtn').onclick=()=>{
+  const remaining=REGIONS.filter(
+    r=>
+      String(r.colorId)===String(selectedColor) &&
+      !painted[r.regionId] &&
+      regionHasUsableNumber(r) &&
+      regionIsVisuallyPaintable(r)
+  );
+
+  if(!remaining.length){
+    const resolved=resolveHiddenSelectedRegions();
+    hintedRegionId=null;
+    clearHintMarker();
+    refreshSelectedRegions();
+    renderProgress();
+    updateColorStatus();
+    message.textContent=resolved
+      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} restored.`
+      : `No visible unpainted color ${selectedColor} sections remain.`;
+    return;
+  }
+
+  // Rotate only through regions that can be visibly marked and selected.
+  let currentIndex=remaining.findIndex(r=>r.regionId===hintedRegionId);
+  let next=null;
+  for(let offset=1;offset<=remaining.length;offset++){
+    const candidate=remaining[(currentIndex+offset)%remaining.length];
+    if(showHintMarker(candidate)){
+      next=candidate;
+      break;
+    }
+  }
+
+  if(!next){
+    const resolved=resolveHiddenSelectedRegions();
+    hintedRegionId=null;
+    clearHintMarker();
+    refreshSelectedRegions();
+    renderProgress();
+    updateColorStatus();
+    message.textContent=resolved
+      ? `${resolved} color ${selectedColor} number reference${resolved===1?' was':'s were'} repaired.`
+      : `No usable color ${selectedColor} hint remains.`;
+    return;
+  }
+
+  hintedRegionId=next.regionId;
+  repairRegionNumber(next);
+  refreshSelectedRegions();
+  showHintMarker(next); // redraw after refresh so marker stays above all labels.
+
+  const el=document.getElementById(hintedRegionId);
+  if(el){
+    const point=findVisibleInteriorPoint(next,el);
+    const svg=svgHost.querySelector('svg');
+    const svgBox=svg.viewBox.baseVal;
+    const cx=point?.x ?? (el.getBBox().x+el.getBBox().width/2);
+    const cy=point?.y ?? (el.getBBox().y+el.getBBox().height/2);
+    const normalizedX=(cx-(svgBox.x+svgBox.width/2))/svgBox.width;
+    const normalizedY=(cy-(svgBox.y+svgBox.height/2))/svgBox.height;
+    if(zoom<3) zoom=3;
+    const rect=artboard.getBoundingClientRect();
+    panX=Math.round(-normalizedX*rect.width*zoom);
+    panY=Math.round(-normalizedY*rect.height*zoom);
+    applyTransform();
+    document.getElementById('zoomReadout').textContent=Math.round(zoom*100)+'%';
+  }
+
+  message.textContent=`Hint: the pink marker identifies one visible number ${selectedColor} section.`;
+};
+
+
+document.getElementById('paintHintBtn').onclick=()=>{
+  if(!hintedRegionId){
+    message.textContent='Select Show One Hint first.';
+    return;
+  }
+  const region=REGIONS.find(r=>r.regionId===hintedRegionId);
+  if(!region){
+    message.textContent='The highlighted section is no longer available.';
+    return;
+  }
+  paintRegionProgrammatically(region,'the highlighted-section control');
+};
+
+document.getElementById('resolveHiddenBtn').onclick=()=>{
+  const resolved=resolveHiddenSelectedRegions();
+  refreshSelectedRegions();
+  renderProgress();
+  updateColorStatus();
+  message.textContent=resolved
+    ? `${resolved} hidden color ${selectedColor} section${resolved===1?' was':'s were'} completed.`
+    : `No hidden color ${selectedColor} sections need recovery.`;
+};
+
+document.getElementById('clearHintBtn').onclick=()=>{
+  hintedRegionId=null;
+  clearHintMarker();
+  refreshSelectedRegions();
+  message.textContent='Hint cleared.';
+};
+
+
+document.getElementById('skipColorBtn').onclick=()=>{
+  const current=String(selectedColor);
+  const currentState=colorCompletionMap()[current];
+
+  if(!currentState || currentState.complete){
+    message.textContent=`Color ${selectedColor} is already complete.`;
+    return;
+  }
+
+  skippedColors.add(current);
+  hintedRegionId=null;
+
+  const next=chooseNextAvailableColor();
+  if(!next){
+    message.textContent='No other unfinished colors are available.';
+    return;
+  }
+
+  const skippedColor=selectedColor;
+  selectedColor=next.colorId;
+  renderPalette();
+  refreshSelectedRegions();
+  updateColorStatus();
+
+  message.textContent=
+    `Color ${skippedColor} saved for later. Continue with color ${selectedColor}.`;
+};
+
+
+document.getElementById('downloadArtworkBtn').onclick=()=>{
+  downloadDataUrl(completion.src,'euqilegna-finished-artwork.png');
+};
+
+document.getElementById('downloadShowcaseBtn').onclick=async()=>{
+  const canvas=await createShowcaseCard();
+  downloadDataUrl(canvas.toDataURL('image/png'),'euqilegna-painted-artwork-showcase.png');
+};
+
+document.getElementById('shareArtworkBtn').onclick=async()=>{
+  try{
+    await shareFinishedArtwork();
+  }catch(error){
+    message.textContent='Sharing was cancelled or unavailable.';
+  }
+};
+
+
+document.getElementById('exportProgressBtn').onclick=()=>{
+  downloadJson(progressPayload(),'euqilegna-paint-progress.json');
+  message.textContent='Progress file downloaded.';
+};
+document.getElementById('importProgressBtn').onclick=()=>{
+  document.getElementById('progressImportFile').click();
+};
+document.getElementById('progressImportFile').onchange=async event=>{
+  const file=event.target.files?.[0];
+  if(!file) return;
+  try{
+    const payload=JSON.parse(await file.text());
+    if(!restoreProgressPayload(payload)) throw new Error('Invalid progress payload');
+    save(false);
+    message.textContent='Progress restored from file.';
+  }catch(error){
+    message.textContent='The selected progress file could not be loaded.';
+  }
+};
+
+document.getElementById('saveBtn').onclick=()=>save(true);
+function resetArtworkForRepaint(){
+  painted={};
+  hintedRegionId=null;
+  skippedColors=new Set();
+  completionShown=false;
+  numberFocus=false;
+  clearHintMarker();
+  safeLocalSet(STORAGE_KEY,JSON.stringify(progressPayload()));
+  resetCompletionReveal();
+  applySaved();
+  rebuildMasterReveal();
+  refreshSelectedRegions();
+  refreshNumberLabels();
+  renderPalette();
+  renderProgress();
+  updateColorStatus();
+  setZoom(1);
+  message.textContent='Artwork reset. All unpainted number references are visible.';
+}
+
+document.getElementById('resetBtn').onclick=()=>{
+  if(!confirm('Reset this painting and start again? This will erase the current painting progress.')) return;
+  resetArtworkForRepaint();
+};
+
+document.getElementById('paintAgainBtn').onclick=()=>{
+  if(!confirm('Paint this artwork again? This will erase the current painting progress and restore the numbered canvas.')) return;
+  resetArtworkForRepaint();
+};
+
+artboard.addEventListener('pointerdown',event=>{
+  pointerIsDown=true;
+  pointerStartX=event.clientX;
+  pointerStartY=event.clientY;
+  dragStartX=event.clientX-panX;
+  dragStartY=event.clientY-panY;
+  hasDragged=false;
+  isDragging=false;
+
+  const mousePanGesture=event.pointerType==='mouse' && (
+    event.button===1 || spacePanActive
+  );
+  const touchPanGesture=event.pointerType==='touch' && !canvasLocked;
+
+  if(zoom>1 && (mousePanGesture || touchPanGesture)){
+    isDragging=true;
+    hasDragged=true;
+    artboard.classList.add('dragging');
+    try{artboard.setPointerCapture(event.pointerId)}catch(e){}
+  }
+});
+
+artboard.addEventListener('pointermove',event=>{
+  if(!pointerIsDown || !isDragging || zoom<=1) return;
+
+  event.preventDefault();
+  panX=event.clientX-dragStartX;
+  panY=event.clientY-dragStartY;
+  applyTransform();
+});
+
+artboard.addEventListener('pointerup',event=>{
+  pointerIsDown=false;
+  if(isDragging){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  isDragging=false;
+  artboard.classList.remove('dragging');
+
+  try{artboard.releasePointerCapture(event.pointerId)}catch(e){}
+  setTimeout(()=>{hasDragged=false;},0);
+});
+
+artboard.addEventListener('pointercancel',()=>{
+  pointerIsDown=false;
+  isDragging=false;
+  hasDragged=false;
+  artboard.classList.remove('dragging');
+});
+artboard.addEventListener('lostpointercapture',()=>{
+  pointerIsDown=false;
+  isDragging=false;
+  artboard.classList.remove('dragging');
+});
+
+window.addEventListener('keydown',event=>{
+  if(event.code==='Space' && !event.repeat){
+    spacePanActive=true;
+    if(zoom>1) artboard.style.cursor='grab';
+  }
+});
+window.addEventListener('keyup',event=>{
+  if(event.code==='Space'){
+    spacePanActive=false;
+    artboard.style.cursor='';
+  }
+});
+artboard.addEventListener('wheel',event=>{
+  event.preventDefault();
+  const delta=event.deltaY<0?.25:-.25;
+  setZoom(zoom+delta);
+},{passive:false});
+
+document.getElementById('zoomIn').onclick=()=>setZoom(Math.round((zoom+.25)*4)/4);
+document.getElementById('zoomOut').onclick=()=>setZoom(Math.round((zoom-.25)*4)/4);
+document.getElementById('zoomReset').onclick=()=>{zoom=1;panX=0;panY=0;applyTransform();document.getElementById('zoomReadout').textContent='100%';};
+document.getElementById('canvasLockBtn').onclick=()=>{
+  canvasLocked=!canvasLocked;
+  const button=document.getElementById('canvasLockBtn');
+  button.textContent=canvasLocked?'Canvas Locked':'Pan Canvas';
+  button.className=canvasLocked?'secondary':'primary';
+  message.textContent=canvasLocked
+    ? 'Canvas locked — tapping paints without moving the artwork.'
+    : 'Canvas unlocked — drag to pan while zoomed in. Lock it again to paint.';
+};
+document.getElementById('centerSelected').onclick=centerOnSelectedColor;
+document.getElementById('toggleNumberFocus').onclick=()=>{
+  numberFocus=!numberFocus;
+  refreshNumberLabels();
+  document.getElementById('toggleNumberFocus').textContent=
+    numberFocus ? 'Show All Numbers' : 'Focus Selected Number';
+  message.textContent=numberFocus
+    ? `Focus Mode on — only number ${selectedColor} is visible.`
+    : 'All unpainted number references are visible.';
+};
+document.getElementById('toggleReference').onclick=()=>{
+  referenceVisible=!referenceVisible;
+  referenceOverlay.style.opacity=referenceVisible?'.55':'0';
+  document.getElementById('toggleReference').textContent=referenceVisible?'Hide Reference Overlay':'Show Reference Overlay';
+};
+document.getElementById('inspectMode').onclick=()=>{
+  inspect=!inspect;
+  document.getElementById('inspectMode').textContent=inspect?'Stop Inspecting':'Inspect Regions';
+  message.textContent=inspect?'Select any region to inspect it.':'Region inspection turned off.';
+};
+document.getElementById('reviewModeBtn').onclick=()=>setMode('review');
+document.getElementById('customerModeBtn').onclick=()=>setMode('customer');
+
+
+function reviewPayload(){
+  return {
+    notes:document.getElementById('reviewNotes').value,
+    checklist:[...document.querySelectorAll('#checklist input')].map(box=>box.checked),
+    approved:safeLocalGet(REVIEW_KEY)==='approved',
+    updatedAt:new Date().toISOString()
+  };
+}
+function saveReview(show=true){
+  const ok=safeLocalSet(REVIEW_KEY+'-details',JSON.stringify(reviewPayload()));
+  if(show){
+    document.getElementById('approvalMessage').textContent=ok
+      ? 'Review notes and checklist saved locally.'
+      : 'Browser storage is unavailable. Download the QA Report to preserve your notes.';
+  }
+  return ok;
+}
+document.getElementById('saveReviewBtn').onclick=()=>saveReview(true);
+document.getElementById('reviewNotes').addEventListener('input',()=>saveReview(false));
+document.querySelectorAll('#checklist input').forEach(box=>box.addEventListener('change',()=>saveReview(false)));
+try{
+  const savedReview=JSON.parse(safeLocalGet(REVIEW_KEY+'-details')||'null');
+  if(savedReview){
+    document.getElementById('reviewNotes').value=savedReview.notes||'';
+    [...document.querySelectorAll('#checklist input')].forEach((box,index)=>{
+      box.checked=Boolean(savedReview.checklist?.[index]);
+    });
+  }
+}catch(error){}
+
+document.getElementById('downloadReport').onclick=()=>{
+  const checks=[...document.querySelectorAll('#checklist input')].map((box,index)=>({item:index+1,passed:box.checked}));
+  const report={
+    generatedAt:new Date().toISOString(),
+    totalRegions:REGIONS.length,
+    tinyRegions:REGIONS.filter(r=>r.area<80).length,
+    paletteColors:PALETTE.length,
+    checklist:checks,
+    notes:document.getElementById('reviewNotes').value,
+    approved:localStorage.getItem(REVIEW_KEY)==='approved'
+  };
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download='euqilegna_qa_report.json';link.click();
+  URL.revokeObjectURL(url);
+};
+document.getElementById('approveBtn').onclick=()=>{
+  const boxes=[...document.querySelectorAll('#checklist input')];
+  if(!boxes.every(box=>box.checked)){
+    document.getElementById('approvalMessage').textContent='Complete every checklist item before approval.';
+    document.getElementById('approvalMessage').style.color='#8d1717';
+    return;
+  }
+  localStorage.setItem(REVIEW_KEY,'approved');
+  document.getElementById('approvalMessage').textContent='Approved locally for website publishing. The package has not been uploaded.';
+  document.getElementById('approvalMessage').style.color='#216e39';
+};
+
+document.querySelectorAll('input[name="playMode"]').forEach(radio=>radio.onchange=()=>{
+  playMode=currentPlayMode();
+  message.textContent=`Play style changed to ${playMode}.`;
+});
+
+setupMasterReveal();
+ensureEveryPaintableRegionHasNumber();
+renderPalette();
+applySaved();
+refreshSelectedRegions();
+numberFocus=false;
+refreshNumberLabels();
+document.getElementById('toggleNumberFocus').textContent='Focus Selected Number';
+difficulty();
+setMode('review');
+
+
+(function installEuqilegnaPointerEngineV9(){
+  const ENGINE_VERSION='9.0.0';
+  const artboard=document.getElementById('artboard');
+  const host=document.getElementById('svgHost');
+
+  if(!artboard || !host || !Array.isArray(REGIONS)){
+    console.warn('Euqilegna Pointer Engine V9 could not initialize.');
+    return;
+  }
+
+  let pointerDown=null;
+  let lastHandledAt=0;
+  let lastHandledRegion=null;
+
+  const asText=value=>String(value ?? '');
+
+  function getSvg(){
+    return host.querySelector('svg');
+  }
+
+  function toSvgPoint(clientX,clientY){
+    const svg=getSvg();
+    if(!svg) return null;
+    const matrix=svg.getScreenCTM();
+    if(!matrix) return null;
+
+    const point=svg.createSVGPoint();
+    point.x=clientX;
+    point.y=clientY;
+    return point.matrixTransform(matrix.inverse());
+  }
+
+  function candidateRegions(){
+    return REGIONS.filter(region=>{
+      if(asText(region.colorId)!==asText(selectedColor)) return false;
+      if(painted[region.regionId]) return false;
+      return Boolean(document.getElementById(region.regionId));
+    });
+  }
+
+  function pathContainsPoint(path,point){
+    if(!path || !point) return false;
+
+    try{
+      if(typeof path.isPointInFill==='function' && path.isPointInFill(point)){
+        return true;
+      }
+    }catch(_error){}
+
+    // Fallback for browsers with incomplete SVGGeometryElement support.
+    try{
+      const box=path.getBBox();
+      return (
+        point.x>=box.x &&
+        point.x<=box.x+box.width &&
+        point.y>=box.y &&
+        point.y<=box.y+box.height
+      );
+    }catch(_error){
+      return false;
+    }
+  }
+
+  function distanceToLabel(region,point){
+    const x=Number(region.label?.x ?? 0);
+    const y=Number(region.label?.y ?? 0);
+    return Math.hypot(point.x-x,point.y-y);
+  }
+
+  function areaOf(region){
+    const area=Number(region.area);
+    return Number.isFinite(area) && area>0 ? area : Number.MAX_SAFE_INTEGER;
+  }
+
+  function resolveRegionAt(clientX,clientY){
+    const point=toSvgPoint(clientX,clientY);
+    if(!point) return null;
+
+    const direct=[];
+    for(const region of candidateRegions()){
+      const path=document.getElementById(region.regionId);
+      if(pathContainsPoint(path,point)){
+        direct.push({region,path});
+      }
+    }
+
+    if(direct.length){
+      // Prefer the smallest containing region so tiny details are not swallowed
+      // by a larger background region drawn beneath them.
+      direct.sort((a,b)=>
+        areaOf(a.region)-areaOf(b.region) ||
+        distanceToLabel(a.region,point)-distanceToLabel(b.region,point)
+      );
+      return direct[0];
+    }
+
+    // Accessibility fallback: allow a small nearest-label tolerance for very
+    // thin regions and Apple Pencil taps that land a few pixels outside.
+    const svg=getSvg();
+    const viewBox=svg?.viewBox?.baseVal;
+    const rect=svg?.getBoundingClientRect();
+    const unitsPerPixel=(
+      viewBox && rect && rect.width
+        ? viewBox.width/rect.width
+        : 1
+    );
+    const tolerance=Math.max(5*unitsPerPixel,2.5);
+
+    const nearby=candidateRegions()
+      .map(region=>({
+        region,
+        path:document.getElementById(region.regionId),
+        distance:distanceToLabel(region,point),
+      }))
+      .filter(item=>item.distance<=tolerance)
+      .sort((a,b)=>a.distance-b.distance || areaOf(a.region)-areaOf(b.region));
+
+    return nearby[0] || null;
+  }
+
+  function paintResolved(resolved,event){
+    if(!resolved) return false;
+    const {region,path}=resolved;
+
+    if(asText(region.colorId)!==asText(selectedColor)){
+      return false;
+    }
+
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+
+    lastHandledAt=performance.now();
+    lastHandledRegion=region.regionId;
+    handleRegion(region,path);
+    return true;
+  }
+
+  function movementDistance(start,event){
+    if(!start) return Number.POSITIVE_INFINITY;
+    return Math.hypot(
+      Number(event.clientX)-start.x,
+      Number(event.clientY)-start.y
+    );
+  }
+
+  artboard.addEventListener('pointerdown',event=>{
+    if(event.button!==undefined && event.button!==0) return;
+    pointerDown={
+      id:event.pointerId,
+      x:Number(event.clientX),
+      y:Number(event.clientY),
+      time:performance.now(),
+    };
+  },true);
+
+  artboard.addEventListener('pointercancel',()=>{
+    pointerDown=null;
+  },true);
+
+  artboard.addEventListener('pointerup',event=>{
+    if(!pointerDown || pointerDown.id!==event.pointerId) return;
+
+    const moved=movementDistance(pointerDown,event);
+    const elapsed=performance.now()-pointerDown.time;
+    pointerDown=null;
+
+    // Preserve pan/drag and long-press behavior.
+    if(hasDragged || moved>10 || elapsed>1200) return;
+
+    const resolved=resolveRegionAt(event.clientX,event.clientY);
+    paintResolved(resolved,event);
+  },true);
+
+  // Suppress the synthetic click emitted after a pointerup we already handled.
+  artboard.addEventListener('click',event=>{
+    if(performance.now()-lastHandledAt<700){
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  },true);
+
+  // Keyboard-accessible region painting for focused SVG paths.
+  artboard.addEventListener('keydown',event=>{
+    if(event.key!=='Enter' && event.key!==' ') return;
+    const target=event.target?.closest?.('.paint-region,.region-hit');
+    if(!target) return;
+
+    const regionId=
+      target.getAttribute('data-target-region') ||
+      target.getAttribute('data-region-id') ||
+      target.id;
+    const region=REGIONS.find(item=>item.regionId===regionId);
+    const path=region ? document.getElementById(region.regionId) : null;
+    if(region && path){
+      paintResolved({region,path},event);
+    }
+  },true);
+
+  // Make all visible paths keyboard focusable and expose their number.
+  for(const region of REGIONS){
+    const path=document.getElementById(region.regionId);
+    if(path){
+      path.setAttribute('tabindex','0');
+      path.setAttribute('role','button');
+      path.setAttribute(
+        'aria-label',
+        `Paint color ${region.colorId} section`
+      );
+      path.dataset.pointerEngine='v9';
+    }
+  }
+
+  window.EuqilegnaPointerEngineV9={
+    version:ENGINE_VERSION,
+    resolveRegionAt,
+    selectedColor:()=>selectedColor,
+    lastHandledRegion:()=>lastHandledRegion,
+  };
+
+  console.info(`Euqilegna Pointer Engine ${ENGINE_VERSION} ready.`);
+})();
+
+</script>
+</body>
+</html>

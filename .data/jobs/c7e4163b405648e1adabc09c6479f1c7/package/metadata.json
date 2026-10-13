@@ -1,0 +1,137 @@
+{
+  "engine": "Euqilegna Paint Compiler 12.0 Validation-First",
+  "inputFile": "F81F6EB8-41CB-46B8-BA9C-9A3090C0E96D.png",
+  "width": 1536,
+  "height": 1024,
+  "regions": 300,
+  "inkPaths": 0,
+  "markerSeeds": 300,
+  "colors": 12,
+  "preset": "illustration",
+  "minRegionArea": 70,
+  "outlineWidth": 0.38,
+  "simplifyTolerance": 0.35,
+  "autoCrop": false,
+  "crop": {
+    "cropped": false,
+    "box": [
+      0,
+      0,
+      1536,
+      1024
+    ],
+    "foreground": {
+      "mode": "full_canvas",
+      "fallbackUsed": false,
+      "coverage": 1.0
+    }
+  },
+  "completionImage": "finished_masterpiece.png",
+  "progressiveRevealImage": "completion_reveal.png",
+  "inkOverlay": "ink_overlay.svg",
+  "detailMap": "detail_map.png",
+  "paintabilityEngine": "paintability_engine_report.json",
+  "paintabilitySimulation": "paintability_simulation.json",
+  "paintabilityGuaranteed": true,
+  "experienceMode": "relaxed",
+  "targetRegions": 300,
+  "designStyle": "photo",
+  "activePipeline": "photo",
+  "pipelineAnalysis": {
+    "pipeline": "illustration",
+    "confidence": 0.63,
+    "edgeDensity": 0.2531,
+    "uniqueColorScore": 0.6383,
+    "textureScore": 0.2115
+  },
+  "artworkProfile": "decorative",
+  "artworkProfileAnalysis": {
+    "source": "automatic_classifier",
+    "metrics": {
+      "edgeDensity": 0.1709906260172526,
+      "saturation": 0.4416854958129085,
+      "valueStd": 0.30472714567971776,
+      "darkRatio": 0.3582922617594401,
+      "lightRatio": 0.08980242411295573,
+      "nearBinaryRatio": 0.4660491943359375,
+      "aspectRatio": 1.5,
+      "orientationBalance": 0.9542160630226135
+    },
+    "detectedPipeline": "illustration",
+    "profile": {
+      "name": "decorative",
+      "pipeline": "illustration",
+      "use_full_canvas": true,
+      "allow_auto_crop": false,
+      "foreground_required": false,
+      "color_cap": 32,
+      "minimum_region_area": 18,
+      "target_region_min": 300,
+      "target_region_max": 760,
+      "experience_mode": "detailed",
+      "simplify_tolerance_floor": 0.13,
+      "description": "Ornamental, botanical, koi, peacock, floral, symmetrical, or patterned artwork."
+    }
+  },
+  "foregroundAnalysis": {
+    "mode": "full_canvas",
+    "fallbackUsed": false,
+    "coverage": 1.0
+  },
+  "automaticRecoveryEnabled": true,
+  "modularCompilerVersion": "11.0",
+  "visualFidelityReport": "visual_fidelity_report.json",
+  "visualFidelity": {
+    "artworkProfile": "decorative",
+    "edgeRetention": 0.0927,
+    "tonalMeanAbsoluteError": 39.814,
+    "regions": 300,
+    "passed": false
+  },
+  "finalCanvasCoverage": 1.0,
+  "pixelCoveragePercent": 100.0,
+  "coverageErrors": 0,
+  "orphanPixels": 0,
+  "edgeRepair": "completed",
+  "coverageGuarantee": true,
+  "completionImageSource": "artistic_master",
+  "finishMode": "original",
+  "tinyRegions": 0,
+  "smallRegions": 0,
+  "qualityStatus": "PASS",
+  "paintabilityScore": 100,
+  "estimatedInteractiveMinutes": 30,
+  "v12SourceAnalysis": {
+    "family": "landscape_or_scene",
+    "width": 1536,
+    "height": 1024,
+    "darkRatio": 0.37831,
+    "lightRatio": 0.09886,
+    "saturation": 0.44169,
+    "edgeDensity": 0.17844,
+    "tonalStd": 0.30473
+  },
+  "v12SelectedAttempt": "full-canvas-photo-recovery",
+  "v12SimilarityScore": 0.70988,
+  "v12ValidationPassed": true,
+  "v12Attempts": [
+    {
+      "name": "smart-auto",
+      "success": false,
+      "score": 0.77274,
+      "error": null
+    },
+    {
+      "name": "full-canvas-illustration-recovery",
+      "success": false,
+      "score": 0.77237,
+      "error": null
+    },
+    {
+      "name": "full-canvas-photo-recovery",
+      "success": true,
+      "score": 0.70988,
+      "error": null
+    }
+  ]
+}

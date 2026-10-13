@@ -1,0 +1,23 @@
+{
+  "engine": "Pre-Export Customer Simulation 9.0",
+  "passed": true,
+  "expected": 300,
+  "simulated": 300,
+  "svgPaintPaths": 300,
+  "svgNumberLabels": 300,
+  "paletteCounts": {
+    "5": 19,
+    "9": 24,
+    "10": 17,
+    "12": 18,
+    "4": 17,
+    "8": 66,
+    "2": 14,
+    "1": 31,
+    "7": 15,
+    "6": 30,
+    "11": 30,
+    "3": 19
+  },
+  "failures": []
+}

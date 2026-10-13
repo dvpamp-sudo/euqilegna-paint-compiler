@@ -5,42 +5,113 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes">
 <title>Euqilegna Color-by-Number Beta</title>
 <style>
-:root{--bg:#100b14;--panel:#0b090e;--purple:#8a3fc1;--purple2:#bf78e5;--line:#583968;--text:#fff;--muted:#cbbbd2;--good:#39a766}
+:root{--bg:#0a0710;--panel:#120d18;--card:#1a1322;--card2:#221a2c;--purple:#8a3fc1;--purple2:#bf78e5;--gold:#d9ad59;--line:#3b2b49;--text:#fff;--muted:#c8b9d3;--good:#3fae6d}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 button{font:inherit;touch-action:manipulation}
-.top{padding:18px 22px;background:#09070b;border-bottom:1px solid var(--line)}
-.top a{color:#ddaaff;font-weight:800}.top h1{font-family:Georgia,serif;font-size:34px;margin:16px 0 8px}
-.top p{color:var(--muted);margin:0}
-.app{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:calc(100vh - 132px)}
-.stage{display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;overscroll-behavior:contain}
-.board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px #0008}
-.board{display:block;width:100%;height:auto;touch-action:manipulation}
-.zone{fill:#fff;stroke:#302636;stroke-width:2.2;cursor:pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
-.zone.target{fill:#ded7e1;stroke:#7c2fb2;stroke-width:4;filter:drop-shadow(0 0 4px #fff)}
+.top{position:relative;padding:22px 24px 20px;background:radial-gradient(1100px 280px at 0% 0%,rgba(138,63,193,.30),transparent 70%),linear-gradient(180deg,#0d0912,#080609);border-bottom:1px solid var(--line)}
+.top a{display:inline-block;color:var(--gold);font-weight:800;font-size:12px;letter-spacing:1.7px;text-transform:uppercase;text-decoration:none}
+.top h1{font-family:Georgia,"Times New Roman",serif;font-size:40px;line-height:1.05;letter-spacing:-.5px;margin:14px 0 10px;color:#fbf6ee}
+.top p{color:var(--muted);margin:0;max-width:660px;line-height:1.55}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:calc(100vh - 152px)}
+.stage{position:sticky;top:0;align-self:start;min-height:calc(100vh - 152px);display:flex;align-items:flex-start;justify-content:center;padding:26px;overflow:auto;overscroll-behavior:contain;background:radial-gradient(900px 520px at 50% 35%,#1a1226 0%,#0a0710 72%)}
+.board-wrap{position:relative;width:min(920px,96vw);background:#fff;border-radius:20px;overflow:hidden;border:1px solid #4a3a5c;box-shadow:0 40px 90px -30px #000,0 0 0 8px rgba(255,255,255,.03),0 0 60px -20px rgba(138,63,193,.45)}
+.board{--ink:#1b1b1b;display:block;width:100%;height:auto;touch-action:manipulation}
+.zone{fill:#fff;stroke:var(--ink,#1b1b1b);stroke-width:var(--zone-stroke,1.5);stroke-linejoin:round;cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><g transform='rotate(-45 16 16)'><path d='M16 2L23 9L9 9Z' fill='%23bf78e5' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><path d='M9 9H23V29a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2Z' fill='%238a3fc1' stroke='%232b2233' stroke-width='1.5' stroke-linejoin='round'/><rect x='9' y='13' width='14' height='4' fill='%23d9ad59' stroke='%232b2233' stroke-width='1.5'/></g></svg>") 6 6, pointer;transition:fill .35s ease,stroke .2s ease,filter .2s ease}
+.zone.target{fill:#e6dff0;stroke:var(--gold);stroke-width:var(--zone-target-stroke,2.6);filter:drop-shadow(0 0 3px rgba(217,173,89,.9))}
 .zone.wrong{animation:shake .28s linear}
-.zone.painting{animation:paintPop .48s ease}
-.zone.done{stroke:#ffffff55;stroke-width:1.2}
-.zone-label{pointer-events:none;font-weight:900;fill:#171219;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+.zone.painting{fill:#fff!important;fill-opacity:1}
+.paint-tip{pointer-events:none}
+.zone.done{stroke:var(--ink,#1b1b1b);stroke-opacity:.5;stroke-width:var(--zone-stroke,1.5);fill-opacity:.97;filter:url(#paintGrain)}
+.zone-label{pointer-events:none;font-weight:900;fill:#1b1424;paint-order:stroke;stroke:#fff;stroke-width:3.6px;stroke-linejoin:round}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-@keyframes paintPop{0%{filter:brightness(1.7);opacity:.65}100%{filter:none;opacity:1}}
-.complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:#100b14cc;text-align:center;padding:24px}
-.complete-overlay.show{display:grid}.complete-card{background:#fff;color:#281a2d;border-radius:18px;padding:24px;max-width:420px}.complete-card h2{font-family:Georgia,serif;font-size:32px;margin:0 0 8px}
-.panel{padding:20px;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
-.panel h2{margin:0 0 12px}.current{border:1px solid var(--line);border-radius:14px;padding:13px;background:#15101a;margin-bottom:14px}
-.current-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{background:#211829;border-radius:10px;padding:10px}.metric small{display:block;color:var(--muted);margin-bottom:4px}
-.palette{display:grid;grid-template-columns:1fr 1fr;gap:10px}.swatch{min-height:68px;border-radius:12px;border:3px solid transparent;font-weight:900;color:#fff;cursor:pointer;position:relative}
-.swatch.active{border-color:#fff;box-shadow:0 0 0 3px var(--purple)}.swatch.complete:after{content:"✓";position:absolute;right:8px;top:6px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center}
-.swatch small{display:block;margin-top:4px}
-.progress{height:13px;background:#34273d;border-radius:999px;overflow:hidden;margin-top:8px}.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2));width:0;transition:width .3s}
-.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.toolbar button,.toolbar a{padding:11px;border-radius:10px;border:1px solid var(--line);background:#201627;color:#fff;text-decoration:none;text-align:center;font-weight:800;cursor:pointer}
-.toolbar .primary{background:var(--purple);border-color:var(--purple)}.save-note{color:var(--muted);font-size:13px;margin-top:10px;min-height:18px}
-.review{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}.review textarea{width:100%;min-height:90px;background:#151019;color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
-.mobile-palette-toggle{display:none;position:sticky;bottom:10px;z-index:20;margin:10px auto;border:0;border-radius:999px;background:var(--purple);color:#fff;padding:13px 20px;font-weight:900}
+.complete-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.82);backdrop-filter:blur(3px);text-align:center;padding:24px}
+.complete-overlay.show{display:grid}
+.complete-card{background:linear-gradient(180deg,#fff,#f3ecf8);color:#281a2d;border-radius:20px;padding:28px;max-width:430px;box-shadow:0 30px 70px -20px #000}
+.complete-card h2{font-family:Georgia,serif;font-size:30px;margin:0 0 10px}
+.complete-card p{color:#4b3b57;margin:0 0 16px}
+.complete-card button{padding:12px 18px;border-radius:11px;border:0;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;font-weight:900;cursor:pointer}
+.complete-card a{display:block;margin-top:12px;color:var(--purple);font-weight:800}
+.panel{padding:22px;background:linear-gradient(180deg,#141019,#100c16);border-left:1px solid var(--line);overflow:auto}
+.panel h2{margin:0 0 14px;font-family:Georgia,serif;font-size:22px}
+.current{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card);margin-bottom:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.current-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric{background:var(--card2);border:1px solid #2f2440;border-radius:12px;padding:11px}
+.metric small{display:block;color:var(--gold);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:800;margin-bottom:5px}
+.metric strong{font-size:22px}
+#status{color:var(--muted);margin:14px 0 10px;line-height:1.5}
+#count{display:block;font-size:14px;color:#e8ddf1}
+.progress{height:12px;background:#2b2136;border-radius:999px;overflow:hidden;margin-top:9px;box-shadow:inset 0 1px 3px #0006}
+.bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2) 60%,var(--gold));width:0;transition:width .35s ease}
+.palette{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.swatch{min-height:72px;border-radius:14px;border:2px solid rgba(0,0,0,.28);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);font-weight:900;color:#fff;cursor:pointer;position:relative;text-shadow:0 1px 3px rgba(0,0,0,.55);transition:transform .15s ease,box-shadow .2s ease}
+.swatch:hover{transform:translateY(-2px)}
+.swatch.active{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,173,89,.35),inset 0 0 0 1px rgba(255,255,255,.2)}
+.swatch.complete:after{content:"✓";position:absolute;right:8px;top:7px;background:var(--good);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px}
+.swatch small{display:block;margin-top:5px;font-weight:700;font-size:12px;opacity:.92}
+.toolbox{margin-bottom:18px}
+.toolbox-note{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0 0 10px}
+.tool-group{margin-bottom:12px}
+.tool-group h3{margin:0 0 7px;font-family:Georgia,serif;font-size:14.5px;color:#e9dfff}
+.tool-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tool-btn{display:block;padding:6px 6px 5px;border-radius:12px;border:2px solid var(--line);background:#161020;color:#f2e9f8;font-weight:800;font-size:11.5px;line-height:1.25;cursor:pointer;transition:transform .15s ease,border-color .2s ease,box-shadow .2s ease}
+.tool-btn:hover{transform:translateY(-2px);border-color:#6a4d86}
+.tool-btn.active{border-color:var(--gold);box-shadow:0 0 0 3px rgba(217,173,89,.28)}
+.tool-chip{display:block;width:100%;height:auto;border-radius:8px;margin-bottom:5px}
+.tool-name{display:block}
+.toolbar{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}
+.toolbar button,.toolbar a{padding:12px;border-radius:11px;border:1px solid var(--line);background:#1d1626;color:#f2e9f8;text-decoration:none;text-align:center;font-weight:800;font-size:14px;cursor:pointer;transition:.18s}
+.toolbar button:hover,.toolbar a:hover{border-color:var(--gold);background:#251c31;transform:translateY(-1px)}
+.toolbar .primary{background:linear-gradient(180deg,var(--purple2),var(--purple));border-color:transparent;color:#fff}
+.save-note{color:var(--muted);font-size:13px;margin-top:12px;min-height:18px}
+.review{margin-top:20px;border-top:1px solid var(--line);padding-top:18px}
+.review h3{margin:0 0 10px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
+.review textarea{width:100%;min-height:92px;background:#0e0a13;color:#fff;border:1px solid var(--line);border-radius:11px;padding:11px;font:inherit;resize:vertical}
+.review button{margin-top:9px;padding:11px;border-radius:10px;border:0;color:#fff;font-weight:800;cursor:pointer;background:linear-gradient(180deg,var(--purple2),var(--purple))}
+.mobile-palette-toggle{display:none;position:sticky;bottom:12px;z-index:20;margin:12px auto;border:0;border-radius:999px;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;padding:14px 22px;font-weight:900;box-shadow:0 14px 30px -10px #000}
+.upload{margin-bottom:18px;border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card)}
+.upload h3{margin:0 0 6px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
+.upload p{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 10px}
+.upload input[type=file]{width:100%;color:var(--muted);font-size:13px;margin-bottom:10px}
+.upload input[type=file]::file-selector-button{margin-right:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font:inherit;font-weight:700;cursor:pointer}
+.upload button{width:100%;padding:12px;border-radius:11px;border:0;background:linear-gradient(180deg,var(--purple2),var(--purple));color:#fff;font-weight:900;cursor:pointer}
+.upload button:disabled{opacity:.55;cursor:progress}
+.upload button.ghost{margin-top:8px;background:#241a30;border:1px solid var(--line);color:#f2e9f8}
+.upload button.ghost:hover{border-color:var(--gold)}
+.upload-note{color:var(--muted);font-size:12.5px;margin:8px 0 0;min-height:16px}
+.designs{margin-bottom:18px;border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--card)}
+.designs h3{margin:0 0 6px;font-family:Georgia,serif;font-size:17px;color:#e9dfff}
+.designs p{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 10px}
+.design-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.design-chip{display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:11px;border:1px solid var(--line);background:#1b1526;color:#f2e9f8;font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-align:left}
+.design-chip:hover{border-color:var(--purple2)}
+.design-chip img{width:100%;height:60px;object-fit:cover;border-radius:7px;display:block;background:#0d0913}
+.design-add{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.design-add input[type=file]{width:100%;color:var(--muted);font-size:12.5px}
+.design-add input[type=file]::file-selector-button{margin-right:8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font:inherit;font-weight:700;cursor:pointer}
+.design-add button{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#251c31;color:#f2e9f8;font-weight:800;cursor:pointer}
+.design-add button:disabled{opacity:.5;cursor:progress}
+.design-item{position:relative}
+.design-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;padding:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);background:rgba(24,16,32,.86);color:#f2e9f8;font-size:14px;line-height:1;font-weight:900;cursor:pointer;box-shadow:0 2px 6px #0007;z-index:2}
+.design-remove:hover{border-color:#e06a8a;color:#ffd9e4}
+.compile-overlay{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,7,16,.86);backdrop-filter:blur(3px);text-align:center;padding:24px}
+.compile-overlay.show{display:grid}
+.compile-card{background:linear-gradient(180deg,#1d1528,#150f1e);border:1px solid #4a3a5c;border-radius:18px;padding:24px;max-width:400px;width:100%;color:#f4ecfa;box-shadow:0 30px 70px -20px #000}
+.compile-card h2{font-family:Georgia,serif;font-size:24px;margin:0 0 8px}
+.compile-card p{color:var(--muted);margin:0 0 14px;min-height:20px;line-height:1.45}
+.compile-card .progress{margin:0}
+.compile-card strong{display:block;margin-top:10px;font-size:20px}
 @media(max-width:780px){
- .top h1{font-size:28px}.app{display:block}.stage{padding:10px;min-height:auto}.board-wrap{width:100%}
- .panel{border-left:0;border-top:1px solid var(--line);padding:16px}.palette{grid-template-columns:repeat(4,1fr)}
- .swatch{min-height:58px}.mobile-palette-toggle{display:block}.panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
+ .top{padding:18px 18px 16px}.top h1{font-size:30px}
+ .app{display:block}
+ .stage{padding:12px;min-height:auto;position:static;align-self:auto}
+ .board-wrap{width:100%;border-radius:14px;box-shadow:0 22px 50px -20px #000,0 0 40px -18px rgba(138,63,193,.5)}
+ .panel{border-left:0;border-top:1px solid var(--line);padding:18px}
+ .palette{grid-template-columns:repeat(3,1fr)}
+ .tool-row{grid-template-columns:repeat(3,1fr)}
+ .swatch{min-height:60px}
+ .mobile-palette-toggle{display:block}
+ .panel.collapsed .toolbox,.panel.collapsed .palette,.panel.collapsed .current,.panel.collapsed .toolbar,.panel.collapsed .review,.panel.collapsed .save-note,.panel.collapsed h2{display:none}
 }
 </style>
 </head>
@@ -48,30 +119,43 @@ button{font:inherit;touch-action:manipulation}
 <header class="top">
 <a href="/beta">← Beta Dashboard</a>
 <h1>Color-by-Number Beta</h1>
-<p>Tap a color, then tap only the softly highlighted matching zones. Progress saves automatically.</p>
+<p>Tap a color, then tap only the softly highlighted matching zones. Progress saves automatically, and finishing a picture keeps it in My Paintings.</p>
 </header>
 
 <div class="app">
 <main class="stage">
 <div class="board-wrap">
-<svg id="board" class="board" viewBox="0 0 800 600" aria-label="Interactive color-by-number artwork">
-<rect width="800" height="600" fill="#e7daf0"/>
-<path class="zone" data-c="1" d="M0 430 C180 350 310 400 430 440 C580 490 700 440 800 390 L800 600 L0 600 Z"/>
-<circle class="zone" data-c="2" cx="400" cy="205" r="90"/>
-<path class="zone" data-c="3" d="M312 210 C315 105 500 90 500 215 C465 165 430 145 395 150 C355 155 330 175 312 210 Z"/>
-<path class="zone" data-c="4" d="M330 305 C365 270 440 266 478 306 L530 540 L280 540 Z"/>
-<path class="zone" data-c="5" d="M360 300 L404 405 L448 300 L470 532 L330 532 Z"/>
-<path class="zone" data-c="6" d="M210 190 C245 120 320 145 325 220 C290 185 250 180 210 205 Z"/>
-<path class="zone" data-c="7" d="M520 200 C570 125 655 155 660 245 C620 200 570 190 520 220 Z"/>
-<ellipse class="zone" data-c="8" cx="180" cy="450" rx="100" ry="45"/>
-<ellipse class="zone" data-c="8" cx="640" cy="460" rx="110" ry="48"/>
-</svg>
+<svg id="board" class="board" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" aria-label="Dahlia Mandala color-by-number artwork"><rect width="800" height="600" fill="#fff"/><ellipse class="zone" data-c="2" cx="400.0" cy="115.0" rx="34" ry="88" transform="rotate(0.0 400.0 115.0)"/><ellipse class="zone" data-c="3" cx="470.8" cy="129.1" rx="34" ry="88" transform="rotate(22.5 470.8 129.1)"/><ellipse class="zone" data-c="4" cx="530.8" cy="169.2" rx="34" ry="88" transform="rotate(45.0 530.8 169.2)"/><ellipse class="zone" data-c="5" cx="570.9" cy="229.2" rx="34" ry="88" transform="rotate(67.5 570.9 229.2)"/><ellipse class="zone" data-c="2" cx="585.0" cy="300.0" rx="34" ry="88" transform="rotate(90.0 585.0 300.0)"/><ellipse class="zone" data-c="3" cx="570.9" cy="370.8" rx="34" ry="88" transform="rotate(112.5 570.9 370.8)"/><ellipse class="zone" data-c="4" cx="530.8" cy="430.8" rx="34" ry="88" transform="rotate(135.0 530.8 430.8)"/><ellipse class="zone" data-c="5" cx="470.8" cy="470.9" rx="34" ry="88" transform="rotate(157.5 470.8 470.9)"/><ellipse class="zone" data-c="2" cx="400.0" cy="485.0" rx="34" ry="88" transform="rotate(180.0 400.0 485.0)"/><ellipse class="zone" data-c="3" cx="329.2" cy="470.9" rx="34" ry="88" transform="rotate(202.5 329.2 470.9)"/><ellipse class="zone" data-c="4" cx="269.2" cy="430.8" rx="34" ry="88" transform="rotate(225.0 269.2 430.8)"/><ellipse class="zone" data-c="5" cx="229.1" cy="370.8" rx="34" ry="88" transform="rotate(247.5 229.1 370.8)"/><ellipse class="zone" data-c="2" cx="215.0" cy="300.0" rx="34" ry="88" transform="rotate(270.0 215.0 300.0)"/><ellipse class="zone" data-c="3" cx="229.1" cy="229.2" rx="34" ry="88" transform="rotate(292.5 229.1 229.2)"/><ellipse class="zone" data-c="4" cx="269.2" cy="169.2" rx="34" ry="88" transform="rotate(315.0 269.2 169.2)"/><ellipse class="zone" data-c="5" cx="329.2" cy="129.1" rx="34" ry="88" transform="rotate(337.5 329.2 129.1)"/><ellipse class="zone" data-c="3" cx="429.2" cy="173.3" rx="32" ry="72" transform="rotate(13.0 429.2 173.3)"/><ellipse class="zone" data-c="4" cx="481.3" cy="198.6" rx="32" ry="72" transform="rotate(38.714285714285715 481.3 198.6)"/><ellipse class="zone" data-c="5" cx="517.3" cy="243.9" rx="32" ry="72" transform="rotate(64.42857142857143 517.3 243.9)"/><ellipse class="zone" data-c="6" cx="530.0" cy="300.3" rx="32" ry="72" transform="rotate(90.14285714285714 530.0 300.3)"/><ellipse class="zone" data-c="3" cx="517.0" cy="356.7" rx="32" ry="72" transform="rotate(115.85714285714286 517.0 356.7)"/><ellipse class="zone" data-c="4" cx="480.8" cy="401.8" rx="32" ry="72" transform="rotate(141.57142857142858 480.8 401.8)"/><ellipse class="zone" data-c="5" cx="428.6" cy="426.8" rx="32" ry="72" transform="rotate(167.28571428571428 428.6 426.8)"/><ellipse class="zone" data-c="6" cx="370.8" cy="426.7" rx="32" ry="72" transform="rotate(193.0 370.8 426.7)"/><ellipse class="zone" data-c="3" cx="318.7" cy="401.4" rx="32" ry="72" transform="rotate(218.71428571428572 318.7 401.4)"/><ellipse class="zone" data-c="4" cx="282.7" cy="356.1" rx="32" ry="72" transform="rotate(244.42857142857142 282.7 356.1)"/><ellipse class="zone" data-c="5" cx="270.0" cy="299.7" rx="32" ry="72" transform="rotate(270.14285714285717 270.0 299.7)"/><ellipse class="zone" data-c="6" cx="283.0" cy="243.3" rx="32" ry="72" transform="rotate(295.85714285714283 283.0 243.3)"/><ellipse class="zone" data-c="3" cx="319.2" cy="198.2" rx="32" ry="72" transform="rotate(321.57142857142856 319.2 198.2)"/><ellipse class="zone" data-c="4" cx="371.4" cy="173.2" rx="32" ry="72" transform="rotate(347.2857142857143 371.4 173.2)"/><ellipse class="zone" data-c="4" cx="400.0" cy="218.0" rx="28" ry="55" transform="rotate(0.0 400.0 218.0)"/><ellipse class="zone" data-c="5" cx="441.0" cy="229.0" rx="28" ry="55" transform="rotate(30.0 441.0 229.0)"/><ellipse class="zone" data-c="6" cx="471.0" cy="259.0" rx="28" ry="55" transform="rotate(60.0 471.0 259.0)"/><ellipse class="zone" data-c="2" cx="482.0" cy="300.0" rx="28" ry="55" transform="rotate(90.0 482.0 300.0)"/><ellipse class="zone" data-c="4" cx="471.0" cy="341.0" rx="28" ry="55" transform="rotate(120.0 471.0 341.0)"/><ellipse class="zone" data-c="5" cx="441.0" cy="371.0" rx="28" ry="55" transform="rotate(150.0 441.0 371.0)"/><ellipse class="zone" data-c="6" cx="400.0" cy="382.0" rx="28" ry="55" transform="rotate(180.0 400.0 382.0)"/><ellipse class="zone" data-c="2" cx="359.0" cy="371.0" rx="28" ry="55" transform="rotate(210.0 359.0 371.0)"/><ellipse class="zone" data-c="4" cx="329.0" cy="341.0" rx="28" ry="55" transform="rotate(240.0 329.0 341.0)"/><ellipse class="zone" data-c="5" cx="318.0" cy="300.0" rx="28" ry="55" transform="rotate(270.0 318.0 300.0)"/><ellipse class="zone" data-c="6" cx="329.0" cy="259.0" rx="28" ry="55" transform="rotate(300.0 329.0 259.0)"/><ellipse class="zone" data-c="2" cx="359.0" cy="229.0" rx="28" ry="55" transform="rotate(330.0 359.0 229.0)"/><ellipse class="zone" data-c="5" cx="400.0" cy="258.0" rx="22" ry="40" transform="rotate(0.0 400.0 258.0)"/><ellipse class="zone" data-c="6" cx="429.7" cy="270.3" rx="22" ry="40" transform="rotate(45.0 429.7 270.3)"/><ellipse class="zone" data-c="3" cx="442.0" cy="300.0" rx="22" ry="40" transform="rotate(90.0 442.0 300.0)"/><ellipse class="zone" data-c="5" cx="429.7" cy="329.7" rx="22" ry="40" transform="rotate(135.0 429.7 329.7)"/><ellipse class="zone" data-c="6" cx="400.0" cy="342.0" rx="22" ry="40" transform="rotate(180.0 400.0 342.0)"/><ellipse class="zone" data-c="3" cx="370.3" cy="329.7" rx="22" ry="40" transform="rotate(225.0 370.3 329.7)"/><ellipse class="zone" data-c="5" cx="358.0" cy="300.0" rx="22" ry="40" transform="rotate(270.0 358.0 300.0)"/><ellipse class="zone" data-c="6" cx="370.3" cy="270.3" rx="22" ry="40" transform="rotate(315.0 370.3 270.3)"/><ellipse class="zone" data-c="1" cx="400" cy="300" rx="32" ry="32" transform="rotate(0 400 300)"/></svg>
 <div id="completeOverlay" class="complete-overlay"><div class="complete-card"><h2>Masterpiece Complete!</h2><p>You finished the Color-by-Number beta design.</p><button id="closeComplete">View Artwork</button><a href="/beta/feedback" style="display:block;margin-top:12px">Give Beta Feedback</a></div></div>
+<div id="compileOverlay" class="compile-overlay"><div class="compile-card"><h2>Compiling your image</h2><p id="compileStage">Uploading…</p><div class="progress"><div id="compileBar" class="bar"></div></div><strong id="compilePercent">0%</strong></div></div>
 </div>
 </main>
 
 <aside id="panel" class="panel">
 <button id="mobilePaletteToggle" class="mobile-palette-toggle">Show / Hide Palette</button>
+<section class="upload">
+<h3>Use Your Own Image</h3>
+<p>Upload a photo and the paint compiler turns it into numbered regions you can paint right here.</p>
+<input id="artworkFile" type="file" accept="image/png,image/jpeg,image/webp">
+<button id="compileButton" type="button">Compile My Image</button>
+<button id="removeArtworkButton" class="ghost" type="button" hidden>Remove Image</button>
+<p id="uploadNote" class="upload-note"></p>
+</section>
+<section class="designs">
+<h3>More Designs</h3>
+<p>Pick one of the studio's color-by-number designs, or add your own image to the library.</p>
+<div id="designs" class="design-grid"></div>
+<div class="design-add">
+<input id="designFile" type="file" accept="image/png,image/jpeg,image/webp">
+<button id="addDesignButton" type="button">Add to Design Library</button>
+</div>
+<p id="designNote" class="upload-note"></p>
+</section>
+<section class="toolbox">
+<h2>Drawing Tool</h2>
+<p class="toolbox-note">Choose a marker, a crayon or a colored pencil — each medium lays down its own stroke and texture.</p>
+<div id="toolbox"></div>
+</section>
 <h2>Choose a Color</h2>
 <section class="current">
 <div class="current-grid">
@@ -87,6 +171,7 @@ button{font:inherit;touch-action:manipulation}
 <button id="showNext" type="button">Show Next</button>
 <button id="undo" type="button">Undo</button>
 <button id="save" type="button">Save Now</button>
+<button id="saveLibrary" type="button">Save to My Paintings</button>
 <button id="reset" type="button">Reset</button>
 <a href="/beta/feedback">Give Feedback</a>
 <button id="downloadProgress" type="button">Download Progress</button>
@@ -99,15 +184,19 @@ button{font:inherit;touch-action:manipulation}
 </section>
 </aside>
 </div>
+<svg id="toolSampleDefs" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
 
 <script>
 'use strict';
-const COLORS=['#2a2237','#b96f61','#292132','#96506f','#d89270','#765f88','#ae657f','#82937d'];
-const STORAGE_KEY='euqilegna-color-by-number-beta-v2';
-const REVIEW_KEY=STORAGE_KEY+'-review';
+let COLORS=['#2A2633','#73546F','#A96F7B','#D18B87','#E7B49A','#D6B76D'];
+const STORAGE_KEY='euqilegna-color-by-number-beta-v3';
+const SESSION_KEY=`${STORAGE_KEY}-session`;
+const ARTWORK_KEY=`${STORAGE_KEY}-artwork`;
+const BUILTIN_ARTWORK='dahlia-mandala';
 
 const board=document.getElementById('board');
 const paletteEl=document.getElementById('palette');
+const toolboxEl=document.getElementById('toolbox');
 const statusEl=document.getElementById('status');
 const countEl=document.getElementById('count');
 const barEl=document.getElementById('bar');
@@ -118,10 +207,23 @@ const panelEl=document.getElementById('panel');
 const completeOverlay=document.getElementById('completeOverlay');
 const reviewNote=document.getElementById('reviewNote');
 
-const zones=[...board.querySelectorAll('.zone')];
+let zones=[];
 let selected=1;
 let completed=new Set();
 let history=[];
+let artworkKey='';
+
+function storeKey(){return artworkKey?`${STORAGE_KEY}-${artworkKey}`:STORAGE_KEY;}
+function reviewKey(){return `${storeKey()}-review`;}
+function canvasSession(){
+  let id=safeGet(SESSION_KEY);
+  if(!id){
+    id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():`s${Date.now().toString(36)}${Math.random().toString(36).slice(2,10)}`;
+    safeSet(SESSION_KEY,id);
+  }
+  return id;
+}
+function canvasArtworkKey(){return artworkKey||BUILTIN_ARTWORK;}
 
 function safeSet(key,value){
   try{localStorage.setItem(key,value);return true}catch(error){return false}
@@ -129,24 +231,155 @@ function safeSet(key,value){
 function safeGet(key){
   try{return localStorage.getItem(key)}catch(error){return null}
 }
+function progressSnapshot(){
+  return {version:3,selected,completed:[...completed],savedAt:new Date().toISOString()};
+}
+function saveLocal(){
+  return safeSet(storeKey(),JSON.stringify(progressSnapshot()));
+}
+/* The browser stays the fast path; every save also mirrors into the SQLite session. */
+let studioSyncTimer=null;
+function saveToStudio(immediate=false){
+  const payload={
+    sessionId:canvasSession(),
+    artworkKey:canvasArtworkKey(),
+    selected,
+    completed:[...completed],
+    regionTotal:zones.length,
+  };
+  const send=async()=>{
+    try{
+      const response=await fetch('/api/canvas/progress',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      if(!response.ok) throw new Error('Studio save rejected');
+      if(immediate) saveNoteEl.textContent='Progress saved to the studio database.';
+    }catch(error){
+      saveNoteEl.textContent='Saved on this device — the studio copy will sync when you are back online.';
+    }
+  };
+  clearTimeout(studioSyncTimer);
+  if(immediate) send(); else studioSyncTimer=setTimeout(send,700);
+}
 function saveProgress(show=false){
-  const data={version:2,selected,completed:[...completed],savedAt:new Date().toISOString()};
-  const ok=safeSet(STORAGE_KEY,JSON.stringify(data));
+  const data=progressSnapshot();
+  const ok=safeSet(storeKey(),JSON.stringify(data));
   if(show) saveNoteEl.textContent=ok?'Progress saved.':'Storage is blocked; use Download Progress.';
+  saveToStudio(show);
   return data;
 }
-function addLabels(){
+/* The finished painting is kept as a picture, not only as progress. The board is
+   copied with its styling made explicit — the page's stylesheet does not travel
+   with a copied SVG — so the browser can draw it, and the image goes to the studio
+   with the finish, where "My Paintings" shows the artwork that was painted. */
+function boardImage(){
+  return new Promise(resolve=>{
+    let markup;
+    try{
+      const view=board.viewBox.baseVal;
+      const width=view.width||800,height=view.height||600;
+      const unit=Math.min(width,height);
+      const clone=board.cloneNode(true);
+      clone.querySelectorAll('.zone-label').forEach(node=>node.remove());
+      clone.querySelectorAll('.zone').forEach(zone=>{
+        const painted=(zone.style.fill||'').indexOf('url(#paint-')===0;
+        zone.removeAttribute('class');
+        zone.setAttribute('stroke','#1b1b1b');
+        zone.setAttribute('stroke-width',(unit*.0016).toFixed(3));
+        zone.setAttribute('stroke-linejoin','round');
+        if(painted){
+          zone.setAttribute('stroke-opacity','.5');
+          zone.setAttribute('filter','url(#paintGrain)');
+        }else{
+          zone.setAttribute('fill','#fff');
+        }
+      });
+      clone.setAttribute('xmlns',NS);
+      clone.setAttribute('width',String(width));
+      clone.setAttribute('height',String(height));
+      markup=new XMLSerializer().serializeToString(clone);
+    }catch(error){
+      resolve(null);
+      return;
+    }
+    const image=new Image();
+    image.onload=()=>{
+      try{
+        const view=board.viewBox.baseVal;
+        const width=view.width||800,height=view.height||600;
+        const scale=Math.min(2,1600/Math.max(width,height));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(width*scale));
+        canvas.height=Math.max(1,Math.round(height*scale));
+        const context=canvas.getContext('2d');
+        context.fillStyle='#fff';
+        context.fillRect(0,0,canvas.width,canvas.height);
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        canvas.toBlob(blob=>resolve(blob),'image/png');
+      }catch(error){resolve(null)}
+    };
+    image.onerror=()=>resolve(null);
+    image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(markup);
+  });
+}
+/* A finished painting is stored once per artwork: the studio keeps the painting row
+   for the artwork and this either creates it (the built-in design) or marks the one
+   the artwork was compiled into as completed. */
+const finishedPaintings=new Set();
+let savingFinished=false;
+async function saveFinishedPainting(announce=false){
+  if(savingFinished) return false;
+  savingFinished=true;
+  try{
+    const image=await boardImage();
+    const body=new FormData();
+    body.append('artworkKey',canvasArtworkKey());
+    body.append('regionTotal',String(zones.length));
+    body.append('painted',String(completed.size));
+    body.append('colorCount',String(COLORS.length));
+    if(image) body.append('image',image,'finished-painting.png');
+    const response=await fetch(`/api/canvas/progress/${encodeURIComponent(canvasSession())}/complete`,{method:'POST',body});
+    if(!response.ok) throw new Error('Library save rejected');
+    finishedPaintings.add(canvasArtworkKey());
+    if(announce) saveNoteEl.textContent='Finished painting saved to My Paintings.';
+    return true;
+  }catch(error){
+    if(announce) saveNoteEl.textContent='Could not save to My Paintings — try again.';
+    return false;
+  }finally{
+    savingFinished=false;
+  }
+}
+function bindZones(){
+  zones=[...board.querySelectorAll('.zone')];
   zones.forEach((zone,index)=>{
     zone.dataset.index=String(index);
     zone.setAttribute('tabindex','0');
     zone.setAttribute('role','button');
+    zone.addEventListener('pointerup',event=>{event.preventDefault();paintZone(zone,index);});
+    zone.addEventListener('keydown',event=>{
+      if(event.key==='Enter'||event.key===' '){event.preventDefault();paintZone(zone,index);}
+    });
+  });
+}
+function addLabels(){
+  board.querySelectorAll('.zone-label').forEach(node=>node.remove());
+  const view=board.viewBox.baseVal;
+  const unit=Math.min(view.width||800,view.height||600);
+  const floor=unit*.016;
+  const ceiling=unit*.036;
+  zones.forEach((zone,index)=>{
     const box=zone.getBBox();
+    const size=Math.max(floor,Math.min(ceiling,Math.min(box.width,box.height)*.3));
     const label=document.createElementNS('http://www.w3.org/2000/svg','text');
     label.setAttribute('x',box.x+box.width/2);
     label.setAttribute('y',box.y+box.height/2);
     label.setAttribute('text-anchor','middle');
     label.setAttribute('dominant-baseline','middle');
-    label.setAttribute('font-size',Math.max(17,Math.min(30,Math.min(box.width,box.height)*.3)));
+    label.setAttribute('font-size',size.toFixed(2));
+    label.setAttribute('stroke-width',(size*.14).toFixed(2));
     label.setAttribute('class','zone-label');
     label.textContent=zone.dataset.c;
     board.appendChild(label);
@@ -182,10 +415,422 @@ function highlight(){
     ? `Color ${selected} selected. Tap a gray highlighted zone.`
     : `Color ${selected} is complete. Choose another color.`;
 }
+/* ---------------------------------------------------------------------------
+   Drawing tools
+   A medium is two things at once: the dried texture a finished zone keeps (its
+   pattern + paper grain) and the stroke the hand lays down while painting it.
+   `grain.strength` is the paper tooth the dried region keeps: 0 is flat ink, and the
+   filter spends it mostly on the colour (a fine shading of the pigment) and only a
+   little on its opacity, so a finished zone stays dense and opaque the way a
+   coloured-pencil fill does instead of being half masked away into static. Markers
+   sit lowest, crayons highest. Crayons press broad waxy pads and work back and
+   forth; colored pencils hatch thin lines one way and cross them the other, letting
+   the under-colour show through the over-colour as the pigment layers up. Every
+   medium finishes with the page's own thin dark outline still readable on top.
+--------------------------------------------------------------------------- */
+const TOOL_KEY=`${STORAGE_KEY}-tool`;
+
+function shade(hex,amount){
+  const match=/^#?([0-9a-f]{6})$/i.exec(String(hex));
+  if(!match) return hex;
+  const value=parseInt(match[1],16);
+  const mix=channel=>Math.max(0,Math.min(255,Math.round(amount<0?channel*(1+amount):channel+(255-channel)*amount)));
+  return `rgb(${mix((value>>16)&255)},${mix((value>>8)&255)},${mix(value&255)})`;
+}
+function hatch(u,hex,count,width,opacity,offset){
+  let markup='';
+  for(let index=0;index<count;index++){
+    markup+=`<path d="M${u(-.08)} ${u((index+offset)/count)}H${u(1.08)}" stroke="${hex}" stroke-opacity="${opacity}" stroke-width="${u(width)}"/>`;
+  }
+  return markup;
+}
+/* Pencil pigment goes down one way and then across the other, so the lines cross
+   and the under-colour shows through the over-colour. Perpendicular lines cross
+   the tile edge straight, so the hatch stays continuous tile to tile. */
+function crossHatch(u,hex,count,width,opacity,offset){
+  let markup='';
+  for(let index=0;index<count;index++){
+    markup+=`<path d="M${u((index+offset)/count)} ${u(-.08)}V${u(1.08)}" stroke="${hex}" stroke-opacity="${opacity}" stroke-width="${u(width)}"/>`;
+  }
+  return markup;
+}
+
+const TOOLS=[
+  {id:'broad-marker',family:'Markers',label:'Broad Marker',note:'A wide felt tip that floods the zone with flat, even ink.',
+   grain:{frequency:.7,octaves:2,strength:.22},angle:-6,tip:'marker',tipScale:1.05,
+   stroke:{ms:820,width:.1,floor:.022,density:1.05,minPasses:2,maxPasses:6,opacity:.93,jitter:.05,wobble:.06,cap:'butt',lean:-6,leanJitter:3,sheen:.16},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect x="${u(-.05)}" y="${u(.14)}" width="${u(1.1)}" height="${u(.13)}" fill="#000000" fill-opacity=".08"/>`+
+     `<rect x="${u(-.05)}" y="${u(.72)}" width="${u(1.1)}" height="${u(.1)}" fill="#000000" fill-opacity=".05"/>`+
+     `<rect x="${u(-.05)}" y="${u(.36)}" width="${u(1.1)}" height="${u(.07)}" fill="#ffffff" fill-opacity=".08"/>`},
+  {id:'brush-marker',family:'Markers',label:'Brush Marker',note:'A flexible nib that lays a juicy, see-through wash.',
+   grain:{frequency:.78,octaves:2,strength:.26},angle:-12,tip:'marker',tipScale:1,
+   stroke:{ms:900,width:.12,floor:.02,density:.88,minPasses:3,maxPasses:8,opacity:.6,jitter:.1,wobble:.16,cap:'round',lean:-12,leanJitter:8,wash:.18,sheen:.1},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect x="${u(-.05)}" y="${u(.16)}" width="${u(1.1)}" height="${u(.22)}" fill="#000000" fill-opacity=".05"/>`+
+     `<rect x="${u(-.05)}" y="${u(.58)}" width="${u(1.1)}" height="${u(.28)}" fill="#ffffff" fill-opacity=".07"/>`},
+  {id:'fineliner',family:'Markers',label:'Fineliner',note:'A fine hard nib for tight zones and thin, even lines.',
+   grain:{frequency:.9,octaves:2,strength:.2},angle:-30,tip:'marker',tipScale:.8,
+   stroke:{ms:1000,width:.038,floor:.009,density:1.25,minPasses:8,maxPasses:24,opacity:.6,jitter:.05,wobble:.05,cap:'round',lean:-30,leanJitter:4,rag:.25},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<path d="M${u(-.05)} ${u(.34)}H${u(1.05)}" stroke="#000000" stroke-opacity=".07" stroke-width="${u(.1)}"/>`+
+     `<path d="M${u(-.05)} ${u(.68)}H${u(1.05)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.08)}"/>`},
+  {id:'wax-crayon',family:'Crayons',label:'Wax Crayon',note:'Broad waxy passes with a heavy paper tooth.',
+   grain:{frequency:.82,octaves:2,strength:.5},angle:-32,tip:'crayon',tipScale:1,
+   stroke:{ms:1000,width:.08,floor:.016,density:.9,minPasses:3,maxPasses:14,opacity:.88,jitter:.1,wobble:.2,cap:'round',lean:-35,leanJitter:10},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<path d="M${u(-.06)} ${u(.2)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".12" stroke-width="${u(.3)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.55)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".08" stroke-width="${u(.18)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.82)}H${u(1.06)}" stroke="#000000" stroke-opacity=".05" stroke-width="${u(.16)}" stroke-linecap="round"/>`+
+     `<ellipse cx="${u(.3)}" cy="${u(.38)}" rx="${u(.22)}" ry="${u(.1)}" fill="#ffffff" fill-opacity=".10"/>`+
+     `<ellipse cx="${u(.72)}" cy="${u(.72)}" rx="${u(.18)}" ry="${u(.08)}" fill="#000000" fill-opacity=".06"/>`},
+  {id:'soft-pastel',family:'Crayons',label:'Soft Pastel',note:'Chalky layers of pigment that stay see-through.',
+   grain:{frequency:.76,octaves:2,strength:.54},angle:-18,tip:'crayon',tipScale:1.12,
+   stroke:{ms:1150,width:.115,floor:.022,density:1.15,minPasses:3,maxPasses:9,opacity:.6,jitter:.18,wobble:.32,cap:'round',lean:-28,leanJitter:14},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".94"/>`+
+     `<rect x="${u(-.05)}" y="${u(.05)}" width="${u(1.1)}" height="${u(.4)}" fill="#ffffff" fill-opacity=".10"/>`+
+     `<rect x="${u(-.05)}" y="${u(.6)}" width="${u(1.1)}" height="${u(.24)}" fill="#000000" fill-opacity=".05"/>`+
+     `<ellipse cx="${u(.3)}" cy="${u(.34)}" rx="${u(.3)}" ry="${u(.16)}" fill="#ffffff" fill-opacity=".12"/>`+
+     `<ellipse cx="${u(.7)}" cy="${u(.76)}" rx="${u(.26)}" ry="${u(.12)}" fill="#000000" fill-opacity=".06"/>`+
+     `<circle cx="${u(.56)}" cy="${u(.12)}" r="${u(.06)}" fill="#ffffff" fill-opacity=".16"/>`},
+  {id:'metallic',family:'Crayons',label:'Metallic',note:'Sheened wax that catches the light as you draw.',
+   grain:{frequency:.95,octaves:2,strength:.46},angle:-50,tip:'crayon',tipScale:.95,
+   stroke:{ms:950,width:.06,floor:.014,density:.58,minPasses:4,maxPasses:12,opacity:.9,jitter:.06,wobble:.12,cap:'round',lean:-50,leanJitter:6,sheen:.5},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}"/>`+
+     `<rect width="${u(1)}" height="${u(1)}" fill="${shade(hex,-.5)}" fill-opacity=".6"/>`+
+     `<path d="M${u(-.06)} ${u(.3)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".4" stroke-width="${u(.13)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.44)}H${u(1.06)}" stroke="#ffffff" stroke-opacity=".18" stroke-width="${u(.32)}" stroke-linecap="round"/>`+
+     `<path d="M${u(-.06)} ${u(.79)}H${u(1.06)}" stroke="#000000" stroke-opacity=".16" stroke-width="${u(.16)}" stroke-linecap="round"/>`},
+  {id:'colored-pencil',family:'Colored Pencils',label:'Colored Pencil',note:'Fine hatching from a hard, sharp point.',
+   grain:{frequency:.88,octaves:2,strength:.46},angle:-38,tip:'pencil',tipScale:.72,
+   stroke:{ms:1250,width:.03,floor:.009,density:.9,minPasses:12,maxPasses:30,opacity:.42,jitter:.16,wobble:.1,cap:'butt',lean:-38,leanJitter:3,rag:.9},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".8"/>`+
+     hatch(u,hex,5,.15,.7,.12)+hatch(u,shade(hex,-.28),5,.11,.32,.42)+hatch(u,shade(hex,.4),5,.07,.2,.8)+
+     crossHatch(u,shade(hex,-.18),6,.06,.16,.3)},
+  {id:'soft-core',family:'Colored Pencils',label:'Soft Core',note:'Denser shading that fills the paper tooth faster.',
+   grain:{frequency:.84,octaves:2,strength:.44},angle:-34,tip:'pencil',tipScale:.8,
+   stroke:{ms:1100,width:.045,floor:.012,density:.78,minPasses:9,maxPasses:20,opacity:.44,jitter:.14,wobble:.13,cap:'round',lean:-30,leanJitter:8,rag:.5},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".82"/>`+
+     hatch(u,hex,6,.24,.55,.1)+hatch(u,shade(hex,-.26),6,.19,.3,.34)+hatch(u,shade(hex,.34),6,.09,.16,.7)+
+     crossHatch(u,shade(hex,-.14),5,.08,.14,.5)},
+  {id:'watercolor-pencil',family:'Colored Pencils',label:'Watercolor',note:'A damp wash that bleeds under the strokes.',
+   grain:{frequency:.78,octaves:2,strength:.36},angle:-24,tip:'pencil',tipScale:.82,
+   stroke:{ms:1200,width:.07,floor:.016,density:.65,minPasses:5,maxPasses:12,opacity:.36,jitter:.2,wobble:.3,cap:'round',lean:-24,leanJitter:16,wash:.22},
+   pattern:(hex,u)=>`<rect width="${u(1)}" height="${u(1)}" fill="${hex}" fill-opacity=".5"/>`+
+     hatch(u,hex,4,.4,.3,.2)+hatch(u,shade(hex,-.22),4,.3,.2,.62)+crossHatch(u,shade(hex,-.1),4,.1,.12,.35)}
+];
+
+let toolId=(()=>{
+  const stored=safeGet(TOOL_KEY);
+  return TOOLS.some(tool=>tool.id===stored)?stored:TOOLS[0].id;
+})();
+function currentTool(){return TOOLS.find(tool=>tool.id===toolId)||TOOLS[0];}
+
+function buildPaintDefs(){
+  const existing=board.querySelector('#paintDefs');
+  if(existing) existing.remove();
+  const tool=currentTool();
+  const tile=Math.max(10,Math.round(boardUnit()*.035));
+  const u=value=>(tile*value).toFixed(2);
+  const defs=document.createElementNS(NS,'defs');
+  defs.setAttribute('id','paintDefs');
+  /* The tooth is spent mostly on the colour and only a little on the opacity, so the
+     pigment keeps its body: `shadeAmp/shadeBase` deepen it, `maskGain/maskBase` let the
+     noise's low tail let paper through, and both stay centred on 1. Chrome renders
+     fractalNoise as a bright, low-contrast grain (measured: mean ~.86 and sigma ~.04 per
+     channel, r+g+b ~2.59), so the shade is offset by its own mean rather than by .5 —
+     centring on .5 clamped nearly every pixel to 1 and the tooth disappeared. */
+  const tooth=Math.max(0,Math.min(.7,tool.grain.strength));
+  const shadeAmp=(tooth*.8).toFixed(3);
+  const shadeBase=(1-tooth*.8*.86).toFixed(3);
+  const maskGain=(tooth*.6).toFixed(3);
+  const maskBase=(1-tooth*.6*2.59).toFixed(3);
+  defs.innerHTML=
+    `<filter id="paintGrain" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">`+
+      `<feTurbulence type="fractalNoise" baseFrequency="${tool.grain.frequency}" numOctaves="${tool.grain.octaves}" seed="7" result="tooth"/>`+
+      `<feColorMatrix in="tooth" type="matrix" values="${shadeAmp} 0 0 0 ${shadeBase}  0 ${shadeAmp} 0 0 ${shadeBase}  0 0 ${shadeAmp} 0 ${shadeBase}  0 0 0 0 1" result="shade"/>`+
+      `<feComposite in="shade" in2="SourceGraphic" operator="in" result="toothShade"/>`+
+      `<feBlend in="SourceGraphic" in2="toothShade" mode="multiply" result="pigment"/>`+
+      `<feColorMatrix in="tooth" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${maskGain} ${maskGain} ${maskGain} 0 ${maskBase}" result="toothMask"/>`+
+      `<feComposite in="pigment" in2="toothMask" operator="in"/>`+
+    `</filter>`+
+    COLORS.map((hex,index)=>
+      `<pattern id="paint-${index+1}" patternUnits="userSpaceOnUse" patternTransform="rotate(${tool.angle})" width="${tile}" height="${tile}">${tool.pattern(hex,u)}</pattern>`
+    ).join('');
+  board.insertBefore(defs,board.firstChild);
+}
+function paintFill(number){
+  if(!board.querySelector('#paintDefs')) buildPaintDefs();
+  return board.querySelector(`#paint-${number}`)?`url(#paint-${number})`:COLORS[number-1];
+}
+/* The sample chips show the medium's own dried texture under one of its own strokes. */
+function buildSampleDefs(){
+  const host=document.getElementById('toolSampleDefs');
+  if(!host) return;
+  const tile=14;
+  const u=value=>(tile*value).toFixed(2);
+  host.innerHTML=TOOLS.map(tool=>[0,1].map(slot=>
+    `<pattern id="sample-${tool.id}-${slot}" patternUnits="userSpaceOnUse" patternTransform="rotate(${tool.angle})" width="${tile}" height="${tile}">${tool.pattern(COLORS[slot]||COLORS[0],u)}</pattern>`
+  ).join('')).join('');
+}
+function chipMarkup(tool,ink){
+  const spec=tool.stroke;
+  const width=Math.max(1.8,Math.min(9,spec.width*80));
+  let markup=`<rect width="72" height="40" rx="8" fill="url(#sample-${tool.id}-0)"/>`;
+  if(spec.wash) markup+=`<rect width="72" height="40" rx="8" fill="url(#sample-${tool.id}-1)" fill-opacity="${spec.wash}"/>`;
+  markup+=`<path d="M7 31L65 10" fill="none" stroke="${ink}" stroke-width="${width.toFixed(2)}" stroke-linecap="${spec.cap}" stroke-opacity="${Math.min(1,spec.opacity+.15).toFixed(2)}"/>`;
+  if(spec.sheen) markup+=`<path d="M7 31L65 10" fill="none" stroke="${shade(ink,.6)}" stroke-width="${(width*.28).toFixed(2)}" stroke-linecap="round" stroke-opacity="${spec.sheen}"/>`;
+  return markup;
+}
+function renderToolbox(){
+  buildSampleDefs();
+  const ink=COLORS[1]||COLORS[0];
+  toolboxEl.innerHTML='';
+  ['Markers','Crayons','Colored Pencils'].forEach(family=>{
+    const group=document.createElement('div');
+    group.className='tool-group';
+    const heading=document.createElement('h3');
+    heading.textContent=family;
+    const row=document.createElement('div');
+    row.className='tool-row';
+    TOOLS.filter(tool=>tool.family===family).forEach(tool=>{
+      const active=tool.id===toolId;
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='tool-btn'+(active?' active':'');
+      button.title=tool.note;
+      button.setAttribute('aria-pressed',String(active));
+      button.innerHTML=`<svg class="tool-chip" viewBox="0 0 72 40" aria-hidden="true">${chipMarkup(tool,ink)}</svg><span class="tool-name">${tool.label}</span>`;
+      button.addEventListener('click',()=>selectTool(tool.id));
+      row.appendChild(button);
+    });
+    group.appendChild(heading);
+    group.appendChild(row);
+    toolboxEl.appendChild(group);
+  });
+}
+function selectTool(id){
+  if(id===toolId||!TOOLS.some(tool=>tool.id===id)) return;
+  toolId=id;
+  safeSet(TOOL_KEY,id);
+  const stale=board.querySelector('#paintDefs');
+  if(stale) stale.remove();
+  renderToolbox();
+  render();
+}
+let paintLayer=null;
+function boardUnit(){
+  const view=board.viewBox.baseVal;
+  return Math.min(view.width||800,view.height||600);
+}
+function ensurePaintLayer(){
+  if(!paintLayer) paintLayer=document.createElementNS(NS,'g');
+  if(!board.contains(paintLayer)) board.insertBefore(paintLayer,board.querySelector('.zone-label'));
+  return paintLayer;
+}
+function fxDefs(){
+  let defs=board.querySelector('#paintDefs');
+  if(!defs){buildPaintDefs();defs=board.querySelector('#paintDefs');}
+  return defs;
+}
+function clearSweeps(){
+  if(!paintLayer) return;
+  while(paintLayer.firstChild) paintLayer.removeChild(paintLayer.firstChild);
+  board.querySelectorAll('clipPath[id^="stroke-"]').forEach(node=>node.remove());
+}
+function zoneBox(zone){
+  const rect=zone.getBoundingClientRect();
+  const frame=board.getBoundingClientRect();
+  const view=board.viewBox.baseVal;
+  const scaleX=(view.width||800)/frame.width;
+  const scaleY=(view.height||600)/frame.height;
+  return {x:(rect.left-frame.left)*scaleX+view.x,y:(rect.top-frame.top)*scaleY+view.y,w:rect.width*scaleX,h:rect.height*scaleY};
+}
+function crayonTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','paint-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<path d="M${u(-.17)} ${u(-.42)}L${u(.17)} ${u(-.42)}L0 0Z" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(1.1)}" rx="${u(.12)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-.68)}" width="${u(.4)}" height="${u(.22)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(.34)}" rx="${u(.12)}" fill="#2b2233" fill-opacity=".22"/>`+
+  `</g>`;
+  return tip;
+}
+function pencilTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','paint-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(1)}" rx="${u(.05)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.07)} ${u(-1.5)}V${u(-.5)}" stroke="#000000" stroke-opacity=".22" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(.07)} ${u(-1.5)}V${u(-.5)}" stroke="#ffffff" stroke-opacity=".28" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-1.5)}" width="${u(.4)}" height="${u(.28)}" rx="${u(.11)}" fill="#e9a0a0" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.2)}" y="${u(-.68)}" width="${u(.4)}" height="${u(.18)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.2)} ${u(-.5)}L${u(-.14)} ${u(-.12)}H${u(.14)}L${u(.2)} ${u(-.5)}Z" fill="#ecd3ac" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+    `<path d="M${u(-.14)} ${u(-.12)}L0 0L${u(.14)} ${u(-.12)}Z" fill="${hex}" stroke="#2b2233" stroke-width="${u(.04)}" stroke-linejoin="round"/>`+
+  `</g>`;
+  return tip;
+}
+function markerTip(size,hex){
+  const tip=document.createElementNS(NS,'g');
+  tip.setAttribute('class','paint-tip');
+  const u=value=>(size*value).toFixed(2);
+  tip.innerHTML=`<g transform="rotate(-18)">`+
+    `<rect x="${u(-.22)}" y="${u(-1.6)}" width="${u(.44)}" height="${u(1.08)}" rx="${u(.12)}" fill="${hex}" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<rect x="${u(-.22)}" y="${u(-1.6)}" width="${u(.44)}" height="${u(.3)}" rx="${u(.12)}" fill="#2b2233" fill-opacity=".2"/>`+
+    `<rect x="${u(-.22)}" y="${u(-.72)}" width="${u(.44)}" height="${u(.18)}" fill="#d9ad59" stroke="#2b2233" stroke-width="${u(.05)}"/>`+
+    `<path d="M${u(-.17)} ${u(-.54)}H${u(.17)}L${u(.11)} 0H${u(-.11)}Z" fill="${shade(hex,-.22)}" stroke="#2b2233" stroke-width="${u(.05)}" stroke-linejoin="round"/>`+
+  `</g>`;
+  return tip;
+}
+function paintTip(size,hex,tool){
+  if(tool.tip==='marker') return markerTip(size,hex);
+  return tool.tip==='pencil'?pencilTip(size,hex):crayonTip(size,hex);
+}
+function sweepPaint(zone,onDone){
+  const tool=currentTool();
+  const spec=tool.stroke;
+  const number=Number(zone.dataset.c);
+  const box=zoneBox(zone);
+  if(!box.w||!box.h){onDone&&onDone();return}
+  const unit=boardUnit();
+  const seq=(sweepPaint.seq=(sweepPaint.seq||0)+1);
+  /* no two strokes by hand are alike: nudge every pass and lean a little */
+  const wobble=index=>{const x=Math.sin(index*12.9898)*43758.5453;return (x-Math.floor(x))*2-1};
+  const hex=COLORS[number-1];
+  const layer=ensurePaintLayer();
+
+  /* Wax never crosses an edge, so the passes are clipped to the region's own outline. */
+  const clip=document.createElementNS(NS,'clipPath');
+  clip.setAttribute('id',`stroke-${seq}`);
+  clip.setAttribute('clipPathUnits','userSpaceOnUse');
+  const outline=zone.cloneNode(false);
+  outline.removeAttribute('style');
+  outline.setAttribute('class','');
+  clip.appendChild(outline);
+  fxDefs().appendChild(clip);
+  const group=document.createElementNS(NS,'g');
+  group.setAttribute('clip-path',`url(#${clip.id})`);
+  layer.appendChild(group);
+
+  /* A hand colours in one direction and then works back the other way, so the
+     whole region leans together and the grain runs in bands. */
+  const lean=(spec.lean+wobble(seq*3)*spec.leanJitter)*Math.PI/180;
+  const cx=box.x+box.w/2,cy=box.y+box.h/2;
+  const ux=Math.cos(lean),uy=Math.sin(lean),nx=-uy,ny=ux;
+  let minU=Infinity,maxU=-Infinity,minN=Infinity,maxN=-Infinity;
+  [[box.x,box.y],[box.x+box.w,box.y],[box.x+box.w,box.y+box.h],[box.x,box.y+box.h]].forEach(corner=>{
+    const dx=corner[0]-cx,dy=corner[1]-cy;
+    const along=dx*ux+dy*uy,across=dx*nx+dy*ny;
+    if(along<minU) minU=along;
+    if(along>maxU) maxU=along;
+    if(across<minN) minN=across;
+    if(across>maxN) maxN=across;
+  });
+
+  /* Broad passes lap over each other; pencil lines stay thin and let the paper through. */
+  const ms=spec.ms;
+  const width=Math.max(unit*spec.floor,Math.min(Math.min(box.w,box.h)*.3,unit*spec.width));
+  const count=Math.max(spec.minPasses,Math.min(spec.maxPasses,Math.round((maxN-minN)/(width*spec.density))));
+  const step=(maxN-minN)/count;
+  const pad=width*.6;
+  const passMs=ms/count;
+
+  /* A wet medium floods the region first, then the strokes settle into it. */
+  if(spec.wash){
+    const wash=document.createElementNS(NS,'rect');
+    wash.setAttribute('x',(box.x-2).toFixed(2));
+    wash.setAttribute('y',(box.y-2).toFixed(2));
+    wash.setAttribute('width',(box.w+4).toFixed(2));
+    wash.setAttribute('height',(box.h+4).toFixed(2));
+    wash.setAttribute('fill',hex);
+    wash.setAttribute('fill-opacity','0');
+    group.appendChild(wash);
+    wash.animate([{fillOpacity:0},{fillOpacity:spec.wash}],{duration:ms*.7,easing:'linear',fill:'forwards'});
+  }
+  const keys=[];
+  for(let pass=0;pass<count;pass++){
+    /* crayons work back and forth; pencil hatching always runs the same way */
+    const forward=spec.alternate?pass%2===0:true;
+    const across=minN+step*(pass+.5)+wobble(seq*31+pass)*step*.16;
+    const w=width*(1+wobble(seq*41+pass)*spec.jitter);
+    const rag=spec.rag?width*spec.rag:0;
+    const head=pad+rag*Math.abs(wobble(seq*53+pass*17));
+    const tail=pad+rag*Math.abs(wobble(seq*61+pass*19));
+    const fromU=forward?minU-head:maxU+head;
+    const toU=forward?maxU+tail:minU-tail;
+    const points=[];
+    let d='';
+    for(let stop=0;stop<=4;stop++){
+      const along=fromU+(toU-fromU)*stop/4;
+      const off=across+(stop&&stop<4?wobble(seq*37+pass*13+stop)*w*.2:0);
+      const x=cx+ux*along+nx*off,y=cy+uy*along+ny*off;
+      d+=(stop?' L':'M')+x.toFixed(2)+' '+y.toFixed(2);
+      points.push({x,y});
+    }
+    /* metallic wax lays a bright gloss along the same pass */
+    const layers=[[hex,w,spec.opacity+wobble(seq*43+pass)*.08,spec.cap]];
+    if(spec.sheen) layers.push([shade(hex,.65),w*.26,spec.sheen,'round']);
+    layers.forEach(([color,lineWidth,opacity,cap])=>{
+      const stroke=document.createElementNS(NS,'path');
+      stroke.setAttribute('d',d);
+      stroke.setAttribute('fill','none');
+      stroke.setAttribute('stroke',color);
+      stroke.setAttribute('stroke-width',lineWidth.toFixed(2));
+      stroke.setAttribute('stroke-linecap',cap);
+      stroke.setAttribute('stroke-linejoin',cap==='butt'?'miter':'round');
+      stroke.setAttribute('stroke-opacity',Math.max(.05,Math.min(1,opacity)).toFixed(3));
+      group.appendChild(stroke);
+      /* The pass is drawn on rather than faded in, so the pigment builds up behind the tip. */
+      const length=stroke.getTotalLength()||1;
+      stroke.style.strokeDasharray=length.toFixed(2);
+      stroke.style.strokeDashoffset=length.toFixed(2);
+      stroke.animate(
+        [{strokeDashoffset:length},{strokeDashoffset:0}],
+        {delay:pass*passMs,duration:passMs,easing:'linear',fill:'forwards'}
+      );
+    });
+    const tilt=(forward?-1:1)*(-16+wobble(seq*23+pass)*6);
+    points.forEach((point,stop)=>{
+      /* the nudge keeps each new pass strictly later than the one before it */
+      const offset=Math.min(1,(pass*passMs+passMs*stop/4)/ms+(stop?0:pass*1e-4));
+      keys.push({offset,transform:`translate(${point.x.toFixed(2)}px,${point.y.toFixed(2)}px) rotate(${tilt.toFixed(2)}deg)`});
+    });
+  }
+
+  const tip=paintTip(Math.max(unit*.04,Math.min(width*1.6,unit*.14))*tool.tipScale,hex,tool);
+  layer.appendChild(tip);
+  const travel=tip.animate(keys,{duration:ms,easing:'linear'});
+  tip.animate([
+    {offset:0,opacity:0},
+    {offset:.06,opacity:1},
+    {offset:.9,opacity:1},
+    {offset:1,opacity:0}
+  ],{duration:ms,easing:'linear'});
+  const cleanup=()=>{
+    group.remove();
+    clip.remove();
+    tip.remove();
+    zone.style.transition='none';
+    onDone&&onDone();
+    requestAnimationFrame(()=>{zone.style.transition='';});
+  };
+  /* The wax is dry the moment the last pass lands; let it show through. */
+  const settle=()=>{
+    zone.classList.remove('painting');
+    const fade=group.animate([{opacity:1},{opacity:0}],{duration:150,easing:'linear'});
+    fade.onfinish=cleanup;
+    fade.oncancel=cleanup;
+  };
+  travel.onfinish=settle;
+  travel.oncancel=cleanup;
+}
 function render(){
   zones.forEach((zone,index)=>{
     if(completed.has(index)){
-      zone.style.fill=COLORS[Number(zone.dataset.c)-1];
+      zone.style.fill=paintFill(Number(zone.dataset.c));
       zone.classList.add('done');
       if(zone._label) zone._label.style.display='none';
     }else{
@@ -198,7 +843,16 @@ function render(){
   barEl.style.width=`${zones.length?completed.size/zones.length*100:0}%`;
   renderPalette();
   highlight();
-  if(completed.size===zones.length) completeOverlay.classList.add('show');
+  if(zones.length&&completed.size===zones.length){
+    completeOverlay.classList.add('show');
+    /* Finishing the picture keeps it: the save happens by itself once, and the
+       button below can ask for it again. */
+    if(!finishedPaintings.has(canvasArtworkKey())){
+      saveFinishedPainting().then(ok=>{
+        if(ok) saveNoteEl.textContent='Finished painting saved to My Paintings.';
+      });
+    }
+  }
 }
 function paintZone(zone,index){
   if(completed.has(index)) return;
@@ -211,17 +865,272 @@ function paintZone(zone,index){
   }
   completed.add(index);
   history.push(index);
-  zone.classList.add('painting');
-  setTimeout(()=>zone.classList.remove('painting'),500);
   saveProgress(false);
+  zone.classList.add('painting');
+  render();
+  sweepPaint(zone,()=>zone.classList.remove('painting'));
+}
+const NS='http://www.w3.org/2000/svg';
+const compileOverlay=document.getElementById('compileOverlay');
+const compileStage=document.getElementById('compileStage');
+const compileBar=document.getElementById('compileBar');
+const compilePercent=document.getElementById('compilePercent');
+const artworkFile=document.getElementById('artworkFile');
+const compileButton=document.getElementById('compileButton');
+const uploadNote=document.getElementById('uploadNote');
+const designsEl=document.getElementById('designs');
+const designFile=document.getElementById('designFile');
+const addDesignButton=document.getElementById('addDesignButton');
+const designNote=document.getElementById('designNote');
+
+function renderCompiled(art){
+  const width=Number(art.width)||800;
+  const height=Number(art.height)||600;
+  board.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  const unit=Math.min(width,height);
+  /* Fine printed line art, the way a grown-up coloring book is drawn. */
+  board.style.setProperty('--zone-stroke',(unit*.0016).toFixed(3));
+  board.style.setProperty('--zone-target-stroke',(unit*.003).toFixed(3));
+  COLORS=art.palette.map(item=>item.hex);
+  renderToolbox();
+  board.innerHTML='';
+  const backdrop=document.createElementNS(NS,'rect');
+  backdrop.setAttribute('width',width);
+  backdrop.setAttribute('height',height);
+  backdrop.setAttribute('fill','#fff');
+  board.appendChild(backdrop);
+  const fragment=document.createDocumentFragment();
+  art.regions.forEach(region=>{
+    const path=document.createElementNS(NS,'path');
+    path.setAttribute('class','zone');
+    path.setAttribute('data-c',String(region.colorId));
+    path.setAttribute('d',region.path);
+    fragment.appendChild(path);
+  });
+  board.appendChild(fragment);
+  bindZones();
+  selected=1;
+  completed=new Set();
+  history=[];
+  completeOverlay.classList.remove('show');
+  addLabels();
   render();
 }
-zones.forEach((zone,index)=>{
-  zone.addEventListener('pointerup',event=>{event.preventDefault();paintZone(zone,index);});
-  zone.addEventListener('keydown',event=>{
-    if(event.key==='Enter'||event.key===' '){event.preventDefault();paintZone(zone,index);}
-  });
+
+async function loadCompiledArtwork(key){
+  try{
+    const response=await fetch(`/jobs/${encodeURIComponent(key)}/artwork`);
+    if(!response.ok) throw new Error('Saved artwork is no longer available');
+    renderCompiled(await response.json());
+    artworkKey=key;
+    safeSet(ARTWORK_KEY,key);
+    updateRemoveButton();
+    return true;
+  }catch(error){
+    if(safeGet(ARTWORK_KEY)===key) safeSet(ARTWORK_KEY,'');
+    return false;
+  }
+}
+
+/* The studio copy only wins over the browser copy when it was saved later. */
+async function resumeFromStudio(local){
+  try{
+    const response=await fetch(`/api/canvas/progress/${encodeURIComponent(canvasSession())}`);
+    if(!response.ok) return;
+    const {records}=await response.json();
+    if(!Array.isArray(records)||!records.length) return;
+    const key=canvasArtworkKey();
+    const record=records.find(item=>item.artworkKey===key)||records[0];
+    if(!record) return;
+    const studioTime=Date.parse(record.updatedAt||'');
+    const localTime=Date.parse((local&&local.savedAt)||'');
+    if(localTime&&studioTime&&studioTime<=localTime) return;
+    if(record.artworkKey!==key&&!await loadCompiledArtwork(record.artworkKey)) return;
+    completed=new Set((record.completed||[]).map(Number));
+    selected=Math.max(1,Math.min(COLORS.length,Number(record.selected||1)));
+    saveLocal();
+    render();
+    saveNoteEl.textContent=`Resumed your saved progress — ${completed.size} region${completed.size===1?'':'s'} restored.`;
+  }catch(error){}
+}
+
+async function pollCompile(jobId){
+  for(;;){
+    const response=await fetch(`/jobs/${jobId}`);
+    if(!response.ok) throw new Error('Compilation status unavailable');
+    const job=await response.json();
+    const percent=Number(job.percent||0);
+    compileStage.textContent=job.stage||'Working…';
+    compileBar.style.width=`${percent}%`;
+    compilePercent.textContent=`${percent}%`;
+    if(job.status==='complete') break;
+    if(job.status==='failed'||job.status==='cancelled'){
+      compileStage.textContent=job.error||'Compilation did not finish.';
+      uploadNote.textContent='Compilation failed.';
+      compileButton.disabled=false;
+      return;
+    }
+    await new Promise(resolve=>setTimeout(resolve,1500));
+  }
+  const artwork=await fetch(`/jobs/${jobId}/artwork`);
+  if(!artwork.ok){
+    compileStage.textContent='Compiled, but the artwork data is missing.';
+    uploadNote.textContent='Artwork data unavailable.';
+    compileButton.disabled=false;
+    return;
+  }
+  const data=await artwork.json();
+  artworkKey=jobId;
+  safeSet(ARTWORK_KEY,jobId);
+  updateRemoveButton();
+  renderCompiled(data);
+  compileOverlay.classList.remove('show');
+  compileButton.disabled=false;
+  uploadNote.textContent=`Ready — ${data.regionCount||data.regions.length} regions in ${data.colorCount||data.palette.length} colors.`;
+}
+
+compileButton.onclick=async()=>{
+  const file=artworkFile.files&&artworkFile.files[0];
+  if(!file){uploadNote.textContent='Choose an image first.';return}
+  compileButton.disabled=true;
+  compileOverlay.classList.add('show');
+  compileStage.textContent='Uploading your image…';
+  compileBar.style.width='0%';
+  compilePercent.textContent='0%';
+  try{
+    const body=new FormData();
+    body.append('file',file);
+    const response=await fetch('/api/paintings/upload',{method:'POST',body});
+    if(!response.ok) throw new Error('Upload failed');
+    const {jobId}=await response.json();
+    await pollCompile(jobId);
+  }catch(error){
+    compileStage.textContent='Compilation could not be started.';
+    uploadNote.textContent=String(error.message||error);
+    compileButton.disabled=false;
+  }
+};
+/* Your uploaded image can be taken off the board again, leaving the studio's own
+   design; the button only shows while a compiled image is open. */
+const removeArtworkButton=document.getElementById('removeArtworkButton');
+function updateRemoveButton(){
+  removeArtworkButton.hidden=!artworkKey;
+}
+removeArtworkButton.onclick=()=>{
+  if(!confirm('Remove this image and go back to the studio design?')) return;
+  safeSet(ARTWORK_KEY,'');
+  window.location.reload();
+};
+/* The studio design library: paint one of its designs, or add a new image to it. */
+function designChip(slug,title,imageUrl){
+  const chip=document.createElement('button');
+  chip.type='button';
+  chip.className='design-chip';
+  chip.dataset.slug=slug;
+  if(imageUrl){
+    const img=document.createElement('img');
+    img.src=imageUrl;
+    img.alt='';
+    img.loading='lazy';
+    chip.appendChild(img);
+  }
+  const label=document.createElement('span');
+  label.textContent=title;
+  chip.appendChild(label);
+  return chip;
+}
+/* A library design sits in a wrapper so it can carry its own remove control;
+   the built-in Dahlia Mandala has none because it ships with the page. */
+function designItem(slug,title,imageUrl,removable){
+  const item=document.createElement('div');
+  item.className='design-item';
+  item.appendChild(designChip(slug,title,imageUrl));
+  if(removable){
+    const remove=document.createElement('button');
+    remove.type='button';
+    remove.className='design-remove';
+    remove.dataset.slug=slug;
+    remove.dataset.title=title;
+    remove.title=`Remove ${title} from the design library`;
+    remove.setAttribute('aria-label',`Remove ${title} from the design library`);
+    remove.textContent='\u00d7';
+    item.appendChild(remove);
+  }
+  return item;
+}
+function renderDesigns(list){
+  designsEl.innerHTML='';
+  designsEl.appendChild(designItem('__builtin__','Dahlia Mandala',null,false));
+  list.forEach(item=>designsEl.appendChild(designItem(item.slug,item.title,item.imageUrl,true)));
+}
+async function loadDesigns(){
+  try{
+    const response=await fetch('/api/designs',{cache:'no-store'});
+    if(!response.ok) throw new Error('Designs unavailable');
+    const data=await response.json();
+    renderDesigns(Array.isArray(data.designs)?data.designs:[]);
+  }catch(error){
+    renderDesigns([]);
+  }
+}
+async function openDesign(slug){
+  if(slug==='__builtin__'){
+    safeSet(ARTWORK_KEY,'');
+    window.location.reload();
+    return;
+  }
+  compileOverlay.classList.add('show');
+  compileStage.textContent='Opening design…';
+  compileBar.style.width='0%';
+  compilePercent.textContent='0%';
+  try{
+    const response=await fetch(`/api/designs/${encodeURIComponent(slug)}/compile`,{method:'POST'});
+    if(!response.ok) throw new Error('Design unavailable');
+    const {jobId}=await response.json();
+    await pollCompile(jobId);
+    designNote.textContent=`Now painting ${slug.replace(/[-_]+/g,' ')}.`;
+  }catch(error){
+    compileOverlay.classList.remove('show');
+    designNote.textContent='That design could not be opened.';
+  }
+}
+async function removeDesign(slug,title){
+  if(!confirm(`Remove "${title}" from the design library?`)) return;
+  designNote.textContent='Removing…';
+  try{
+    const response=await fetch(`/api/designs/${encodeURIComponent(slug)}`,{method:'DELETE'});
+    if(!response.ok) throw new Error('Remove failed');
+    designNote.textContent=`Removed ${title}.`;
+    await loadDesigns();
+  }catch(error){
+    designNote.textContent='Could not remove that design.';
+  }
+}
+designsEl.addEventListener('click',event=>{
+  const remove=event.target.closest('button.design-remove');
+  if(remove){removeDesign(remove.dataset.slug,remove.dataset.title);return}
+  const chip=event.target.closest('button.design-chip');
+  if(chip) openDesign(chip.dataset.slug);
 });
+addDesignButton.onclick=async()=>{
+  const file=designFile.files&&designFile.files[0];
+  if(!file){designNote.textContent='Choose an image first.';return}
+  addDesignButton.disabled=true;
+  designNote.textContent='Adding your design…';
+  try{
+    const body=new FormData();
+    body.append('file',file);
+    const response=await fetch('/api/designs',{method:'POST',body});
+    if(!response.ok) throw new Error('Add failed');
+    designFile.value='';
+    designNote.textContent='Added — it is in the list above.';
+    await loadDesigns();
+  }catch(error){
+    designNote.textContent='Could not add that image.';
+  }finally{
+    addDesignButton.disabled=false;
+  }
+};
 function showNext(){
   const item=zones.find((zone,index)=>Number(zone.dataset.c)===selected&&!completed.has(index));
   if(!item){statusEl.textContent=`Color ${selected} is complete.`;return}
@@ -237,32 +1146,53 @@ document.getElementById('showNext').onclick=showNext;
 document.getElementById('undo').onclick=()=>{
   const last=history.pop();
   if(last===undefined){statusEl.textContent='Nothing to undo.';return}
+  clearSweeps();
   completed.delete(last);saveProgress(false);render();
 };
 document.getElementById('save').onclick=()=>saveProgress(true);
+document.getElementById('saveLibrary').onclick=()=>{
+  if(!zones.length||completed.size!==zones.length){
+    saveNoteEl.textContent='Finish every region before saving to My Paintings.';
+    return;
+  }
+  saveFinishedPainting(true);
+};
 document.getElementById('reset').onclick=()=>{
   if(!confirm('Reset all Color-by-Number progress?')) return;
-  completed.clear();history=[];safeSet(STORAGE_KEY,'');completeOverlay.classList.remove('show');render();
+  clearSweeps();
+  completed.clear();history=[];safeSet(storeKey(),'');completeOverlay.classList.remove('show');render();saveToStudio(true);
 };
 document.getElementById('downloadProgress').onclick=()=>downloadJson(saveProgress(false),'euqilegna-color-by-number-progress.json');
 document.getElementById('closeComplete').onclick=()=>completeOverlay.classList.remove('show');
 document.getElementById('mobilePaletteToggle').onclick=()=>panelEl.classList.toggle('collapsed');
-reviewNote.addEventListener('input',()=>safeSet(REVIEW_KEY,reviewNote.value));
+reviewNote.addEventListener('input',()=>safeSet(reviewKey(),reviewNote.value));
 document.getElementById('saveReview').onclick=()=>{
-  const ok=safeSet(REVIEW_KEY,reviewNote.value);
+  const ok=safeSet(reviewKey(),reviewNote.value);
   saveNoteEl.textContent=ok?'Review note saved.':'Review could not be saved in this browser.';
 };
 
+bindZones();
 addLabels();
-try{
-  const saved=JSON.parse(safeGet(STORAGE_KEY)||'null');
-  if(saved){
-    selected=Number(saved.selected||1);
-    (saved.completed||[]).forEach(index=>completed.add(Number(index)));
+renderToolbox();
+reviewNote.value=safeGet(reviewKey())||'';
+async function bootstrap(){
+  const storedArtwork=safeGet(ARTWORK_KEY);
+  if(storedArtwork) await loadCompiledArtwork(storedArtwork);
+  let local=null;
+  try{
+    local=JSON.parse(safeGet(storeKey())||'null');
+  }catch(error){
+    local=null;
   }
-}catch(error){}
-reviewNote.value=safeGet(REVIEW_KEY)||'';
-render();
+  if(local){
+    selected=Math.max(1,Math.min(COLORS.length,Number(local.selected||1)));
+    (local.completed||[]).forEach(index=>completed.add(Number(index)));
+  }
+  render();
+  await resumeFromStudio(local);
+}
+loadDesigns();
+bootstrap();
 </script>
 </body>
 </html>

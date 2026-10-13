@@ -5,12 +5,16 @@ from typing import Callable, Any
 import json
 import shutil
 import tempfile
+import time
 
 from compiler_core import compile_artwork as compile_core
 from .analyzer import analyze_source
 from .models import AttemptResult
 from .recovery import build_attempts
 from .validation import validate_package
+
+# Keep trying recovery attempts until one validates, but not past this long.
+RECOVERY_TIME_BUDGET_SECONDS = 600
 
 
 def _copy_tree_contents(source: Path, destination: Path) -> None:
@@ -73,6 +77,7 @@ def compile_artwork(
     attempts = build_attempts(analysis, requested)
     results: list[AttemptResult] = []
     best: AttemptResult | None = None
+    started_at = time.monotonic()
 
     if progress_callback:
         progress_callback(1, "Version 12 analyzing artwork and preparing recovery plan", {
@@ -136,11 +141,19 @@ def compile_artwork(
                         },
                     )
 
+                # Judge the region budget against the target the compiler actually
+                # used: artwork profiles raise a small requested target to their
+                # own minimum, and that raised target is what the core aims for.
                 report = validate_package(
                     attempt_dir,
                     source_path=input_path,
                     minimum_similarity=0.68,
-                    target_regions=int(settings.get("target_regions") or target_regions or 480),
+                    target_regions=int(
+                        metadata.get("targetRegions")
+                        or settings.get("target_regions")
+                        or target_regions
+                        or 480
+                    ),
                 )
                 result = AttemptResult(
                     name=attempt_name,
@@ -163,12 +176,19 @@ def compile_artwork(
             if result.success and (best is None or result.score > best.score):
                 best = result
 
-            # A strong valid result is good enough; don't waste CPU.
-            if result.success and result.score >= 0.82:
+            # The first package that passes validation is the answer: later
+            # attempts are recovery strategies, and validation already enforces
+            # the minimum fidelity. (The old 0.82 "strong result" bar is above
+            # what simplified paint-by-number art scores, so every attempt ran.)
+            if result.success:
                 break
 
-            # Runtime guard: never burn through four multi-hour retries.
-            if index >= 2 and best is None:
+            # Runtime guard: stop retrying once recovery has used its time budget.
+            # (This was "give up after two attempts" back when one attempt could
+            # take hours; attempts now take seconds, and the last recovery
+            # strategy -- the full-canvas photo pass -- is the one that rescues
+            # busy artwork whose illustration passes exceed the region budget.)
+            if best is None and time.monotonic() - started_at > RECOVERY_TIME_BUDGET_SECONDS:
                 break
 
         if best is None:

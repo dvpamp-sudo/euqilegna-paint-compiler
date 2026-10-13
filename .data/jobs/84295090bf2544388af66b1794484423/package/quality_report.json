@@ -1,0 +1,26 @@
+{
+  "studio": "Euqilegna Paint Studio 1.0",
+  "status": "FAIL",
+  "paintabilityScore": 82,
+  "difficulty": "Advanced",
+  "estimatedInteractiveMinutes": 5,
+  "metrics": {
+    "regions": 38,
+    "colors": 12,
+    "tinyRegions": 13,
+    "tinyRegionPercent": 34.2,
+    "smallRegions": 5,
+    "smallRegionPercent": 13.2,
+    "unlabeledRegions": 0,
+    "unlabeledRegionPercent": 0.0,
+    "highDetailRegions": 0
+  },
+  "publishGate": {
+    "automaticApproval": false,
+    "manualReviewRequired": true,
+    "websiteReady": false
+  },
+  "recommendations": [
+    "Merge more tiny regions before publishing."
+  ]
+}

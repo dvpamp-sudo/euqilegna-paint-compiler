@@ -16,6 +16,30 @@ REQUIRED_FILES = (
     "preview.png",
 )
 
+# A paint-by-number package is a flat-colour rendering: it drops photographic
+# texture, shading and fine edge detail on purpose. Scoring the tonal match per
+# pixel therefore measures detail the medium is meant to discard -- it is only
+# satisfied by packages with thousands of tiny regions, which the region budget
+# below forbids, so busy photos could never pass both checks. Tone is compared
+# at paint-region scale instead: a blur of roughly 1.2% of the short side is
+# several pixels wide (so texture cancels out) yet well below the size of a
+# single paint region (so misplaced or merged-together regions still cost
+# score). The bar itself is unchanged.
+TONE_SIGMA_RATIO = 0.012
+TONE_WEIGHT = 0.72
+EDGE_WEIGHT = 0.28
+
+
+def _local_tone_error(source_gray: np.ndarray, preview_gray: np.ndarray) -> float:
+    """Mean absolute tone difference measured at paint-region scale."""
+    sigma = max(1.0, min(source_gray.shape) * TONE_SIGMA_RATIO)
+    return float(
+        np.abs(
+            cv2.GaussianBlur(source_gray, (0, 0), sigma)
+            - cv2.GaussianBlur(preview_gray, (0, 0), sigma)
+        ).mean()
+    )
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     try:
@@ -35,26 +59,32 @@ def _image_similarity(original_path: Path, preview_path: Path) -> dict[str, floa
             interpolation=cv2.INTER_AREA,
         )
 
-    og = cv2.cvtColor(original, cv2.COLOR_RGB2GRAY)
-    pg = cv2.cvtColor(preview, cv2.COLOR_RGB2GRAY)
+    og_u8 = cv2.cvtColor(original, cv2.COLOR_RGB2GRAY)
+    pg_u8 = cv2.cvtColor(preview, cv2.COLOR_RGB2GRAY)
+    og = og_u8.astype(np.float32)
+    pg = pg_u8.astype(np.float32)
 
-    mae = float(np.abs(og.astype(np.float32) - pg.astype(np.float32)).mean())
-    tonal_similarity = max(0.0, 1.0 - mae / 255.0)
+    mae = float(np.abs(og - pg).mean())
+    local_tone_error = _local_tone_error(og, pg)
+    tonal_similarity = max(0.0, 1.0 - local_tone_error / 255.0)
 
-    oe = cv2.Canny(og, 45, 120) > 0
-    pe = cv2.Canny(pg, 45, 120) > 0
+    oe = cv2.Canny(og_u8, 45, 120) > 0
+    pe = cv2.Canny(pg_u8, 45, 120) > 0
     union = int(np.logical_or(oe, pe).sum())
     overlap = int(np.logical_and(oe, pe).sum())
     edge_iou = (overlap / union) if union else 1.0
 
     # Tone matters more than exact edge overlap because paint-by-number
     # intentionally simplifies edges.
-    score = tonal_similarity * 0.72 + edge_iou * 0.28
+    score = tonal_similarity * TONE_WEIGHT + edge_iou * EDGE_WEIGHT
     return {
         "score": round(score, 5),
         "tonalSimilarity": round(tonal_similarity, 5),
         "edgeIoU": round(edge_iou, 5),
+        # Raw per-pixel error, kept for diagnostics only: it is not part of the
+        # score because it penalises texture the medium cannot carry.
         "meanAbsoluteError": round(mae, 3),
+        "localToneError": round(local_tone_error, 3),
     }
 
 

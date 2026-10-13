@@ -1,0 +1,7 @@
+{
+  "artworkProfile": "line_art",
+  "edgeRetention": 0.1175,
+  "tonalMeanAbsoluteError": 36.851,
+  "regions": 360,
+  "passed": true
+}

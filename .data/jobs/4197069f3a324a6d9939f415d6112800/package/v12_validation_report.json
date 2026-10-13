@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "regions": 360,
+  "colors": 20,
+  "similarity": {
+    "score": 0.73053,
+    "tonalSimilarity": 0.9747,
+    "edgeIoU": 0.10266,
+    "meanAbsoluteError": 19.582,
+    "localToneError": 6.451
+  },
+  "errors": [],
+  "warnings": []
+}

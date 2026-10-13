@@ -1,0 +1,137 @@
+{
+  "engine": "Euqilegna Paint Compiler 12.0 Validation-First",
+  "inputFile": "botanical-portrait.jpg",
+  "width": 1456,
+  "height": 816,
+  "regions": 300,
+  "inkPaths": 0,
+  "markerSeeds": 300,
+  "colors": 12,
+  "preset": "illustration",
+  "minRegionArea": 70,
+  "outlineWidth": 0.38,
+  "simplifyTolerance": 0.35,
+  "autoCrop": false,
+  "crop": {
+    "cropped": false,
+    "box": [
+      0,
+      0,
+      1456,
+      816
+    ],
+    "foreground": {
+      "mode": "full_canvas",
+      "fallbackUsed": false,
+      "coverage": 1.0
+    }
+  },
+  "completionImage": "finished_masterpiece.png",
+  "progressiveRevealImage": "completion_reveal.png",
+  "inkOverlay": "ink_overlay.svg",
+  "detailMap": "detail_map.png",
+  "paintabilityEngine": "paintability_engine_report.json",
+  "paintabilitySimulation": "paintability_simulation.json",
+  "paintabilityGuaranteed": true,
+  "experienceMode": "relaxed",
+  "targetRegions": 300,
+  "designStyle": "photo",
+  "activePipeline": "photo",
+  "pipelineAnalysis": {
+    "pipeline": "photo",
+    "confidence": 0.66,
+    "edgeDensity": 0.1348,
+    "uniqueColorScore": 0.5556,
+    "textureScore": 0.0908
+  },
+  "artworkProfile": "decorative",
+  "artworkProfileAnalysis": {
+    "source": "premium_override",
+    "matchedArtwork": "botanical-portrait",
+    "metrics": {
+      "edgeDensity": 0.08436691984486103,
+      "saturation": 0.6646242292165735,
+      "valueStd": 0.2299494440614086,
+      "darkRatio": 0.595029357897005,
+      "lightRatio": 0.03796242054514113,
+      "nearBinaryRatio": 0.6384138992135315,
+      "aspectRatio": 1.7843137254901962,
+      "orientationBalance": 0.877308189868927
+    },
+    "profile": {
+      "name": "decorative",
+      "pipeline": "illustration",
+      "use_full_canvas": true,
+      "allow_auto_crop": false,
+      "foreground_required": false,
+      "color_cap": 32,
+      "minimum_region_area": 18,
+      "target_region_min": 300,
+      "target_region_max": 760,
+      "experience_mode": "detailed",
+      "simplify_tolerance_floor": 0.13,
+      "description": "Ornamental, botanical, koi, peacock, floral, symmetrical, or patterned artwork."
+    }
+  },
+  "foregroundAnalysis": {
+    "mode": "full_canvas",
+    "fallbackUsed": false,
+    "coverage": 1.0
+  },
+  "automaticRecoveryEnabled": true,
+  "modularCompilerVersion": "11.0",
+  "visualFidelityReport": "visual_fidelity_report.json",
+  "visualFidelity": {
+    "artworkProfile": "decorative",
+    "edgeRetention": 0.1558,
+    "tonalMeanAbsoluteError": 15.006,
+    "regions": 300,
+    "passed": true
+  },
+  "finalCanvasCoverage": 1.0,
+  "pixelCoveragePercent": 100.0,
+  "coverageErrors": 0,
+  "orphanPixels": 0,
+  "edgeRepair": "completed",
+  "coverageGuarantee": true,
+  "completionImageSource": "artistic_master",
+  "finishMode": "original",
+  "tinyRegions": 0,
+  "smallRegions": 0,
+  "qualityStatus": "PASS",
+  "paintabilityScore": 100,
+  "estimatedInteractiveMinutes": 30,
+  "v12SourceAnalysis": {
+    "family": "landscape_or_scene",
+    "width": 1456,
+    "height": 816,
+    "darkRatio": 0.60974,
+    "lightRatio": 0.04045,
+    "saturation": 0.66462,
+    "edgeDensity": 0.08703,
+    "tonalStd": 0.22995
+  },
+  "v12SelectedAttempt": "full-canvas-photo-recovery",
+  "v12SimilarityScore": 0.71901,
+  "v12ValidationPassed": true,
+  "v12Attempts": [
+    {
+      "name": "smart-auto",
+      "success": false,
+      "score": 0.79168,
+      "error": null
+    },
+    {
+      "name": "full-canvas-illustration-recovery",
+      "success": false,
+      "score": 0.78765,
+      "error": null
+    },
+    {
+      "name": "full-canvas-photo-recovery",
+      "success": true,
+      "score": 0.71901,
+      "error": null
+    }
+  ]
+}
