@@ -1,0 +1,18 @@
+{
+  "engine": "Guaranteed Paintability Engine 12.2 Fast Crop Validator",
+  "initialRegions": 300,
+  "finalRegions": 300,
+  "mergedRegions": 0,
+  "minimumArea": 28,
+  "minimumLabelRadius": 2.25,
+  "passes": [
+    {
+      "pass": 1,
+      "regions": 300,
+      "invalid": 0
+    }
+  ],
+  "remainingInvalid": [],
+  "passed": true,
+  "optimization": "tight-crop validation; deferred polygon/vector validation"
+}

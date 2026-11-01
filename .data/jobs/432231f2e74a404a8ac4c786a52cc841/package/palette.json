@@ -1,0 +1,122 @@
+[
+  {
+    "colorId": "1",
+    "hex": "#DDDDDD",
+    "rgb": [
+      221,
+      221,
+      221
+    ],
+    "label": "Color 1"
+  },
+  {
+    "colorId": "2",
+    "hex": "#959595",
+    "rgb": [
+      149,
+      149,
+      149
+    ],
+    "label": "Color 2"
+  },
+  {
+    "colorId": "3",
+    "hex": "#FBFBFB",
+    "rgb": [
+      251,
+      251,
+      251
+    ],
+    "label": "Color 3"
+  },
+  {
+    "colorId": "4",
+    "hex": "#B7B7B7",
+    "rgb": [
+      183,
+      183,
+      183
+    ],
+    "label": "Color 4"
+  },
+  {
+    "colorId": "5",
+    "hex": "#282828",
+    "rgb": [
+      40,
+      40,
+      40
+    ],
+    "label": "Color 5"
+  },
+  {
+    "colorId": "6",
+    "hex": "#686868",
+    "rgb": [
+      104,
+      104,
+      104
+    ],
+    "label": "Color 6"
+  },
+  {
+    "colorId": "7",
+    "hex": "#C6C6C6",
+    "rgb": [
+      198,
+      198,
+      198
+    ],
+    "label": "Color 7"
+  },
+  {
+    "colorId": "8",
+    "hex": "#E9E9E9",
+    "rgb": [
+      233,
+      233,
+      233
+    ],
+    "label": "Color 8"
+  },
+  {
+    "colorId": "9",
+    "hex": "#A8A8A8",
+    "rgb": [
+      168,
+      168,
+      168
+    ],
+    "label": "Color 9"
+  },
+  {
+    "colorId": "10",
+    "hex": "#7E7E7E",
+    "rgb": [
+      126,
+      126,
+      126
+    ],
+    "label": "Color 10"
+  },
+  {
+    "colorId": "11",
+    "hex": "#CFCFCF",
+    "rgb": [
+      207,
+      207,
+      207
+    ],
+    "label": "Color 11"
+  },
+  {
+    "colorId": "12",
+    "hex": "#8B8B8B",
+    "rgb": [
+      139,
+      139,
+      139
+    ],
+    "label": "Color 12"
+  }
+]

@@ -1,0 +1,132 @@
+{
+  "engine": "Euqilegna Paint Compiler 12.0 Validation-First",
+  "inputFile": "beta_upload_test.png",
+  "width": 180,
+  "height": 140,
+  "regions": 38,
+  "inkPaths": 0,
+  "markerSeeds": 47,
+  "colors": 12,
+  "preset": "illustration",
+  "minRegionArea": 70,
+  "outlineWidth": 0.38,
+  "simplifyTolerance": 0.35,
+  "autoCrop": true,
+  "crop": {
+    "cropped": false,
+    "box": [
+      0,
+      0,
+      180,
+      140
+    ]
+  },
+  "completionImage": "finished_masterpiece.png",
+  "progressiveRevealImage": "completion_reveal.png",
+  "inkOverlay": "ink_overlay.svg",
+  "detailMap": "detail_map.png",
+  "paintabilityEngine": "paintability_engine_report.json",
+  "paintabilitySimulation": "paintability_simulation.json",
+  "paintabilityGuaranteed": true,
+  "experienceMode": "relaxed",
+  "targetRegions": 300,
+  "designStyle": "smart_auto",
+  "activePipeline": "photo",
+  "pipelineAnalysis": {
+    "pipeline": "illustration",
+    "confidence": 0.76,
+    "edgeDensity": 0.0211,
+    "uniqueColorScore": 0.0017,
+    "textureScore": 0.0324
+  },
+  "artworkProfile": "portrait",
+  "artworkProfileAnalysis": {
+    "source": "automatic_classifier",
+    "metrics": {
+      "edgeDensity": 0.021111111111111112,
+      "saturation": 0.2274187675070028,
+      "valueStd": 0.3414964679214078,
+      "darkRatio": 0.0,
+      "lightRatio": 0.6249206349206349,
+      "nearBinaryRatio": 0.6249206349206349,
+      "aspectRatio": 1.2857142857142858,
+      "orientationBalance": 0.8083811402320862
+    },
+    "detectedPipeline": "illustration",
+    "profile": {
+      "name": "portrait",
+      "pipeline": "illustration",
+      "use_full_canvas": false,
+      "allow_auto_crop": true,
+      "foreground_required": false,
+      "color_cap": 34,
+      "minimum_region_area": 20,
+      "target_region_min": 300,
+      "target_region_max": 750,
+      "experience_mode": "detailed",
+      "simplify_tolerance_floor": 0.12,
+      "description": "Character or portrait artwork with meaningful background detail."
+    }
+  },
+  "foregroundAnalysis": {
+    "mode": "detected_foreground",
+    "fallbackUsed": false,
+    "coverage": 0.374286
+  },
+  "automaticRecoveryEnabled": true,
+  "modularCompilerVersion": "11.0",
+  "visualFidelityReport": "visual_fidelity_report.json",
+  "visualFidelity": {
+    "artworkProfile": "portrait",
+    "edgeRetention": 0.1348,
+    "tonalMeanAbsoluteError": 4.734,
+    "regions": 38,
+    "passed": true
+  },
+  "finalCanvasCoverage": 1.0,
+  "pixelCoveragePercent": 100.0,
+  "coverageErrors": 0,
+  "orphanPixels": 0,
+  "edgeRepair": "completed",
+  "coverageGuarantee": true,
+  "completionImageSource": "artistic_master",
+  "finishMode": "original",
+  "tinyRegions": 13,
+  "smallRegions": 5,
+  "qualityStatus": "FAIL",
+  "paintabilityScore": 82,
+  "estimatedInteractiveMinutes": 5,
+  "v12SourceAnalysis": {
+    "family": "landscape_or_scene",
+    "width": 180,
+    "height": 140,
+    "darkRatio": 0.0,
+    "lightRatio": 0.62492,
+    "saturation": 0.22742,
+    "edgeDensity": 0.02111,
+    "tonalStd": 0.3415
+  },
+  "v12SelectedAttempt": "smart-auto",
+  "v12SimilarityScore": 0.74428,
+  "v12ValidationPassed": true,
+  "v12Attempts": [
+    {
+      "name": "smart-auto",
+      "success": true,
+      "score": 0.74428,
+      "error": null
+    },
+    {
+      "name": "full-canvas-illustration-recovery",
+      "success": false,
+      "score": 0.0,
+      "error": "cannot access local variable 'illustration_hard_cap' where it is not associated with a value"
+    },
+    {
+      "name": "full-canvas-photo-recovery",
+      "success": true,
+      "score": 0.74428,
+      "error": null
+    }
+  ]
+}
